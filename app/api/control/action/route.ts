@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation } from "@/lib/security";
-import { ensureGlobalGiftMarket } from "@/lib/telegram-resale";
+import { syncConfiguredGiftCatalogSources } from "@/lib/gift-catalog";
+import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 const ACTOR = "local-god-mode";
@@ -170,9 +171,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === "catalog.source.add") {
+      const telegramId = number(body.telegramId);
+      const label = text(body.label, 120) || null;
+      if (telegramId == null || !Number.isSafeInteger(telegramId) || telegramId <= 0) {
+        return NextResponse.json({ error: "Укажите числовой Telegram ID источника" }, { status: 400 });
+      }
+      const { data, error } = await supabase
+        .from("gift_catalog_sources")
+        .upsert({ telegram_id: telegramId, label, active: true, updated_at: new Date().toISOString() }, { onConflict: "telegram_id" })
+        .select("id")
+        .single();
+      if (error) throw error;
+      await audit("catalog.source.add", "gift_catalog_source", String(data.id), { telegramId, label });
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
+    if (action === "catalog.source.toggle") {
+      const id = text(body.id, 80);
+      if (!id || typeof body.active !== "boolean") return NextResponse.json({ error: "Некорректный источник" }, { status: 400 });
+      const { error } = await supabase.from("gift_catalog_sources").update({ active: body.active, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+      await audit("catalog.source.toggle", "gift_catalog_source", id, { active: body.active });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "catalog.source.delete") {
+      const id = text(body.id, 80);
+      if (!id) return NextResponse.json({ error: "Источник не выбран" }, { status: 400 });
+      const { error } = await supabase.from("gift_catalog_sources").delete().eq("id", id);
+      if (error) throw error;
+      await audit("catalog.source.delete", "gift_catalog_source", id);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === "catalog.sync") {
-      const result = await ensureGlobalGiftMarket({ force: true, reason: "local-control" });
-      await audit("catalog.sync", "telegram_resale_catalog", undefined, { result });
+      const catalog = await syncConfiguredGiftCatalogSources();
+      const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 18 });
+      await audit("catalog.sync", "telegram_bot_catalog", undefined, { catalog, liquidity });
+      return NextResponse.json({ ok: true, catalog, liquidity });
+    }
+
+    if (action === "npc.tick") {
+      const result = await ensureNpcMarketLiquidity({ force: true, targetListings: Math.floor(number(body.targetListings) ?? 18) });
+      await audit("npc.tick", "gift_liquidity", undefined, { result });
       return NextResponse.json({ ok: true, result });
     }
 

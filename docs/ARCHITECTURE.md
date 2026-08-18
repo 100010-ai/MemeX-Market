@@ -28,9 +28,9 @@
 
 `gift_offers`, `gift_trades`, `gift_collection_candles` продолжают виртуальный lifecycle. Настоящий Telegram owner не меняется при сделке MXM.
 
-## 2. Global Telegram Resale ingestion
+## 2. Telegram Bot API catalogue ingestion
 
-Основной source v0.8 — Telegram global resale via MTProto user session.
+Основной source v0.8 — Telegram global resale via Bot API user session.
 
 Pipeline:
 
@@ -52,11 +52,11 @@ seed_global_catalog_gift()
 small system-owned virtual MXM listing
 ```
 
-Весь Telegram catalog не копируется. `MARKET_BOOTSTRAP_*` и `MARKET_CATALOG_*` ограничивают scan/import. При пустом рынке scan может быть шире обычного, но persisted listings всё равно ограничены target/minimum.
+Каталог реальных Unique Gifts импортируется через Telegram Bot API из источников, настроенных в локальном `/control`. Production-запросы рынка не выполняют внешнее сканирование Telegram: DB-only NPC liquidity tick использует только уже проверенные `gift_assets`.
 
 ## 3. Bootstrap первого пользователя
 
-`GET /api/market?scope=gifts` сначала читает текущий рынок. Если активных Gift listings нет и MTProto настроен, один запрос может вызвать `ensureGlobalGiftMarket()`.
+`GET /api/market?scope=gifts` сначала читает текущий рынок. При низкой ликвидности выполняется короткий `ensureNpcMarketLiquidity()` без внешних HTTP-запросов; он может создать listings только из `bot_catalog` assets.
 
 Postgres advisory-style state lock через `catalog_sync_state` не позволяет нескольким serverless requests одновременно запускать импорт. После sync Market выполняет новый authoritative query.
 
@@ -94,7 +94,7 @@ Supabase Realtime используется как invalidation signal, а не �
 - static thumbnail используется там, где Telegram его дал;
 - TGS запускается только у видимого/близкого к viewport media;
 - Telegram file proxy stream-ит response;
-- global MTProto importer зеркалирует media по Telegram unique file identity;
+- global Bot API importer зеркалирует media по Telegram unique file identity;
 - одинаковые media переиспользуются во время одного sync;
 - model/symbol одного Gift скачиваются параллельно.
 
@@ -116,6 +116,6 @@ white-space: nowrap
 
 ## 9. Local God Mode
 
-`/control` доступен только loopback host при `MXM_LOCAL_ADMIN_ENABLED=true` и после локальной token-auth. Session — signed HttpOnly + SameSite Strict. Все mutations идут через server route и пишутся в `admin_audit_logs`.
+`/control` доступен только в development на loopback host. При первом открытии сервер создаёт `.mxm-control-secret`; после token-auth используется signed HttpOnly + SameSite Strict session. Все mutations идут через server routes и пишутся в audit log.
 
 God Mode не должен быть включён на production Vercel environment.

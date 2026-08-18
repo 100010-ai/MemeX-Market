@@ -108,8 +108,7 @@ export type GiftAsset = {
   isBurned: boolean;
   isFromBlockchain: boolean;
   lastSeenAt: string;
-  catalogSource: "profile_sync" | "telegram_resale";
-  telegramResalePriceTon: number | null;
+  catalogSource: "profile_sync" | "bot_catalog";
   bestOffer: number | null;
   offerCount: number;
   ownerId: string;

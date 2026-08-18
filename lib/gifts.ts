@@ -376,3 +376,102 @@ export async function getTelegramTgsJson(fileId: string) {
   if (tgsJsonCache.size > 300) tgsJsonCache.delete(tgsJsonCache.keys().next().value as string);
   return data;
 }
+
+export type GiftCatalogImportResult = {
+  telegramId: number;
+  pagesFetched: number;
+  totalHosted: number;
+  uniqueReceived: number;
+  assetsUpserted: number;
+  syncedAt: string;
+};
+
+/**
+ * Imports verified Telegram Unique Gift metadata into the shared MXM catalogue
+ * without assigning the real Telegram owner's inventory to any MXM player.
+ * Uses only the Bot API token already required by the Mini App.
+ */
+export async function importTelegramGiftCatalog(telegramId: number): Promise<GiftCatalogImportResult> {
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Некорректный Telegram ID источника каталога");
+  const supabase = getSupabaseAdmin();
+  const all: TelegramOwnedGift[] = [];
+  let offset = "";
+  let pagesFetched = 0;
+  let expectedTotal: number | null = null;
+
+  for (let page = 0; page < 100; page += 1) {
+    const result = await telegramApi<OwnedGiftsResult>("getUserGifts", {
+      user_id: telegramId,
+      exclude_unlimited: true,
+      exclude_limited_upgradable: true,
+      exclude_limited_non_upgradable: true,
+      exclude_unique: false,
+      offset,
+      limit: 100,
+    });
+    pagesFetched += 1;
+    if (!Number.isInteger(result.total_count) || result.total_count < 0) throw new Error("Telegram вернул некорректное количество Gifts");
+    if (expectedTotal === null) expectedTotal = result.total_count;
+    else if (expectedTotal !== result.total_count) throw new Error("Коллекция Telegram изменилась во время импорта; повторите импорт");
+    if (!Array.isArray(result.gifts)) throw new Error("Telegram вернул некорректный payload Gifts");
+    all.push(...result.gifts);
+    if (!result.next_offset) break;
+    offset = result.next_offset;
+    if (page === 99) throw new Error("Коллекция источника превышает поддерживаемое окно импорта");
+  }
+
+  const unique = all.filter((entry): entry is Extract<TelegramOwnedGift, { type: "unique" }> => entry.type === "unique");
+  unique.forEach(({ gift }) => assertUniqueGift(gift));
+  assertNoSourceConflicts(unique);
+
+  const now = new Date().toISOString();
+  const rows = unique.map(({ gift }) => ({
+    telegram_name: gift.name,
+    gift_id: gift.gift_id,
+    base_name: gift.base_name,
+    gift_number: gift.number,
+    model_name: gift.model.name,
+    model_rarity_per_mille: gift.model.rarity_per_mille,
+    model_rarity: gift.model.rarity ?? null,
+    model_file_id: gift.model.sticker.file_id,
+    model_thumb_file_id: gift.model.sticker.thumbnail?.file_id ?? null,
+    model_is_animated: Boolean(gift.model.sticker.is_animated),
+    model_is_video: Boolean(gift.model.sticker.is_video),
+    symbol_name: gift.symbol.name,
+    symbol_rarity_per_mille: gift.symbol.rarity_per_mille,
+    symbol_file_id: gift.symbol.sticker.file_id,
+    symbol_thumb_file_id: gift.symbol.sticker.thumbnail?.file_id ?? null,
+    symbol_is_animated: Boolean(gift.symbol.sticker.is_animated),
+    symbol_is_video: Boolean(gift.symbol.sticker.is_video),
+    backdrop_name: gift.backdrop.name,
+    backdrop_rarity_per_mille: gift.backdrop.rarity_per_mille,
+    backdrop_center_color: gift.backdrop.colors.center_color,
+    backdrop_edge_color: gift.backdrop.colors.edge_color,
+    backdrop_symbol_color: gift.backdrop.colors.symbol_color,
+    backdrop_text_color: gift.backdrop.colors.text_color,
+    is_premium: Boolean(gift.is_premium),
+    is_burned: Boolean(gift.is_burned),
+    is_from_blockchain: Boolean(gift.is_from_blockchain),
+    telegram_payload: gift,
+    last_seen_at: now,
+    updated_at: now,
+    catalog_source: "bot_catalog",
+    source_reference: `bot-user:${telegramId}`,
+    resale_seen_at: null,
+    telegram_resale_price_ton: null,
+  }));
+
+  if (rows.length) {
+    const { error } = await supabase.from("gift_assets").upsert(rows, { onConflict: "telegram_name" });
+    if (error) throw error;
+  }
+
+  return {
+    telegramId,
+    pagesFetched,
+    totalHosted: expectedTotal ?? 0,
+    uniqueReceived: unique.length,
+    assetsUpserted: rows.length,
+    syncedAt: now,
+  };
+}

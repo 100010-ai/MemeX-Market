@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const supabase = getSupabaseAdmin();
   try {
-    const [profileRows, missionRows, coinRows, giftRows, auditRows, syncRunRows, catalogRunRows, catalogStateRows] = await Promise.all([
+    const [profileRows, missionRows, coinRows, giftRows, auditRows, sourceRows, npcStateRows, npcLogRows] = await Promise.all([
       fetchAll((from, to) =>
         supabase
           .from("profiles")
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       fetchAll((from, to) =>
         supabase
           .from("gift_market_overview")
-          .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at,catalog_source,telegram_resale_price_ton,resale_seen_at")
+          .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at,catalog_source,source_reference")
           .order("created_at", { ascending: false })
           .range(from, to),
       ),
@@ -62,26 +62,25 @@ export async function GET(request: Request) {
       ),
       fetchAll((from, to) =>
         supabase
-          .from("gift_sync_runs")
-          .select("id,telegram_id,status,unique_imported,virtual_created,error_message,started_at,finished_at")
-          .order("started_at", { ascending: false })
+          .from("gift_catalog_sources")
+          .select("id,telegram_id,label,active,last_synced_at,last_error,created_at,updated_at")
+          .order("created_at", { ascending: true })
           .range(from, to),
       ),
       fetchAll((from, to) =>
         supabase
-          .from("catalog_sync_runs")
-          .select("id,source,status,reason,collections_scanned,resale_gifts_seen,assets_upserted,virtual_listings_created,media_objects_uploaded,skipped_without_ton_price,error_message,started_at,finished_at")
-          .order("started_at", { ascending: false })
+          .from("npc_market_state")
+          .select("key,locked_until,last_tick_at,last_success_at,last_error,cycle,updated_at")
           .range(from, to),
       ),
-      fetchAll((from, to) =>
-        supabase
-          .from("catalog_sync_state")
-          .select("key,locked_until,last_started_at,last_finished_at,last_success_at,last_error,updated_at")
-          .range(from, to),
-      ),
+      supabase
+        .from("npc_market_log")
+        .select("id,virtual_gift_id,asset_id,npc_profile_id,fair_price,listing_price,pricing_mode,rarity_score,created_at")
+        .order("created_at", { ascending: false })
+        .limit(60),
     ]);
 
+    const systemIds = new Set(profileRows.filter((row) => row.is_system).map((row) => String(row.id)));
     return NextResponse.json({
       metrics: {
         players: profileRows.filter((row) => !row.is_system).length,
@@ -91,15 +90,17 @@ export async function GET(request: Request) {
         activeCoins: coinRows.filter((row) => row.status === "active" && !row.hidden_from_market).length,
         gifts: giftRows.length,
         listedGifts: giftRows.filter((row) => row.status === "listed").length,
+        npcListings: giftRows.filter((row) => row.status === "listed" && systemIds.has(String(row.owner_profile_id))).length,
+        catalogSources: sourceRows.filter((row) => row.active).length,
       },
       profiles: profileRows,
       missions: missionRows,
       coins: coinRows,
       gifts: giftRows,
       audit: auditRows,
-      syncRuns: syncRunRows,
-      catalogRuns: catalogRunRows,
-      catalogState: catalogStateRows[0] || null,
+      catalogSources: sourceRows,
+      npcState: npcStateRows[0] || null,
+      npcLog: npcLogRows.data || [],
       checkedAt: new Date().toISOString(),
     });
   } catch (error) {

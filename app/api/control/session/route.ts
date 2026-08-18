@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { clearLocalControlSession, createLocalControlSession, hasLocalControlSession, localControlAvailable, verifyLocalToken } from "@/lib/local-admin";
+import { clearLocalControlSession, createLocalControlSession, ensureLocalControlKey, hasLocalControlSession, localControlAvailable, verifyLocalToken } from "@/lib/local-admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const available = localControlAvailable(request);
+  if (available) ensureLocalControlKey();
   return NextResponse.json({ available, authenticated: available ? await hasLocalControlSession(request) : false });
 }
 

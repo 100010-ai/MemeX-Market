@@ -1,25 +1,50 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { cookies } from "next/headers";
 
 const COOKIE = "mxm_local_control";
 const MAX_AGE = 60 * 60 * 8;
+const SECRET_FILE = ".mxm-control-secret";
 
 type Payload = { issuedAt: number; nonce: string; tokenHash: string };
 
-function token() {
-  const value = process.env.MXM_LOCAL_ADMIN_TOKEN;
-  if (!value || value.length < 24) throw new Error("MXM_LOCAL_ADMIN_TOKEN должен содержать минимум 24 символа");
-  return value;
+let cachedToken: string | null = null;
+
+function tokenFilePath() {
+  return path.join(process.cwd(), SECRET_FILE);
 }
 
-function secret() {
-  const value = process.env.SESSION_SECRET;
-  if (!value || value.length < 32) throw new Error("SESSION_SECRET должен содержать минимум 32 символа");
-  return value;
+function token() {
+  if (cachedToken) return cachedToken;
+  const file = tokenFilePath();
+  try {
+    const existing = fs.readFileSync(file, "utf8").trim();
+    if (existing.length >= 24) {
+      cachedToken = existing;
+      return existing;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  const generated = crypto.randomBytes(32).toString("base64url");
+  try {
+    fs.writeFileSync(file, `${generated}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    cachedToken = generated;
+    console.info(`\n[MXM Control] Локальный ключ создан: ${generated}\n[MXM Control] Он также сохранён в ${file}\n`);
+    return generated;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    const existing = fs.readFileSync(file, "utf8").trim();
+    if (existing.length < 24) throw new Error(".mxm-control-secret повреждён; удалите файл и перезапустите dev server");
+    cachedToken = existing;
+    return existing;
+  }
 }
 
 function sign(value: string) {
-  return crypto.createHmac("sha256", secret()).update(`local-control:${value}`).digest("base64url");
+  return crypto.createHmac("sha256", token()).update(`local-control:${value}`).digest("base64url");
 }
 
 function localHost(request: Request) {
@@ -35,7 +60,15 @@ function loopbackRequest(request: Request) {
 }
 
 export function localControlAvailable(request: Request) {
-  return process.env.MXM_LOCAL_ADMIN_ENABLED === "true" && localHost(request) && loopbackRequest(request);
+  return process.env.NODE_ENV !== "production" && localHost(request) && loopbackRequest(request);
+}
+
+export function localControlKeyPath() {
+  return tokenFilePath();
+}
+
+export function ensureLocalControlKey() {
+  token();
 }
 
 export function verifyLocalToken(input: string) {
@@ -45,7 +78,12 @@ export function verifyLocalToken(input: string) {
 }
 
 export async function createLocalControlSession() {
-  const payload: Payload = { issuedAt: Math.floor(Date.now() / 1000), nonce: crypto.randomUUID(), tokenHash: crypto.createHash("sha256").update(token()).digest("hex") };
+  const localToken = token();
+  const payload: Payload = {
+    issuedAt: Math.floor(Date.now() / 1000),
+    nonce: crypto.randomUUID(),
+    tokenHash: crypto.createHash("sha256").update(localToken).digest("hex"),
+  };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const value = `${encoded}.${sign(encoded)}`;
   const store = await cookies();

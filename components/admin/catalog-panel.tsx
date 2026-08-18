@@ -20,7 +20,7 @@ type InventoryItem = {
   createdAt: string;
 };
 
-type SyncOutcome = { telegramId: number; ok: boolean; result?: { uniqueImported: number; virtualCreated: number }; error?: string };
+type SyncOutcome = { telegramId: number; assetsUpserted?: number; error?: string };
 
 function hex(color: number) {
   return `#${color.toString(16).padStart(6, "0")}`;
@@ -92,7 +92,7 @@ export function AdminCatalogPanel() {
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border-soft)] px-3 py-3">
         <div className="min-w-0">
           <p className="text-xs font-medium">Каталог и дропы</p>
-          <p className="mt-0.5 text-[10px] text-[var(--muted)]">Импорт реальных Telegram Gifts из настроенных аккаунтов в системный инвентарь.</p>
+          <p className="mt-0.5 text-[10px] text-[var(--muted)]">Импорт реальных Telegram Gifts из источников, настроенных в локальном MXM Control. Без MTProto/user session.</p>
         </div>
         <button onClick={() => void runSync()} disabled={syncing} className="header-action shrink-0">
           <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
@@ -107,10 +107,10 @@ export function AdminCatalogPanel() {
             <span
               key={outcome.telegramId}
               className={`shrink-0 whitespace-nowrap rounded-xl px-2 py-1 text-[9px] uppercase ${
-                outcome.ok ? "bg-[#153322] text-[var(--positive)]" : "bg-[#351a1e] text-[var(--negative)]"
+                !outcome.error ? "bg-[#153322] text-[var(--positive)]" : "bg-[#351a1e] text-[var(--negative)]"
               }`}
             >
-              {outcome.telegramId}: {outcome.ok ? `+${outcome.result?.virtualCreated ?? 0}` : "ошибка"}
+              {outcome.telegramId}: {!outcome.error ? `+${outcome.assetsUpserted ?? 0}` : "ошибка"}
             </span>
           ))}
         </div>

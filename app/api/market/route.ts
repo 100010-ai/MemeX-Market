@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
-import { ensureGlobalGiftMarket, globalResaleCatalogConfigured } from "@/lib/telegram-resale";
+import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,16 +43,18 @@ export async function GET(request: NextRequest) {
     let [giftsResult, collectionsResult] = await queryGiftMarket();
     if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
 
-    // First-ever production visit must not see an invented demo market. If the
-    // real virtual market is empty and MTProto is configured, populate a small,
-    // bounded set of genuine Telegram resale collectibles, then query again.
-    if (!(giftsResult.data || []).length && globalResaleCatalogConfigured()) {
+    // Keep a small amount of system liquidity available without blocking the
+    // market on external Telegram requests. NPCs can only list real Gift assets
+    // that were already verified and imported into gift_assets via Bot API.
+    if ((giftsResult.data || []).length < 10) {
       try {
-        await ensureGlobalGiftMarket({ reason: "first-market-open" });
-        [giftsResult, collectionsResult] = await queryGiftMarket();
-        if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
-      } catch (bootstrapError) {
-        console.error("global Gift market bootstrap", bootstrapError);
+        const liquidity = await ensureNpcMarketLiquidity({ targetListings: 18 });
+        if (liquidity.created > 0) {
+          [giftsResult, collectionsResult] = await queryGiftMarket();
+          if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
+        }
+      } catch (npcError) {
+        console.error("NPC Gift liquidity", npcError);
       }
     }
 
