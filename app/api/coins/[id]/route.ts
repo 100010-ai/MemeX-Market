@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
+import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin } from "@/lib/mappers";
 
@@ -21,12 +21,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   try {
-    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult] = await Promise.all([
+    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, profileSnapshot] = await Promise.all([
       supabase.from("market_overview").select("*").eq("id", id).single(),
       supabase.from("candles").select("bucket_start,open,high,low,close,volume").eq("coin_id", id).order("bucket_start", { ascending: true }).limit(3000),
       supabase.from("trades").select("id,profile_id,side,quote_amount,token_amount,price,created_at,profiles(username,first_name)").eq("coin_id", id).order("created_at", { ascending: false }).limit(100),
       supabase.from("holdings").select("quantity,cost_basis").eq("coin_id", id).eq("profile_id", profile.id).maybeSingle(),
       supabase.from("holdings").select("profile_id,quantity,profiles(username,first_name)").eq("coin_id", id).gt("quantity", 0).order("quantity", { ascending: false }).limit(10),
+      getProfileSnapshot(profile as Record<string, unknown>),
     ]);
     if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Coin not found" }, { status: 404 });
     const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error;
@@ -45,7 +46,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         };
       }),
       holding: { quantity: Number(holdingResult.data?.quantity || 0), costBasis: Number(holdingResult.data?.cost_basis || 0) },
-      balance: Number(profile.balance),
+      balance: profileSnapshot.balance,
+      availableBalance: profileSnapshot.availableBalance,
+      reservedBalance: profileSnapshot.reservedBalance,
       topHolders: (topHoldersResult.data || []).map((holder: any) => {
         const person = relationOne(holder.profiles, "Holder profile");
         return { id: String(holder.profile_id), name: profileName(person), quantity: Number(holder.quantity) };

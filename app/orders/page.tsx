@@ -10,7 +10,7 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftMedia } from "@/components/gifts/gift-media";
 
-const realtimeTables = ["virtual_gifts", "gift_trades"];
+const realtimeTables = ["virtual_gifts", "gift_trades", "market_events"];
 type Payload = { outgoing: GiftOffer[]; incoming: GiftOffer[]; listings: GiftAsset[] };
 
 export default function OrdersPage() {

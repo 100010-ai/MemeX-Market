@@ -35,7 +35,7 @@ export default function TasksPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <section className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3">
-        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Available rewards</p><p className="mt-1 text-[10px] text-[var(--muted)]">Complete market objectives to earn balance.</p></div><div className="text-right"><p className="flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available).replace("$", "")}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{claimable.length} ready</p></div></div>
+        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Remaining rewards</p><p className="mt-1 text-[10px] text-[var(--muted)]">Complete market objectives to earn balance.</p></div><div className="text-right"><p className="flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available).replace("$", "")}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{claimable.length} ready</p></div></div>
       </section>
 
       {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}

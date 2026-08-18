@@ -91,6 +91,13 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
       const gift = eventGifts.get(String(row.virtual_gift_id));
       if (!gift || typeof gift.base_name !== "string" || !gift.base_name) throw new Error(`Market event ${row.id} Gift is missing`);
       items.push({ id: `event-${row.id}`, kind: "listing", actorId: String(row.actor_profile_id), label: `${actorName} listed`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: row.amount == null ? null : Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
+    } else if (row.kind === "offer") {
+      // Null amount is a private offer-state refresh (cancel/reject). It should refresh
+      // subscribers but must not create misleading public feed copy.
+      if (row.amount == null) continue;
+      const gift = eventGifts.get(String(row.virtual_gift_id));
+      if (!gift || typeof gift.base_name !== "string" || !gift.base_name) throw new Error(`Market event ${row.id} Gift is missing`);
+      items.push({ id: `event-${row.id}`, kind: "offer", actorId: String(row.actor_profile_id), label: `${actorName} offered`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
     } else {
       throw new Error(`Unsupported market event kind: ${row.kind}`);
     }

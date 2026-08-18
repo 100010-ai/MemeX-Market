@@ -36,14 +36,20 @@ export function tierForWorth(netWorth: number) {
 export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
   const id = requiredString(profileRow.id, "id");
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("leaderboard").select("coin_value,gift_value,net_worth").eq("id", id).single();
-  if (error) throw error;
-  if (!data) throw new Error("Profile is missing from leaderboard");
+  const [leaderboardResult, offersResult] = await Promise.all([
+    supabase.from("leaderboard").select("coin_value,gift_value,net_worth").eq("id", id).single(),
+    supabase.from("gift_offers").select("amount").eq("buyer_profile_id", id).eq("status", "pending"),
+  ]);
+  if (leaderboardResult.error) throw leaderboardResult.error;
+  if (offersResult.error) throw offersResult.error;
+  if (!leaderboardResult.data) throw new Error("Profile is missing from leaderboard");
 
   const balance = requiredNumber(profileRow.balance, "balance");
-  const coinValue = requiredNumber(data.coin_value, "coin_value");
-  const giftValue = requiredNumber(data.gift_value, "gift_value");
-  const netWorth = requiredNumber(data.net_worth, "net_worth");
+  const reservedBalance = (offersResult.data || []).reduce((sum, row) => sum + requiredNumber(row.amount, "pending offer amount"), 0);
+  const availableBalance = Math.max(0, balance - reservedBalance);
+  const coinValue = requiredNumber(leaderboardResult.data.coin_value, "coin_value");
+  const giftValue = requiredNumber(leaderboardResult.data.gift_value, "gift_value");
+  const netWorth = requiredNumber(leaderboardResult.data.net_worth, "net_worth");
   const firstName = requiredString(profileRow.first_name, "first_name");
   const joinedAt = requiredString(profileRow.created_at, "created_at");
 
@@ -55,6 +61,8 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
     lastName: profileRow.last_name == null ? null : String(profileRow.last_name),
     photoUrl: profileRow.photo_url == null ? null : String(profileRow.photo_url),
     balance,
+    reservedBalance,
+    availableBalance,
     coinValue,
     giftValue,
     netWorth,

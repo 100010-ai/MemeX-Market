@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, RefreshCw, WalletCards } from "lucide-react";
+import { LockKeyhole, RefreshCw, WalletCards } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { GiftAsset, Holding, Profile } from "@/lib/types";
 import { ago, compact, money, percent, price } from "@/lib/format";
@@ -11,7 +11,7 @@ import { GiftCard } from "@/components/gifts/gift-card";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 
-const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades"];
+const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type HistoryItem = { id: string; kind: "coin" | "gift"; label: string; amount: number; pnl: number; createdAt: string; href: string };
 type Payload = { holdings: Holding[]; gifts: GiftAsset[]; profile: Profile; history: HistoryItem[] };
 
@@ -30,8 +30,8 @@ export default function VaultPage() {
   async function sync() {
     setSyncing(true); setMessage(null); haptic("medium");
     try {
-      const result = await apiFetch<{ uniqueImported: number }>("/api/gifts/sync", { method: "POST" });
-      setMessage(`${result.uniqueImported} unique Telegram Gifts synced.`);
+      const result = await apiFetch<{ uniqueImported: number; uniqueReceived: number; assetsUpdated: number; virtualCreated: number; pagesFetched: number }>("/api/gifts/sync", { method: "POST" });
+      setMessage(`Telegram sync complete · ${result.uniqueImported}/${result.uniqueReceived} tradeable · ${result.virtualCreated} added · ${result.assetsUpdated} refreshed · ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`);
       await Promise.all([load(), refreshProfile()]);
     } catch (e) { setMessage(e instanceof Error ? e.message : "Sync failed"); }
     finally { setSyncing(false); }
@@ -49,7 +49,7 @@ export default function VaultPage() {
       <RealtimeRefresh channelName="mxm-vault" tables={realtimeTables} onChange={realtimeReload} />
       <section className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3">
         <div className="flex items-start justify-between gap-3"><div><p className="text-[11px] text-[var(--muted)]">Net worth</p><h1 className="mt-1 text-2xl font-semibold">{money(data.profile.netWorth)}</h1><p className={`mt-1 text-xs ${data.profile.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{data.profile.pnl >= 0 ? "+" : ""}{money(data.profile.pnl)} since start</p></div><button onClick={sync} disabled={syncing} className="flex items-center gap-1.5 rounded-lg bg-[var(--panel-2)] px-3 py-2 text-xs text-[#c9ccd1]"><RefreshCw size={13} className={syncing ? "animate-spin" : ""} />Sync gifts</button></div>
-        <div className="mt-4 grid grid-cols-3 gap-2"><Allocation label="Cash" value={data.profile.balance} pct={cashPct} /><Allocation label="Gifts" value={data.profile.giftValue} pct={giftPct} /><Allocation label="Coins" value={data.profile.coinValue} pct={coinPct} /></div>
+        <div className="mt-4 grid grid-cols-3 gap-2"><Allocation label="Cash" value={data.profile.balance} pct={cashPct} /><Allocation label="Gifts" value={data.profile.giftValue} pct={giftPct} /><Allocation label="Coins" value={data.profile.coinValue} pct={coinPct} /></div>{data.profile.reservedBalance > 0 ? <div className="mt-2 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />Reserved by open Gift offers</span><span>{money(data.profile.reservedBalance)} · {money(data.profile.availableBalance)} available</span></div> : null}
       </section>
       {message ? <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">{message}</div> : null}
       <div className="mb-3 grid grid-cols-4 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-1"><Tab label={`Gifts ${data.gifts.length}`} active={tab === "gifts"} onClick={() => setTab("gifts")} /><Tab label={`Coins ${data.holdings.length}`} active={tab === "coins"} onClick={() => setTab("coins")} /><Tab label={`Listed ${listed.length}`} active={tab === "listed"} onClick={() => setTab("listed")} /><Tab label="History" active={tab === "history"} onClick={() => setTab("history")} /></div>

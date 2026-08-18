@@ -6,6 +6,8 @@ export type Profile = {
   lastName: string | null;
   photoUrl: string | null;
   balance: number;
+  reservedBalance: number;
+  availableBalance: number;
   coinValue: number;
   giftValue: number;
   netWorth: number;
@@ -86,9 +88,14 @@ export type GiftAsset = {
   modelThumbFileId: string | null;
   symbolFileId: string;
   symbolThumbFileId: string | null;
+  symbolMediaKind: GiftMediaKind;
   mediaKind: GiftMediaKind;
   isPremium: boolean;
+  isBurned: boolean;
   isFromBlockchain: boolean;
+  lastSeenAt: string;
+  bestOffer: number | null;
+  offerCount: number;
   ownerId: string;
   ownerName: string;
   acquiredPrice: number;
@@ -101,6 +108,8 @@ export type GiftAsset = {
 
 export type GiftCollection = {
   baseName: string;
+  itemCount: number;
+  holderCount: number;
   listedCount: number;
   floorPrice: number | null;
   lastSalePrice: number | null;
@@ -160,7 +169,7 @@ export type Mission = {
 
 export type ActivityItem = {
   id: string;
-  kind: "coin" | "gift" | "launch" | "listing";
+  kind: "coin" | "gift" | "launch" | "listing" | "offer";
   actorId: string | null;
   label: string;
   detail: string;
@@ -180,6 +189,8 @@ export type LeaderboardPlayer = {
   giftValue: number;
   netWorth: number;
   realizedPnl: number;
+  coinRealizedPnl: number;
+  giftRealizedPnl: number;
   coinTrades: number;
   giftTrades: number;
   giftCount: number;

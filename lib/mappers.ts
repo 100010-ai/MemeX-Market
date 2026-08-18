@@ -26,6 +26,14 @@ function nullableNumber(value: unknown, name: string) {
   return requiredNumber(value, name);
 }
 
+function mediaKind(animated: unknown, video: unknown, label: string): GiftMediaKind {
+  if (animated === true && video === true) throw new Error(`${label} cannot be animated and video at the same time`);
+  if (video === true) return "video";
+  if (animated === true) return "animated";
+  if (video === false && animated === false) return "static";
+  throw new Error(`Invalid ${label} media metadata`);
+}
+
 export function mapCoin(row: Record<string, any>): Coin {
   return {
     id: requiredString(row.id, "coin id"),
@@ -45,12 +53,6 @@ export function mapCoin(row: Record<string, any>): Coin {
 }
 
 export function mapGift(row: Record<string, any>): GiftAsset {
-  let mediaKind: GiftMediaKind;
-  if (row.model_is_video === true) mediaKind = "video";
-  else if (row.model_is_animated === true) mediaKind = "animated";
-  else if (row.model_is_video === false && row.model_is_animated === false) mediaKind = "static";
-  else throw new Error("Invalid Gift media metadata");
-
   const status = row.status;
   if (status !== "owned" && status !== "listed") throw new Error("Invalid Gift market status");
 
@@ -76,9 +78,14 @@ export function mapGift(row: Record<string, any>): GiftAsset {
     modelThumbFileId: nullableString(row.model_thumb_file_id),
     symbolFileId: requiredString(row.symbol_file_id, "gift symbol file id"),
     symbolThumbFileId: nullableString(row.symbol_thumb_file_id),
-    mediaKind,
+    symbolMediaKind: mediaKind(row.symbol_is_animated, row.symbol_is_video, "Gift symbol"),
+    mediaKind: mediaKind(row.model_is_animated, row.model_is_video, "Gift model"),
     isPremium: Boolean(row.is_premium),
+    isBurned: Boolean(row.is_burned),
     isFromBlockchain: Boolean(row.is_from_blockchain),
+    lastSeenAt: requiredString(row.last_seen_at, "gift last_seen_at"),
+    bestOffer: nullableNumber(row.best_offer, "gift best offer"),
+    offerCount: requiredNumber(row.offer_count, "gift offer count"),
     ownerId: requiredString(row.owner_profile_id, "gift owner id"),
     ownerName: requiredString(row.owner_name, "gift owner name"),
     acquiredPrice: requiredNumber(row.acquired_price, "gift acquisition price"),

@@ -1,4 +1,4 @@
--- MXM v0.4 ships with no market seed data.
+-- MXM v0.5 ships with no market seed data.
 -- Coins appear only after users launch them.
 -- Gifts appear only after Telegram unique Gifts are synced and listed.
 -- Missions are installed by 001_init.sql.

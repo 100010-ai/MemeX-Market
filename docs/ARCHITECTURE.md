@@ -1,22 +1,23 @@
-# MXM v0.4 Architecture
+# MXM v0.5 Architecture
 
 ## Runtime
 
 ```text
 Telegram Mini App
-      │ initData
+      │ signed initData
       ▼
 Next.js 16 / Vercel
       │
-      ├── server route handlers
+      ├── authenticated route handlers
       │      ├── Telegram initData verification
-      │      ├── Telegram Bot API Gift sync/media
+      │      ├── Telegram Gift sync + media proxy
+      │      ├── admin diagnostics
       │      └── Supabase RPC transactions
       │
       └── client UI
              ├── Tailwind CSS
              ├── lightweight-charts
-             └── Supabase Realtime subscriptions
+             └── Supabase Realtime invalidation
                     │
                     ▼
              Supabase / Postgres
@@ -24,129 +25,61 @@ Next.js 16 / Vercel
 
 ## Trust boundary
 
-The browser never receives `TELEGRAM_BOT_TOKEN` or `SUPABASE_SECRET_KEY`.
+The browser never receives the Telegram bot token or Supabase secret key. Balance, holdings, ownership, offers, rewards and coin launch state can only mutate through server handlers + database RPCs.
 
-All operations that can change balance, ownership, positions, offers or rewards execute through Next.js route handlers and Postgres functions. The client sends intent only.
+## Telegram Gift source model
 
-## Authentication
+`gift_assets` is observed Telegram source data. MXM requires the unique Gift identity, model, symbol, backdrop, rarities and Telegram sticker IDs before the asset is accepted. `telegram_payload` retains the observed source object for diagnostics and `last_seen_at` records the latest successful observation.
 
-1. Telegram injects `window.Telegram.WebApp.initData`.
-2. The client sends that exact string to `/api/auth/telegram`.
-3. The server verifies the Telegram signature and freshness.
-4. `sync_telegram_profile` inserts or updates the profile.
-5. Next.js sets an HTTP-only signed `mxm_tg_session` cookie.
-6. Protected API routes resolve the profile from that signed session.
+`virtual_gifts` is MXM market state. It stores the MXM owner, acquisition cost, listing price, last sale and listing status. This is intentionally separate from Telegram custody.
 
-## Coin market
+`gift_sync_runs` is server-only observability. Every sync is `running → succeeded|failed` and captures counts plus the exact failure text.
 
-`coins` stores the current AMM state:
+## No source-data substitution
 
-- `token_reserve`
-- `quote_reserve`
-- `current_price`
-- `market_cap`
+The Gift renderer accepts only Telegram file IDs from `gift_assets`. Static stickers are proxied directly, video stickers render as video, and TGS stickers are decoded through the authenticated TGS route and rendered by Lottie. A failed Telegram media request renders an error state; it is not replaced by emoji/generated art.
 
-`buy_coin` and `sell_coin` lock the affected profile, coin and position rows, calculate the trade, write `trades`, update reserves/holdings, then update the current OHLC bucket.
+## Cash reservation
 
-No client-side balance calculation is authoritative.
+A pending Gift offer is a cash commitment. `pending_gift_offer_total` is used by spend RPCs so that one player cannot create multiple offers and then spend the same cash on coins, coin launch or Buy Now.
 
-## Gift catalog
+Client `availableBalance` is informational. Postgres performs the authoritative check under row locks.
 
-A Telegram collectible has two MXM layers:
+## Gift transactions
 
-### `gift_assets`
+`list_virtual_gift`, `create_gift_offer`, `buy_virtual_gift` and `resolve_gift_offer` reject assets currently marked burned by Telegram.
 
-Immutable/observed Telegram identity and visual metadata:
+A completed Gift sale atomically:
 
-- Telegram unique name
-- collection/base name
-- collectible number
-- model + rarity + Telegram file ID
-- symbol + rarity + Telegram file ID
-- backdrop + rarity + Telegram colors
-- premium/blockchain flags
+1. validates current ownership/listing/offer state;
+2. validates spendable balance after other pending offers;
+3. moves MXM cash;
+4. moves MXM Gift ownership;
+5. closes conflicting pending offers;
+6. records `gift_trades` + seller realized PnL;
+7. updates the collection candle;
+8. advances relevant missions.
 
-### `virtual_gifts`
+## Gift market observations
 
-MXM game state:
+`gift_market_overview` exposes the current Gift, listing, live offer depth and an estimated value derived only from observations that exist. Active floors exclude burned assets.
 
-- virtual owner
-- acquisition price
-- listing price
-- last MXM sale
-- listing status
+`gift_collection_overview` is calculated from non-burned Gift assets and reports item/holder/listing counts, floor, last sale, 24h volume/trades and 24h movement.
 
-A virtual MXM trade never transfers the underlying Telegram collectible.
+`gift_collection_candles` are rebuilt from completed Gift sales during the v0.5 migration and maintained at one-minute resolution afterwards.
 
-## Gift valuation
+## Coins
 
-`gift_market_overview.estimated_value` uses only MXM observations that actually exist for that asset context:
-
-- collection floor
-- model floor
-- backdrop floor
-- symbol floor
-- collection last sale
-
-The view averages the available observations. With zero observations the value is `NULL`, so the UI shows an unpriced asset.
-
-## Gift transaction paths
-
-### Listing buy
-
-`buy_virtual_gift`:
-
-1. locks buyer + virtual Gift;
-2. resolves seller and locks seller profile;
-3. validates current listing and buyer balance;
-4. moves virtual balance;
-5. moves virtual ownership;
-6. records the Gift trade and realized PnL;
-7. closes outstanding offers;
-8. records the collection candle;
-9. advances mission progress.
-
-### Offer
-
-- `create_gift_offer`
-- `resolve_gift_offer`
-- `cancel_gift_offer`
-
-Acceptance performs the same balance/ownership consistency checks inside Postgres.
-
-## Realtime
-
-The browser subscribes to market-facing tables:
-
-- `coins`
-- `trades`
-- `virtual_gifts`
-- `gift_trades`
-- `market_events`
-
-A change invalidates the relevant page state and triggers a fresh API read. Realtime events are a refresh signal; route/API responses remain the data contract rendered by the UI.
-
-## Missions
-
-`missions` defines rules. `user_missions` stores a player's period-specific progress. Daily and weekly rows are created with period keys, so progress resets by period without deleting historical rows.
-
-Mission progress is advanced by server-side market functions. `claim_mission` validates completion and performs the balance reward transaction.
+Player-created coins use the Postgres constant-product AMM. `buy_coin` respects Gift-offer cash reservations. Coin trades maintain holdings, market state, trade history and minute candles.
 
 ## Leaderboard
 
-The `leaderboard` view calculates:
+The v0.5 view calculates cash, Coin value, non-burned Gift value, net worth, Coin/Gift realized PnL separately, total realized PnL, trade counts, Gift count and creator market cap.
 
-- cash balance
-- current coin portfolio value
-- priced Gift portfolio value
-- net worth
-- realized PnL
-- trade counts
-- Gift count
-- total active market cap created by the player
+## Realtime
 
-`/api/leaderboard` ranks in Postgres and calculates the current user's global rank from the same metric.
+Realtime events invalidate API state; they do not become the trusted state themselves. Market, Gift detail, Orders and Vault subscribe to the relevant market tables and refetch their authenticated API representation. Private `gift_offers` rows are not published; offer mutations emit a public-safe `market_events` invalidation instead.
 
-## RLS and keys
+## Admin diagnostics
 
-Public Realtime reads use the Supabase publishable key with read-only policies on market tables. Application mutations use the server-side Supabase secret key and explicitly restricted RPC functions.
+`/admin` is not linked as a public navigation item. The API allows only Telegram IDs listed in `ADMIN_TELEGRAM_IDS`. It reports aggregate market health and recent `gift_sync_runs`; it does not expose server secrets.

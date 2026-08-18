@@ -13,7 +13,7 @@ import { ago, compact, money, percent, price } from "@/lib/format";
 import type { Candle, Coin, Trade } from "@/lib/types";
 
 const realtimeTables = ["coins", "trades"];
-type Payload = { coin: Coin; candles: Candle[]; trades: Trade[]; holding: { quantity: number; costBasis: number }; balance: number; topHolders: { id: string; name: string; quantity: number }[] };
+type Payload = { coin: Coin; candles: Candle[]; trades: Trade[]; holding: { quantity: number; costBasis: number }; balance: number; availableBalance: number; reservedBalance: number; topHolders: { id: string; name: string; quantity: number }[] };
 
 export default function CoinPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +31,7 @@ export default function CoinPage() {
   useEffect(() => { void load(); }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
-  const max = useMemo(() => side === "buy" ? data?.balance || 0 : data?.holding.quantity || 0, [data, side]);
+  const max = useMemo(() => side === "buy" ? data?.availableBalance || 0 : data?.holding.quantity || 0, [data, side]);
 
   async function trade() {
     const numeric = Number(amount);
@@ -71,7 +71,8 @@ export default function CoinPage() {
         <aside className="space-y-3">
           <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3 lg:sticky lg:top-[78px]">
             <div className="grid grid-cols-2 rounded-lg bg-[var(--surface)] p-1"><button onClick={() => { setSide("buy"); setAmount(""); }} className={`rounded-md py-2 text-xs font-medium ${side === "buy" ? "bg-[var(--positive)] text-black" : "text-[var(--muted)]"}`}>BUY</button><button onClick={() => { setSide("sell"); setAmount(""); }} className={`rounded-md py-2 text-xs font-medium ${side === "sell" ? "bg-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>SELL</button></div>
-            <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Available</span><span>{side === "buy" ? money(data.balance) : `${compact(data.holding.quantity)} ${coin.symbol}`}</span></div>
+            <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Available</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.quantity)} ${coin.symbol}`}</span></div>
+            {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} reserved by open Gift offers</p> : null}
             <div className="mt-2 flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3"><input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><span className="text-xs text-[var(--muted)]">{side === "buy" ? "USD" : coin.symbol}</span></div>
             <div className="mt-2 grid grid-cols-4 gap-1">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} onClick={() => setAmount(String(max * fraction))} className="rounded-md bg-[var(--panel-2)] py-2 text-[10px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "MAX" : `${fraction * 100}%`}</button>)}</div>
             {error ? <div className="mt-3 rounded-lg bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
