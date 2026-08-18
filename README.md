@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.9.0
+# MemeX Market (MXM) v0.9.1.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 

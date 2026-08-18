@@ -7,6 +7,21 @@ const COOKIE = "mxm_local_control";
 const MAX_AGE = 60 * 60 * 8;
 const SECRET_FILE = ".mxm-control-secret";
 
+
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+export function consumeLocalControlLoginAttempt(key: string, limit = 8, windowMs = 5 * 60_000) {
+  const now = Date.now();
+  const current = loginAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
+}
+
 type Payload = { issuedAt: number; nonce: string; tokenHash: string };
 
 let cachedToken: string | null = null;
