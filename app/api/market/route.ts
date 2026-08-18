@@ -8,19 +8,25 @@ export async function GET() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
+
   try {
     const [coinsResult, giftsResult, collectionsResult, activity] = await Promise.all([
-      supabase.from("market_overview").select("*").eq("status", "active").order("volume_24h", { ascending: false }).limit(100),
-      supabase.from("gift_market_overview").select("*").eq("status", "listed").order("listing_price", { ascending: true }).limit(160),
-      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(60),
+      supabase.from("market_overview").select("*").eq("status", "active").not("creator_profile_id", "is", null).order("volume_24h", { ascending: false }).limit(100),
+      supabase.from("gift_market_overview").select("*").eq("status", "listed").not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }).limit(160),
+      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(100),
       getMarketActivity(supabase, 16),
     ]);
+
     const firstError = coinsResult.error || giftsResult.error || collectionsResult.error;
     if (firstError) throw firstError;
+
+    const rawGifts = giftsResult.data || [];
+    const visibleCollections = new Set(rawGifts.map((row: any) => String(row.base_name)));
+
     return NextResponse.json({
       coins: (coinsResult.data || []).map(mapCoin),
-      gifts: (giftsResult.data || []).map(mapGift),
-      collections: (collectionsResult.data || []).map((row: any) => ({
+      gifts: rawGifts.map(mapGift),
+      collections: (collectionsResult.data || []).filter((row: any) => visibleCollections.has(String(row.base_name))).map((row: any) => ({
         baseName: row.base_name,
         listedCount: Number(row.listed_count),
         floorPrice: row.floor_price == null ? null : Number(row.floor_price),

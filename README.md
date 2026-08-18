@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.3
+# MemeX Market (MXM) v0.4
 
 Telegram Mini App for a multiplayer virtual market built with **Next.js, TypeScript, Tailwind CSS, Supabase and Vercel**.
 
@@ -9,7 +9,16 @@ MXM has two connected markets:
 
 The app starts each new profile with **$100 virtual balance**.
 
-## Included in v0.3
+## v0.4 changes
+
+- Removed every legacy demo Gift and seeded demo coin.
+- Gift cards no longer show a VIRTUAL badge.
+- Gift model media, symbol pattern, backdrop colors, name, number and rarity come from Telegram data only.
+- Mobile header no longer duplicates the MXM/MemeX brand shown by Telegram.
+- Market UI was rebuilt around a compact Telegram-native marketplace layout.
+- `002_remove_legacy_placeholders.sql` cleans databases that were previously initialized with v0.2.
+
+## Included in v0.4
 
 - Telegram Mini App session verification on the server.
 - Telegram profile sync: Telegram ID, name, username and avatar.
@@ -42,7 +51,10 @@ Open **Supabase → SQL Editor** and execute:
 
 ```text
 supabase/migrations/001_init.sql
+supabase/migrations/002_remove_legacy_placeholders.sql
 ```
+
+Run the migrations in that order. `002_remove_legacy_placeholders.sql` is also safe on a fresh database and removes the old v0.2 placeholder rows on an upgraded database.
 
 `supabase/seed.sql` intentionally contains no market assets. Coins are created by players and Gift assets enter MXM only through Telegram Gift sync.
 

@@ -1,3 +1,4 @@
--- MXM v0.3 deliberately ships without fake market assets.
--- The market is populated only by player-created meme coins and Telegram unique Gifts synced through the Bot API.
+-- MXM v0.4 ships with no market seed data.
+-- Coins appear only after users launch them.
+-- Gifts appear only after Telegram unique Gifts are synced and listed.
 -- Missions are installed by 001_init.sql.

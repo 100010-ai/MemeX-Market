@@ -131,6 +131,7 @@ export type GiftOffer = {
   buyerName: string;
   ownerId: string;
   ownerName: string;
+  gift: GiftAsset;
 };
 
 export type GiftTraitStats = {

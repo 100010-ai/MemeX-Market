@@ -42,7 +42,3 @@ export function SecondaryButton({ className = "", children, ...props }: ButtonHT
 export function Chip({ children, active = false }: { children: ReactNode; active?: boolean }) {
   return <span className={`inline-flex h-9 items-center rounded-lg border px-3 text-xs ${active ? "border-[var(--accent)] bg-[rgba(255,216,61,.08)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}>{children}</span>;
 }
-
-export function Verified() {
-  return <span className="inline-grid h-4 w-4 place-items-center rounded-full bg-[var(--blue)] text-[10px] font-black text-white" aria-label="verified">✓</span>;
-}

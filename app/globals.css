@@ -2,21 +2,21 @@
 
 :root {
   color-scheme: dark;
-  --bg: #111213;
-  --surface: #151617;
-  --panel: #191a1c;
-  --panel-2: #202124;
-  --panel-3: #292b2f;
-  --border: #303238;
-  --border-soft: #24262a;
-  --text: #f5f6f7;
-  --muted: #8b9098;
-  --muted-2: #5f646c;
-  --accent: #ffd600;
-  --accent-hover: #ffe348;
-  --positive: #25cb81;
-  --negative: #ff5b68;
-  --blue: #58aaff;
+  --bg: #101112;
+  --surface: #141516;
+  --panel: #191a1b;
+  --panel-2: #222426;
+  --panel-3: #2b2d30;
+  --border: #303236;
+  --border-soft: #232528;
+  --text: #f3f4f5;
+  --muted: #8f949b;
+  --muted-2: #62676e;
+  --accent: #ffd400;
+  --accent-hover: #ffe13e;
+  --positive: #36c989;
+  --negative: #ff626d;
+  --blue: #5da8ff;
 }
 
 * { box-sizing: border-box; }
@@ -34,19 +34,34 @@ button, input, textarea, select { font: inherit; }
 a { color: inherit; text-decoration: none; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
-::selection { background: rgba(255, 214, 0, .2); }
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-thumb { background: #363940; border-radius: 999px; }
+::selection { background: rgba(255, 212, 0, .2); }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: #37393d; border-radius: 999px; }
 
-.safe-bottom { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.safe-bottom { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 .safe-top { padding-top: env(safe-area-inset-top); }
+.header-action {
+  display: grid;
+  height: 34px;
+  width: 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: #b8bbc0;
+}
+.header-action:active { background: var(--panel-3); color: white; }
+
 .market-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 640px) { .market-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 1100px) { .market-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 460px) { .market-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .market-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .mxm-skeleton {
-  background: linear-gradient(90deg, #1b1c1f 25%, #25272b 50%, #1b1c1f 75%);
+  background: linear-gradient(90deg, #1b1c1e 25%, #27292c 50%, #1b1c1e 75%);
   background-size: 200% 100%;
   animation: mxm-shimmer 1.2s infinite linear;
 }
 @keyframes mxm-shimmer { to { background-position: -200% 0; } }
+
+.mxm-scrollbar-none { scrollbar-width: none; }
+.mxm-scrollbar-none::-webkit-scrollbar { display: none; }

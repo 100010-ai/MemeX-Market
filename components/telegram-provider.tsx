@@ -36,8 +36,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         if (!webApp?.initData) throw new Error("MXM must be opened from @MemeXMarketBot in Telegram.");
         webApp.ready();
         webApp.expand();
-        webApp.setHeaderColor?.("#111213");
-        webApp.setBackgroundColor?.("#111213");
+        webApp.setHeaderColor?.("#101112");
+        webApp.setBackgroundColor?.("#101112");
         const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),

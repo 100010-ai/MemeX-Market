@@ -5,8 +5,8 @@ import { TelegramProvider } from "@/components/telegram-provider";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
-  title: "MemeX Market — Virtual Telegram Trading",
-  description: "MXM is a multiplayer virtual market for meme coins and simulated Telegram collectible gifts.",
+  title: "MemeX Market",
+  description: "MXM is a multiplayer trading game for meme coins and Telegram collectible gifts.",
 };
 
 export const viewport: Viewport = {

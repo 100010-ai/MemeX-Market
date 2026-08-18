@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   try {
-    const { data: giftRow, error } = await supabase.from("gift_market_overview").select("*").eq("virtual_gift_id", id).single();
+    const { data: giftRow, error } = await supabase.from("gift_market_overview").select("*").eq("virtual_gift_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).single();
     if (error || !giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
 
     const [tradesResult, candlesResult, offersResult, collectionResult, modelFloorResult, backdropFloorResult, symbolFloorResult] = await Promise.all([

@@ -1,4 +1,4 @@
-# MXM v0.3 Architecture
+# MXM v0.4 Architecture
 
 ## Runtime
 

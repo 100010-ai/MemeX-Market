@@ -655,11 +655,11 @@ insert into public.missions(key,period,title,description,reward,target,action_ty
   ('first_coin_trade','onboarding','First fill','Complete your first meme-coin trade.',10,1,'coin_trade',30),
   ('first_gift_buy','onboarding','First collectible','Buy your first virtual Telegram Gift.',15,1,'gift_buy',40),
   ('daily_trades','daily','Three fills','Complete 3 meme-coin trades today.',8,3,'coin_trade',100),
-  ('daily_offer','daily','Make an offer','Place an offer on another player’s virtual Gift.',6,1,'gift_offer',110),
-  ('daily_listing','daily','Open a listing','List one of your virtual Gifts for sale.',6,1,'gift_list',120),
+  ('daily_offer','daily','Make an offer','Place an offer on another player’s Gift.',6,1,'gift_offer',110),
+  ('daily_listing','daily','Open a listing','List one of your Gifts for sale.',6,1,'gift_list',120),
   ('daily_profit','daily','Close green','Close one profitable meme-coin position.',10,1,'profitable_trade',130),
   ('weekly_market','weekly','Market regular','Complete 20 meme-coin trades this week.',35,20,'coin_trade',200),
-  ('weekly_collector','weekly','Collector run','Buy 4 virtual Gifts this week.',40,4,'gift_buy',210),
+  ('weekly_collector','weekly','Collector run','Buy 4 Gifts this week.',40,4,'gift_buy',210),
   ('weekly_creator','weekly','Launch a meme','Create one meme coin this week.',25,1,'create_coin',220),
   ('weekly_flip','weekly','Gift flipper','Sell 2 Gifts above your acquisition price.',40,2,'profitable_gift_sale',230)
 on conflict (key) do update set
