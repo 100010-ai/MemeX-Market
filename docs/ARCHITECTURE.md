@@ -1,121 +1,90 @@
-# MXM v0.8 Architecture
+# MXM v0.9 Architecture
 
-## 1. Два независимых слоя Telegram Gift
+## Product boundary
 
-### Telegram source asset
+MXM is a simulated Telegram Gift + memecoin market denominated in **virtual TON**. Real Telegram collectible data is used only as the source identity/media/traits for Gift assets. Buying or selling in MXM never transfers, withdraws or redeems a real Telegram collectible or real TON.
 
-`gift_assets` хранит проверенное описание реально существующего collectible Gift:
+## Authentication
 
-- Telegram slug / base gift id / number;
-- collection title;
-- model / symbol / backdrop;
-- rarity per mille;
-- Telegram file identities;
-- mirrored model/symbol media URLs;
-- raw normalized Telegram source payload;
-- catalog source;
-- observed Telegram resale TON price and timestamp.
+- Telegram Mini App sends `initData` to the server.
+- Server verifies Telegram signature and freshness.
+- A signed HttpOnly session identifies the MXM profile.
+- Balance-changing actions require the server session and same-origin mutation checks.
 
-### MXM virtual instance
+## Gift catalogue
 
-`virtual_gifts` хранит только игровое состояние:
+Production does **not** require MTProto, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` or a Telegram user-session.
 
-- MXM owner;
-- acquired price;
-- listing price/status;
-- last sale;
-- timestamps.
+Verified real Gift metadata enters `gift_assets` through explicit server/admin catalogue synchronization using the supported Telegram Bot API source accounts configured in the database. Missing source metadata or media is rejected; the app does not manufacture substitutes.
 
-`gift_offers`, `gift_trades`, `gift_collection_candles` продолжают виртуальный lifecycle. Настоящий Telegram owner не меняется при сделке MXM.
-
-## 2. Telegram Bot API catalogue ingestion
-
-Основной source v0.8 — Telegram global resale via Bot API user session.
-
-Pipeline:
+`gift_assets` is source metadata. `virtual_gifts` is the separate MXM ownership layer.
 
 ```text
-Telegram getStarGiftOptions
+verified Telegram Gift
         ↓
-bounded daily rotation of base Gift types
+gift_assets
         ↓
-Telegram getStarGiftResaleOptions(sort=price)
+virtual_gifts
         ↓
-strict validation of exact collectible metadata + TON resale price
+listing / offers / trades
         ↓
-mirror genuine Telegram model/symbol media to Supabase Storage
-        ↓
-gift_assets upsert
-        ↓
-seed_global_catalog_gift()
-        ↓
-small system-owned virtual MXM listing
+virtual TON ledger
 ```
 
-Каталог реальных Unique Gifts импортируется через Telegram Bot API из источников, настроенных в локальном `/control`. Production-запросы рынка не выполняют внешнее сканирование Telegram: DB-only NPC liquidity tick использует только уже проверенные `gift_assets`.
+## Offline liquidity
 
-## 3. Bootstrap первого пользователя
+A bounded NPC liquidity engine can create virtual listings only for unused, verified `gift_assets` rows. NPC/system profiles are marked `is_system`, excluded from leaderboards and auditable through `npc_market_log`.
 
-`GET /api/market?scope=gifts` сначала читает текущий рынок. При низкой ликвидности выполняется короткий `ensureNpcMarketLiquidity()` без внешних HTTP-запросов; он может создать listings только из `bot_catalog` assets.
+NPC pricing can use Telegram trait rarity plus MXM collection observations, but it never changes Telegram metadata. Market page refills are DB-only and never wait on an external Telegram request.
 
-Postgres advisory-style state lock через `catalog_sync_state` не позволяет нескольким serverless requests одновременно запускать импорт. После sync Market выполняет новый authoritative query.
+## Market read path
 
-Если sync не удался, API не вставляет альтернативные данные.
+The initial Gift Market response is intentionally bounded. Heavy source fields such as raw Telegram payloads are excluded via `giftMarketSelect`.
 
-## 4. Virtual TON
+For search queries of two or more characters, `/api/market/search` performs a lazy server-side search across active listings by collection/model/backdrop/symbol or exact Gift number. This keeps first paint fast without limiting search to the initial cards.
 
-`profiles.balance` остаётся numeric ledger, но продуктовая единица v0.8 — **virtual TON**.
+Supabase Realtime is an invalidation signal only. After a market event, the client refetches authoritative server state.
 
-- signup: 100 virtual TON;
-- memecoin launch: 50 virtual TON;
-- Gift listing/offers/trades: virtual TON;
-- memecoin AMM reserves/quotes/trades: virtual TON;
-- portfolio/net worth/PnL/leaderboard: virtual TON.
+## Gift purchase paths
 
-Это внутренняя игровая единица с TON denomination. Она не является настоящим on-chain TON и не имеет redemption flow.
+### Buy Now
 
-## 5. Транзакции и баланс
+`buy_virtual_gift` is the single-item transactional purchase path.
 
-Client не является source of truth.
+### Cart
 
-Gift buy/list/offer/resolve и coin buy/sell/create завершаются серверно/SQL RPC. Pending Gift offers входят в `reservedBalance`; spendable amount вычисляется как available balance после reservations.
+`market_cart_items` stores the server-side cart. `buy_virtual_gift_cart`:
 
-Database locking/state guards предотвращают повторную продажу одного instance и расход уже зарезервированного баланса.
+- accepts 1–20 unique Gift IDs;
+- locks buyer/listings/sellers in deterministic order;
+- revalidates current listing state;
+- accounts for reserved pending offers;
+- debits the buyer once;
+- transfers all Gifts or none;
+- pays sellers;
+- rejects superseded offers;
+- records trades/candles/missions;
+- removes purchased Gifts from every stale cart.
 
-## 6. Realtime
+The client cannot provide authoritative owner, balance or price values.
 
-Supabase Realtime используется как invalidation signal, а не как authoritative financial state.
+## Gift details
 
-После события UI повторно запрашивает backend contract. `gift_offers` остаются private; публичное изменение офферов инвалидируется через `market_events`.
+The Gift detail API returns:
 
-## 7. Media performance
+- current listing and best offer;
+- collection + trait floors;
+- recent completed sales;
+- latest collection candles;
+- item all-time trade count/volume/high/low sale;
+- current cart state.
 
-- cards lazy-load Gift media;
-- static thumbnail используется там, где Telegram его дал;
-- TGS запускается только у видимого/близкого к viewport media;
-- Telegram file proxy stream-ит response;
-- global Bot API importer зеркалирует media по Telegram unique file identity;
-- одинаковые media переиспользуются во время одного sync;
-- model/symbol одного Gift скачиваются параллельно.
+In-app navigation is intercepted by `app/@modal/(.)gifts/[id]`, so Gift details open as a bottom sheet. Direct/shared URLs still resolve to the standalone Gift page.
 
-## 8. Horizontal mobile rails
+## Memecoins
 
-`.mxm-hscroll` — единый primitive для длинных mobile tabs/filters.
+Memecoins use server-side AMM/RPC trading. Quotes are calculated from authoritative reserves before trade confirmation. User coin images are validated and stored server-side. Candles are derived from completed MXM trades only.
 
-Он использует:
+## Local control
 
-```text
-flex-wrap: nowrap
-overflow-x: auto
-children: flex: 0 0 auto
-white-space: nowrap
--webkit-overflow-scrolling: touch
-```
-
-`body` не блокирует horizontal pan. Это важно для Telegram WebView.
-
-## 9. Local God Mode
-
-`/control` доступен только в development на loopback host. При первом открытии сервер создаёт `.mxm-control-secret`; после token-auth используется signed HttpOnly + SameSite Strict session. Все mutations идут через server routes и пишутся в audit log.
-
-God Mode не должен быть включён на production Vercel environment.
+`/control` is restricted to localhost/loopback and uses a generated `.mxm-control-secret`. The panel can manage users, balances, bans, leaderboard visibility, missions, coins, catalogue sources, Gift ownership/listings and audit data.

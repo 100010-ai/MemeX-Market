@@ -55,8 +55,8 @@ export function GiftMedia({ gift, className = "", compact = false }: { gift: Gif
     ? gift.symbolMediaUrl
     : staticSymbolFileId ? `/api/telegram/file/${encodeURIComponent(staticSymbolFileId)}` : null;
   const pattern = useMemo(() => Array.from({ length: compact ? 8 : 12 }, (_, i) => i), [compact]);
-  // Mirrored MTProto media is already CDN-ready, so do not replace it with a
-  // Bot API thumbnail whose file ID may belong to a different source session.
+  // Mirrored Telegram media is already CDN-ready, so do not replace it with a
+  // Bot API thumbnail whose file ID may belong to a different Telegram source.
   const compactModelFileId = compact && !gift.modelMediaUrl && gift.modelThumbFileId ? gift.modelThumbFileId : gift.modelFileId;
   const compactModelKind: GiftMediaKind = compact && !gift.modelMediaUrl && gift.modelThumbFileId ? "static" : gift.mediaKind;
 

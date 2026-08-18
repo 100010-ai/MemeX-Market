@@ -20,7 +20,7 @@ export default function VaultPage() {
   const [tab, setTab] = useState<TabKey>("gifts");
   const [message, setMessage] = useState<string | null>(null);
   const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/portfolio")); }, []);
-  useEffect(() => { load().catch((e) => setMessage(e instanceof Error ? e.message : "Не удалось загрузить портфель")); }, [load]);
+  useEffect(() => { load().catch((e) => setMessage(e instanceof Error ? e.message : "Не удалось загрузить хранилище")); }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
   const listed = useMemo(() => data?.gifts.filter((gift) => gift.status === "listed") || [], [data]);
@@ -54,7 +54,7 @@ export default function VaultPage() {
       </div>
 
       {tab === "gifts" || tab === "listed" ? (
-        (tab === "listed" ? listed : data.gifts).length ? <div className="market-grid grid gap-2">{(tab === "listed" ? listed : data.gifts).map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <Empty title={tab === "listed" ? "Нет активных лотов" : "В портфеле пока нет подарков"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2 text-xs font-medium">Открыть маркет</Link> : undefined} />
+        (tab === "listed" ? listed : data.gifts).length ? <div className="market-grid grid gap-2">{(tab === "listed" ? listed : data.gifts).map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <Empty title={tab === "listed" ? "Нет активных лотов" : "В хранилище пока нет подарков"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2 text-xs font-medium">Открыть маркет</Link> : undefined} />
       ) : tab === "coins" ? (
         data.holdings.length ? <div className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]"><div className="divide-y divide-[var(--border-soft)]">{data.holdings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 hover:bg-[var(--panel-2)] sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Нет позиций по мемкоинам" action={<Link href="/market" className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2 text-xs font-medium">Открыть маркет</Link>} />
       ) : (

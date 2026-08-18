@@ -34,6 +34,15 @@ function mediaKind(animated: unknown, video: unknown, label: string): GiftMediaK
   throw new Error(`Invalid ${label} media metadata`);
 }
 
+export const giftMarketSelect = [
+  "asset_id","virtual_gift_id","telegram_name","gift_id","base_name","gift_number",
+  "model_name","model_rarity_per_mille","model_rarity","model_file_id","model_thumb_file_id","model_is_animated","model_is_video",
+  "symbol_name","symbol_rarity_per_mille","symbol_file_id","symbol_thumb_file_id","symbol_is_animated","symbol_is_video",
+  "backdrop_name","backdrop_rarity_per_mille","backdrop_center_color","backdrop_edge_color","backdrop_symbol_color","backdrop_text_color",
+  "is_premium","is_from_blockchain","is_burned","last_seen_at","owner_profile_id","owner_name","acquired_price","listing_price","last_sale_price","status","created_at",
+  "estimated_value","best_offer","offer_count","catalog_source","model_media_url","symbol_media_url"
+].join(",");
+
 export function mapCoin(row: Record<string, any>): Coin {
   return {
     id: requiredString(row.id, "coin id"),

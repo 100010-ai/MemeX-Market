@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { progressionForXp, requireProfile, tierForWorth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { mapCoin, mapGift } from "@/lib/mappers";
+import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireProfile();
@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       supabase.from("profile_financial_overview").select("*").eq("id", id).maybeSingle(),
       supabase.from("profiles").select("id,username,first_name,photo_url,created_at,xp").eq("id", id).maybeSingle(),
       supabase.from("market_overview").select("*").eq("creator_profile_id", id).order("market_cap", { ascending: false }).limit(12),
-      supabase.from("gift_market_overview").select("*").eq("owner_profile_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("estimated_value", { ascending: false, nullsFirst: false }).limit(8),
+      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("estimated_value", { ascending: false, nullsFirst: false }).limit(8),
     ]);
     const error = leaderResult.error || profileResult.error || coinsResult.error || giftsResult.error;
     if (error) throw error;

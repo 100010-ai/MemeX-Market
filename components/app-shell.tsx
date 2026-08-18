@@ -11,7 +11,7 @@ const nav = [
   { href: "/orders", label: "Ордера", icon: ReceiptText },
   { href: "/hub", label: "Хаб", icon: Gamepad2 },
   { href: "/tasks", label: "Задания", icon: ListChecks },
-  { href: "/vault", label: "Портфель", icon: Boxes },
+  { href: "/vault", label: "Хранилище", icon: Boxes },
 ];
 
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {

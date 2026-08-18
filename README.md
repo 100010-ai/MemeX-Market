@@ -1,34 +1,48 @@
-# MemeX Market (MXM) v0.8.1
+# MemeX Market (MXM) v0.9.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
-## v0.8.1
+MXM uses **virtual TON only**. Telegram collectible Gifts provide real source artwork/metadata, while ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
-- Virtual TON is the in-game denomination.
-- Removed the MTProto/user-session runtime dependency and `@mtcute/node`.
-- Telegram Gift catalogue sources are configured in local `/control` and imported through the existing Telegram Bot API token.
-- Offline NPC liquidity uses only verified real Telegram Unique Gift metadata already stored in `gift_assets`.
-- NPC system accounts are excluded from leaderboards and are not represented as real human players.
-- NPC listing prices are derived from real Gift traits and existing MXM collection observations. A small, auditable `rare_deal` probability can list a genuinely rare Gift below its calculated virtual fair value.
-- Market opening never waits for an external Telegram catalogue scan. NPC liquidity is generated from Supabase in a bounded DB-only tick.
-- Local God Mode no longer needs `MXM_LOCAL_ADMIN_ENABLED` or `MXM_LOCAL_ADMIN_TOKEN`. On first local `/control` open, a random key is generated into `.mxm-control-secret` and printed in the terminal.
-- Fixed React hydration warning caused by Telegram modifying root viewport CSS before hydration.
-- Added a matching `pnpm-lock.yaml`; Vercel frozen-lockfile installs no longer fail because of `@mtcute/node`.
-- Added `.gitignore` for `.env*`, `.mxm-control-secret`, `.next`, `node_modules`, etc.
+## v0.9 — Market Flow
+
+This release tightens the marketplace flow around the interaction patterns of mature Telegram gift markets without cloning their branding or relying on demo data.
+
+- Added a **server-side Gift cart**. Cart contents live in Postgres, not localStorage.
+- Added atomic multi-item checkout with row locking, balance/reservation validation and all-or-nothing purchase semantics.
+- Market Gift cards can add/remove a live listing from the cart without opening the detail page.
+- Gift search is now **lazy and server-backed**: the first Market payload stays bounded, while queries of 2+ characters search across active listings by collection, model, backdrop, symbol or exact Gift number.
+- Added `/cart` with live listing validation, stale-item cleanup, total virtual TON cost and one-tap checkout.
+- Added compact Gift discovery rails: `Все`, `Выгодно`, `Редкие`, `Новые`, `С офферами`.
+- All long filters/tabs continue using the shared horizontal swipe rail for Telegram WebView.
+- Mobile Market is denser: collection overview cards are no longer inserted above the mobile catalog.
+- Bottom navigation now calls the asset area **Хранилище**.
+- Hub mobile UI has separate horizontally swipeable `Лента рынка / Топ трейдеров` sections instead of forcing two large blocks at once.
+- Gift detail now supports add/remove from cart alongside Buy Now and offers.
+- Gift detail exposes item-level all-time trade count, all-time virtual TON volume, high/low sale and a dedicated activity feed.
+- Gift/collection chart payloads were cut from 4000 old minute rows to the latest 1200 rows, reducing response size and fixing the chart to show recent history rather than the oldest buckets.
+- Gift API queries no longer fetch `telegram_payload` and other unused heavy source fields on every market/portfolio request. `giftMarketSelect` requests only fields needed by the UI.
+- NPC liquidity candidate selection is diversified across collections instead of exhausting one collection first.
+- NPC listings remain based only on previously verified Telegram Gift assets; no NFT metadata is generated.
+- Market bootstrap target was increased slightly so a fresh player has a broader initial selection while the UI still shows a bounded catalog rather than the entire source database.
 
 ## Database upgrade
 
-If your database already has migration `008_v08_global_resale_virtual_ton.sql`, run only:
+If the database already has `009_v081_npc_liquidity.sql`, run only:
 
 ```text
-supabase/migrations/009_v081_npc_liquidity.sql
+supabase/migrations/010_v09_mrkt_flow.sql
 ```
 
-The migration converts legacy `telegram_resale` catalogue rows to `bot_catalog` and keeps existing real Gift metadata.
+The migration adds:
+
+- `market_cart_items`;
+- transactional `buy_virtual_gift_cart(...)`;
+- diversified `npc_market_candidates(...)`.
+
+It inserts no demo market assets.
 
 ## Environment
-
-Copy `.env.example` to `.env.local` locally or configure the same production values in Vercel.
 
 ```env
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -39,11 +53,9 @@ SESSION_SECRET=your-own-random-secret-at-least-32-characters
 ADMIN_TELEGRAM_IDS=123456789
 ```
 
-There are no `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_USER_SESSION`, `MARKET_CATALOG_*` or `MARKET_BOOTSTRAP_*` variables in v0.8.1.
+No MTProto user session is required by the production app.
 
 ## Local God Mode
-
-Run:
 
 ```bash
 npm install
@@ -56,45 +68,27 @@ Open:
 http://localhost:3000/control
 ```
 
-On the first request, MXM creates `.mxm-control-secret` in the project root and prints the key to the terminal. Paste that key into the login form. The file is ignored by Git.
+On first local access MXM creates `.mxm-control-secret` and prints the generated local control key in the terminal.
 
-The control panel can:
+## Real Gift catalogue + NPC liquidity
 
-- adjust/set player balances and XP;
-- ban/unban players and hide them from leaderboards;
-- create/edit/delete missions;
-- create, hide, stop or delete meme coins and upload coin images;
-- add Telegram numeric IDs as catalogue sources;
-- synchronize real Unique Gift metadata from those sources through Bot API;
-- run the offline NPC liquidity tick;
-- transfer/list virtual Gifts;
-- inspect the audit log and NPC pricing state.
-
-## NPC Gift liquidity
-
-NPCs do not invent NFT metadata. The flow is:
+NPCs never create Telegram NFT metadata. They can only virtualize rows already verified and stored in `gift_assets`.
 
 ```text
-Telegram Bot API source
+verified Telegram Gift metadata
         ↓
-verified Unique Gift metadata
+gift_assets
         ↓
-gift_assets (catalog_source=bot_catalog)
+diversified NPC liquidity
         ↓
-offline NPC liquidity engine
+virtual TON listings
         ↓
-virtual_gifts / virtual TON listings
-        ↓
-player secondary market
+players / cart / offers / secondary market
 ```
 
-The market tick targets a small inventory instead of displaying every catalogue asset. It runs only when liquidity is low and is protected by a Postgres lock/cooldown.
+When system liquidity falls below the target, the backend performs a bounded DB-only refill. It does not call an external Telegram source while the user is waiting for the Market page.
 
-A listing fair value is derived from model/symbol/backdrop rarity, special Gift number characteristics, and existing MXM collection floor/last-sale observations when available. A rare asset has a small deterministic chance to enter `rare_deal` mode and be listed at a meaningful discount. These decisions are stored in `npc_market_log` for audit.
-
-If no real catalogue assets have ever been imported, MXM shows an empty state rather than creating fake Gifts. Before public launch, add one or more catalogue source Telegram IDs in local `/control` and run catalogue sync once.
-
-## Install / build
+## Build
 
 ```bash
 npm install
@@ -104,4 +98,4 @@ npm run build
 npm run dev
 ```
 
-The main authenticated app must be opened from Telegram because Telegram `initData` is verified by the server.
+The authenticated application is intended to be opened through Telegram because server authentication validates Telegram `initData`.

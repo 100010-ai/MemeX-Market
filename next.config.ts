@@ -12,7 +12,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   compress: true,
-  serverExternalPackages: ["@mtcute/node"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -18,6 +18,7 @@ export default function HubPage() {
   const [leaders, setLeaders] = useState<LeaderboardPlayer[]>([]);
   const [meRank, setMeRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [section, setSection] = useState<"feed" | "leaders">("feed");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
@@ -56,13 +57,18 @@ export default function HubPage() {
       <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
         <QuickLink href="/market" icon={<LineChart size={15} />} label="Торговать" detail="Мемкоины и подарки" />
         <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" detail="Получать награды" />
-        <QuickLink href="/vault" icon={<Gift size={15} />} label="Портфель" detail="Ваши активы" />
+        <QuickLink href="/vault" icon={<Gift size={15} />} label="Хранилище" detail="Ваши активы" />
+      </div>
+
+      <div className="mxm-hscroll mb-3 gap-1 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-1 lg:hidden">
+        <button onClick={() => setSection("feed")} className={`shrink-0 rounded-[15px] px-4 py-2 text-[10px] ${section === "feed" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>Лента рынка</button>
+        <button onClick={() => setSection("leaders")} className={`shrink-0 rounded-[15px] px-4 py-2 text-[10px] ${section === "leaders" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>Топ трейдеров</button>
       </div>
 
       {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
+        <section className={`${section === "feed" ? "block" : "hidden"} overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:block`}>
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
             <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Рынок онлайн</div>
             <span className="text-[10px] text-[var(--muted)]">В реальном времени</span>
@@ -85,7 +91,7 @@ export default function HubPage() {
           ) : <Empty text="Активности на рынке пока нет." />}
         </section>
 
-        <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
+        <section className={`${section === "leaders" ? "block" : "hidden"} overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:block`}>
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
             <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Топ трейдеров</div>
             <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">Смотреть все</Link>

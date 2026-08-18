@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { mapGift } from "@/lib/mappers";
+import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
 function displayName(row: { username?: unknown; first_name?: unknown } | undefined, label: string) {
   if (!row) throw new Error(`${label} profile is missing`);
@@ -56,8 +56,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
     const [collectionResult, giftRowsResult, listedResult, candlesResult, salesResult, watchedResult] = await Promise.all([
       supabase.from("gift_collection_overview").select("*").eq("base_name", baseName).maybeSingle(),
       supabase.from("gift_market_overview").select("model_name,model_rarity_per_mille,backdrop_name,backdrop_rarity_per_mille,symbol_name,symbol_rarity_per_mille,status,listing_price").eq("base_name", baseName).eq("is_burned", false).limit(1000),
-      supabase.from("gift_market_overview").select("*").eq("base_name", baseName).eq("is_burned", false).eq("status", "listed").not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }).limit(240),
-      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: true }).limit(4000),
+      supabase.from("gift_market_overview").select(giftMarketSelect).eq("base_name", baseName).eq("is_burned", false).eq("status", "listed").not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }).limit(240),
+      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(1200),
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id,gift_assets!inner(base_name,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(40),
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift_collection").eq("gift_collection", baseName).maybeSingle(),
     ]);
@@ -79,7 +79,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
     return NextResponse.json({
       collection: mapCollection(collectionResult.data),
       gifts: (listedResult.data || []).map(mapGift),
-      candles: (candlesResult.data || []).map((candle) => ({
+      candles: [...(candlesResult.data || [])].reverse().map((candle) => ({
         time: Math.floor(new Date(candle.bucket_start).getTime() / 1000),
         open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
       })),

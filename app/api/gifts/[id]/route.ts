@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { mapGift } from "@/lib/mappers";
+import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
 function personName(names: Map<string, string>, id: string) {
   const name = names.get(id);
@@ -15,20 +15,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   try {
-    const { data: giftRow, error } = await supabase.from("gift_market_overview").select("*").eq("virtual_gift_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).single();
+    const { data: giftRow, error } = await supabase.from("gift_market_overview").select(giftMarketSelect).eq("virtual_gift_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).single();
     if (error || !giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
 
-    const [tradesResult, candlesResult, offersResult, collectionResult, modelFloorResult, backdropFloorResult, symbolFloorResult, snapshot] = await Promise.all([
+    const [tradesResult, candlesResult, offersResult, collectionResult, modelFloorResult, backdropFloorResult, symbolFloorResult, itemStatsResult, snapshot] = await Promise.all([
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", id).order("created_at", { ascending: false }).limit(80),
-      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", giftRow.base_name).order("bucket_start", { ascending: true }).limit(4000),
+      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", giftRow.base_name).order("bucket_start", { ascending: false }).limit(1200),
       supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at").eq("virtual_gift_id", id).eq("status", "pending").order("amount", { ascending: false }).limit(60),
       supabase.from("gift_collection_overview").select("*").eq("base_name", giftRow.base_name).single(),
       supabase.from("gift_market_overview").select("listing_price").eq("base_name", giftRow.base_name).eq("model_name", giftRow.model_name).eq("status", "listed").eq("is_burned", false).order("listing_price", { ascending: true }).limit(1).maybeSingle(),
       supabase.from("gift_market_overview").select("listing_price").eq("base_name", giftRow.base_name).eq("backdrop_name", giftRow.backdrop_name).eq("status", "listed").eq("is_burned", false).order("listing_price", { ascending: true }).limit(1).maybeSingle(),
       supabase.from("gift_market_overview").select("listing_price").eq("base_name", giftRow.base_name).eq("symbol_name", giftRow.symbol_name).eq("status", "listed").eq("is_burned", false).order("listing_price", { ascending: true }).limit(1).maybeSingle(),
+      supabase.rpc("gift_item_market_stats", { p_virtual_gift_id: id }).single(),
       getProfileSnapshot(profile),
     ]);
-    const firstError = tradesResult.error || candlesResult.error || offersResult.error || collectionResult.error || modelFloorResult.error || backdropFloorResult.error || symbolFloorResult.error;
+    const firstError = tradesResult.error || candlesResult.error || offersResult.error || collectionResult.error || modelFloorResult.error || backdropFloorResult.error || symbolFloorResult.error || itemStatsResult.error;
     if (firstError) throw firstError;
 
     const profileIds = new Set<string>();
@@ -47,12 +48,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return [String(person.id), name] as [string, string];
     }));
 
+    const cartResult = await supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).eq("virtual_gift_id", id).maybeSingle();
+    if (cartResult.error) throw cartResult.error;
     const collection = collectionResult.data;
     if (!collection) throw new Error("Gift collection market row is missing");
     const gift = mapGift(giftRow);
     return NextResponse.json({
       gift,
       isOwner: gift.ownerId === String(profile.id),
+      inCart: Boolean(cartResult.data),
       balance: snapshot.balance,
       availableBalance: snapshot.availableBalance,
       reservedBalance: snapshot.reservedBalance,
@@ -61,9 +65,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         sellerId: trade.seller_profile_id ? String(trade.seller_profile_id) : null,
         sellerName: trade.seller_profile_id ? personName(names, String(trade.seller_profile_id)) : null,
       })),
-      candles: (candlesResult.data || []).map((candle: any) => ({
+      candles: [...(candlesResult.data || [])].reverse().map((candle: any) => ({
         time: Math.floor(new Date(candle.bucket_start).getTime() / 1000), open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
       })),
+      itemStats: {
+        tradeCount: Number(itemStatsResult.data?.trade_count || 0),
+        volume: Number(itemStatsResult.data?.volume || 0),
+        highSale: itemStatsResult.data?.high_sale == null ? null : Number(itemStatsResult.data.high_sale),
+        lowSale: itemStatsResult.data?.low_sale == null ? null : Number(itemStatsResult.data.low_sale),
+      },
       collection: {
         baseName: String(giftRow.base_name), itemCount: Number(collection.item_count), holderCount: Number(collection.holder_count), listedCount: Number(collection.listed_count),
         floorPrice: collection.floor_price == null ? null : Number(collection.floor_price),

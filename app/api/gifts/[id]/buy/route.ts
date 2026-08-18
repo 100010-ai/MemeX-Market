@@ -12,5 +12,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("buy_virtual_gift", { p_buyer_id: profile.id, p_virtual_gift_id: id });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from("market_cart_items").delete().eq("virtual_gift_id", id);
   return NextResponse.json({ trade: data });
 }
