@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.6.0
+# MemeX Market (MXM) v0.6.1
 
 Telegram Mini App for a multiplayer simulated market built with **Next.js, TypeScript, Tailwind CSS, Supabase and Vercel**.
 
@@ -9,19 +9,26 @@ MXM has two connected markets:
 
 A new profile starts with **$100 MXM cash**. There are no seeded market assets, generated Gift media, synthetic listings, browser dev accounts or demo prices.
 
-## v0.6 — Exchange & Retention
 
-- Persistent **watchlist** for meme coins and Telegram Gift collections.
-- Dedicated Gift collection pages with floor, 24h volume, holders, sales candles, trait floors and live listings.
-- Coin market sorting for Trending, Gainers, Volume, Market Cap and New.
-- Server-derived AMM quote preview before every coin trade: output, execution price, 0.5% fee, price impact and projected post-trade price.
-- Richer coin metrics from actual reserves/trades: liquidity, ATH, all-time volume and 24h buy/sell flow.
-- Persistent XP/level progression driven by completed trades, coin launches and claimed missions.
-- Historical XP backfill is deterministic from existing MXM activity.
-- Profile, Tasks and desktop shell expose level/XP progress.
-- Route error boundary with the exact application error instead of a blank render.
-- `/api/health` reports the correct v0.6 version.
-- Still **no seeded assets, fake Gift media, generated prices, dev login or market-data fallbacks**.
+## v0.6.1 — Russian UI + Realtime config fix
+
+- Интерфейс переведён на русский язык: маркет, торговля, портфель, задания, рейтинг, профили, офферы и диагностика.
+- Визуальная система стала темнее и мягче: более глубокий фон, скруглённые поверхности, кнопки, фильтры, карточки и нижняя навигация.
+- Supabase Realtime больше не является причиной падения всего Mini App. Конфигурация Realtime запрашивается через серверный `/api/realtime/config`.
+- Для Realtime принимаются `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` или `SUPABASE_ANON_KEY`. URL берётся из `NEXT_PUBLIC_SUPABASE_URL` либо `SUPABASE_URL`.
+- Если публичный ключ Realtime действительно не задан, основной серверный API продолжает показывать реальные данные Supabase; Realtime просто не запускается. Никакого polling, mock/fake market data или подстановки активов нет.
+- `/api/health` теперь сообщает `realtimeConfigured` и версию `0.6.1`.
+- Тексты заданий в базе переводятся миграцией `005_v061_ru_ui.sql`.
+
+### Обновление с v0.6
+
+Выполните только:
+
+```text
+supabase/migrations/005_v061_ru_ui.sql
+```
+
+Кодовую миграцию Realtime применять в Supabase не требуется — это исправление Next.js/Vercel-конфигурации.
 
 ## v0.5 — Real Market Core
 
@@ -43,21 +50,14 @@ A new profile starts with **$100 MXM cash**. There are no seeded market assets, 
 
 ## Upgrading an existing MXM database
 
-### From v0.5
+### From v0.4.1
 
 Run only:
 
 ```text
-supabase/migrations/004_v06_exchange_retention.sql
-```
-
-### From v0.4.1
-
-Run, in order:
-
-```text
 supabase/migrations/003_v05_real_market_core.sql
 supabase/migrations/004_v06_exchange_retention.sql
+supabase/migrations/005_v061_ru_ui.sql
 ```
 
 ### From the old v0.2 schema
@@ -68,6 +68,7 @@ Run, in order:
 supabase/migrations/002_remove_legacy_placeholders.sql
 supabase/migrations/003_v05_real_market_core.sql
 supabase/migrations/004_v06_exchange_retention.sql
+supabase/migrations/005_v061_ru_ui.sql
 ```
 
 If an old attempt at `002_remove_legacy_placeholders.sql` failed on a dependent view, use the corrected `002` included here and run it from the beginning. Its transaction rolls back a failed attempt instead of leaving a half-migrated schema.
@@ -81,6 +82,7 @@ supabase/migrations/001_init.sql
 supabase/migrations/002_remove_legacy_placeholders.sql
 supabase/migrations/003_v05_real_market_core.sql
 supabase/migrations/004_v06_exchange_retention.sql
+supabase/migrations/005_v061_ru_ui.sql
 ```
 
 `supabase/seed.sql` intentionally inserts **no market assets**.
@@ -99,6 +101,8 @@ Copy `.env.example` to `.env.local` locally, and configure the same values in Ve
 ```bash
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+# Optional compatibility aliases:
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 TELEGRAM_BOT_TOKEN=123456789:AA...
@@ -191,8 +195,7 @@ Coins use a constant-product AMM. Buy/sell mutations are server RPCs and complet
 ```text
 /market              Gifts + Coins market
 /gifts/[id]          Gift details / trade / offers / activity / chart
-/collections/[name]  Gift collection floor / traits / candles / listings
-/coin/[id]           Coin candles / quote preview / buy / sell / holders
+/coin/[id]           Coin candles / buy / sell / holders
 /create               Launch a meme coin
 /orders               Incoming/outgoing Gift offers + listings
 /hub                  Live market feed
@@ -247,7 +250,7 @@ The diagnostics table is server-only behind RLS and is read with the Supabase se
 app/                    Next.js App Router UI + API routes
 components/             MXM shell, Gift media/cards, chart, realtime
 lib/                    Telegram auth/sync, Supabase, mapping, feed
-supabase/migrations/    schema + v0.4 cleanup + v0.5 market core + v0.6 exchange/retention
+supabase/migrations/    schema + v0.4 cleanup + v0.5 market core
 docs/                   architecture + database upgrade notes
 supabase/seed.sql       intentionally contains no market data
 ```

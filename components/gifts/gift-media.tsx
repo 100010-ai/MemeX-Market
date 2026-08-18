@@ -15,14 +15,14 @@ function TelegramSticker({ fileId, kind, alt, className, onError }: { fileId: st
     Promise.all([
       import("lottie-web"),
       fetch(`/api/telegram/tgs/${encodeURIComponent(fileId)}`, { cache: "force-cache" }).then(async (response) => {
-        if (!response.ok) throw new Error(`Telegram TGS request failed (${response.status})`);
+        if (!response.ok) throw new Error(`Не удалось получить TGS из Telegram (${response.status})`);
         return response.json();
       }),
     ]).then(([module, animationData]) => {
       if (destroyed || !lottieRef.current) return;
       animation = module.default.loadAnimation({ container: lottieRef.current, renderer: "svg", loop: true, autoplay: true, animationData });
     }).catch((cause) => {
-      const message = cause instanceof Error ? cause.message : "Telegram TGS render failed";
+      const message = cause instanceof Error ? cause.message : "Не удалось отрисовать TGS из Telegram";
       setError(message);
       onError?.(message);
     });
@@ -31,9 +31,9 @@ function TelegramSticker({ fileId, kind, alt, className, onError }: { fileId: st
 
   const src = `/api/telegram/file/${encodeURIComponent(fileId)}`;
   if (error) return <div className={`grid place-items-center text-center text-[10px] leading-4 text-white/65 ${className || ""}`}>{error}</div>;
-  if (kind === "video") return <video src={src} autoPlay loop muted playsInline onError={() => { setError("Telegram video load failed"); onError?.("Telegram video load failed"); }} className={className} />;
+  if (kind === "video") return <video src={src} autoPlay loop muted playsInline onError={() => { setError("Не удалось загрузить видео Telegram"); onError?.("Не удалось загрузить видео Telegram"); }} className={className} />;
   if (kind === "animated") return <div ref={lottieRef} aria-label={alt} className={className} />;
-  return <img src={src} alt={alt} onError={() => { setError("Telegram image load failed"); onError?.("Telegram image load failed"); }} className={className} />;
+  return <img src={src} alt={alt} onError={() => { setError("Не удалось загрузить изображение Telegram"); onError?.("Не удалось загрузить изображение Telegram"); }} className={className} />;
 }
 
 export function GiftMedia({ gift, className = "", compact = false }: { gift: GiftAsset; className?: string; compact?: boolean }) {
@@ -78,7 +78,7 @@ export function GiftMedia({ gift, className = "", compact = false }: { gift: Gif
 
       <div className={`relative z-10 grid h-full w-full place-items-center ${compact ? "p-[15%]" : "p-[13%]"}`}>
         {modelError ? (
-          <div className="max-w-[210px] rounded-md bg-black/20 px-3 py-2 text-center text-[10px] leading-4 text-white/75">Telegram media error<br />{modelError}</div>
+          <div className="max-w-[210px] rounded-2xl bg-black/20 px-3 py-2 text-center text-[10px] leading-4 text-white/75">Ошибка медиа Telegram<br />{modelError}</div>
         ) : (
           <TelegramSticker
             fileId={gift.modelFileId}

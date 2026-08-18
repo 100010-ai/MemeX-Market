@@ -20,13 +20,13 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
   const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/orders")); }, []);
-  useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Could not load orders")); }, [load]);
+  useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить ордера")); }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
   async function act(id: string, action: "accept" | "reject" | "cancel") {
     setBusy(id + action); setError(null); haptic("medium");
     try { await apiFetch(`/api/gifts/offers/${id}`, { method: "POST", body: JSON.stringify({ action }) }); await Promise.all([load(), refreshProfile()]); }
-    catch (e) { setError(e instanceof Error ? e.message : "Action failed"); }
+    catch (e) { setError(e instanceof Error ? e.message : "Не удалось выполнить действие"); }
     finally { setBusy(null); }
   }
 
@@ -36,20 +36,20 @@ export default function OrdersPage() {
       <RealtimeRefresh channelName="mxm-orders" tables={realtimeTables} onChange={realtimeReload} />
 
       <div className="mb-3 grid grid-cols-3 border-b border-[var(--border-soft)]">
-        <Tab label={`Offers ${data.incoming.length}`} active={tab === "incoming"} onClick={() => setTab("incoming")} />
-        <Tab label={`My offers ${data.outgoing.length}`} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
-        <Tab label={`Listed ${data.listings.length}`} active={tab === "listings"} onClick={() => setTab("listings")} />
+        <Tab label={`Офферы ${data.incoming.length}`} active={tab === "incoming"} onClick={() => setTab("incoming")} />
+        <Tab label={`Мои офферы ${data.outgoing.length}`} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
+        <Tab label={`В продаже ${data.listings.length}`} active={tab === "listings"} onClick={() => setTab("listings")} />
       </div>
 
-      {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       {tab === "listings" ? (
-        data.listings.length ? <div className="space-y-1.5">{data.listings.map((gift) => <Link key={gift.virtualGiftId} href={`/gifts/${gift.virtualGiftId}`} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2 active:bg-[var(--panel-2)]"><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-lg" /><div className="min-w-0"><p className="truncate text-xs font-medium">{gift.baseName}</p><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice).replace("$", "")}</div></Link>)}</div> : <Empty text="No active listings" icon={<Tag />} />
+        data.listings.length ? <div className="space-y-1.5">{data.listings.map((gift) => <Link key={gift.virtualGiftId} href={`/gifts/${gift.virtualGiftId}`} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2 active:bg-[var(--panel-2)]"><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-2xl" /><div className="min-w-0"><p className="truncate text-xs font-medium">{gift.baseName}</p><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice).replace("$", "")}</div></Link>)}</div> : <Empty text="Нет активных лотов" icon={<Tag />} />
       ) : current.length ? (
-        <div className="space-y-1.5">{current.map((offer) => <div key={offer.id} className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2.5"><div className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5"><Link href={`/gifts/${offer.virtualGiftId}`}><GiftMedia gift={offer.gift} compact className="h-[46px] w-[46px] rounded-lg" /></Link><div className="min-w-0"><Link href={`/gifts/${offer.virtualGiftId}`} className="block truncate text-xs font-medium">{offer.baseName} #{offer.number}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">{tab === "incoming" ? `from ${offer.buyerName}` : `owner ${offer.ownerName}`} · {ago(offer.createdAt)}</p></div><p className="flex items-center gap-1 text-xs font-semibold"><Gem size={11} fill="currentColor" />{money(offer.amount).replace("$", "")}</p></div><div className="mt-2 flex gap-2">{tab === "incoming" ? <><button disabled={busy !== null} onClick={() => act(offer.id, "reject")} className="flex-1 rounded-lg bg-[var(--panel-2)] py-2 text-xs">Reject</button><button disabled={busy !== null} onClick={() => act(offer.id, "accept")} className="flex-1 rounded-lg bg-[var(--accent)] py-2 text-xs font-semibold text-black">Accept</button></> : <button disabled={busy !== null} onClick={() => act(offer.id, "cancel")} className="w-full rounded-lg bg-[var(--panel-2)] py-2 text-xs">Cancel offer</button>}</div></div>)}</div>
-      ) : <Empty text={tab === "incoming" ? "No incoming offers" : "No open offers"} icon={<Inbox />} />}
+        <div className="space-y-1.5">{current.map((offer) => <div key={offer.id} className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2.5"><div className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5"><Link href={`/gifts/${offer.virtualGiftId}`}><GiftMedia gift={offer.gift} compact className="h-[46px] w-[46px] rounded-2xl" /></Link><div className="min-w-0"><Link href={`/gifts/${offer.virtualGiftId}`} className="block truncate text-xs font-medium">{offer.baseName} #{offer.number}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">{tab === "incoming" ? `от ${offer.buyerName}` : `владелец ${offer.ownerName}`} · {ago(offer.createdAt)}</p></div><p className="flex items-center gap-1 text-xs font-semibold"><Gem size={11} fill="currentColor" />{money(offer.amount).replace("$", "")}</p></div><div className="mt-2 flex gap-2">{tab === "incoming" ? <><button disabled={busy !== null} onClick={() => act(offer.id, "reject")} className="flex-1 rounded-2xl bg-[var(--panel-2)] py-2 text-xs">Отклонить</button><button disabled={busy !== null} onClick={() => act(offer.id, "accept")} className="flex-1 rounded-2xl bg-[var(--accent)] py-2 text-xs font-semibold text-black">Принять</button></> : <button disabled={busy !== null} onClick={() => act(offer.id, "cancel")} className="w-full rounded-2xl bg-[var(--panel-2)] py-2 text-xs">Отменить оффер</button>}</div></div>)}</div>
+      ) : <Empty text={tab === "incoming" ? "Входящих офферов нет" : "Активных офферов нет"} icon={<Inbox />} />}
     </div>
   );
 }
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) { return <button onClick={onClick} className={`relative py-3 text-xs ${active ? "text-white" : "text-[var(--muted)]"}`}>{label}{active ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-white" /> : null}</button>; }
-function Empty({ text, icon }: { text: string; icon: React.ReactNode }) { return <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-12 text-center text-[var(--muted)]"><div className="mx-auto flex w-fit opacity-60">{icon}</div><p className="mt-3 text-sm">{text}</p></div>; }
+function Empty({ text, icon }: { text: string; icon: React.ReactNode }) { return <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-12 text-center text-[var(--muted)]"><div className="mx-auto flex w-fit opacity-60">{icon}</div><p className="mt-3 text-sm">{text}</p></div>; }

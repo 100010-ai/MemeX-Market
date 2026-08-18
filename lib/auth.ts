@@ -23,14 +23,14 @@ export async function requireProfile() {
 }
 
 export function tierForWorth(netWorth: number) {
-  if (netWorth >= 10_000_000) return "Market Legend";
-  if (netWorth >= 1_000_000) return "Tycoon";
-  if (netWorth >= 250_000) return "Fund Manager";
-  if (netWorth >= 50_000) return "Whale";
-  if (netWorth >= 10_000) return "Market Maker";
-  if (netWorth >= 2_000) return "Degen";
-  if (netWorth >= 500) return "Trader";
-  return "Newbie";
+  if (netWorth >= 10_000_000) return "Легенда рынка";
+  if (netWorth >= 1_000_000) return "Магнат";
+  if (netWorth >= 250_000) return "Управляющий";
+  if (netWorth >= 50_000) return "Кит";
+  if (netWorth >= 10_000) return "Маркет-мейкер";
+  if (netWorth >= 2_000) return "Деген";
+  if (netWorth >= 500) return "Трейдер";
+  return "Новичок";
 }
 
 export function progressionForXp(rawXp: number) {

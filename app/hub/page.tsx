@@ -32,7 +32,7 @@ export default function HubPage() {
       setLeaders(leaderboard.players.slice(0, 8));
       setMeRank(leaderboard.meRank);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load market hub");
+      setError(e instanceof Error ? e.message : "Не удалось загрузить хаб рынка");
     } finally {
       if (!silent) setLoading(false);
     }
@@ -47,25 +47,25 @@ export default function HubPage() {
 
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Market Hub</h1>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">Live MXM activity and global standings.</p>
+          <h1 className="text-lg font-semibold">Хаб рынка</h1>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Живая активность MXM и глобальный рейтинг.</p>
         </div>
-        {meRank !== null ? <Link href="/leaderboard" className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Your rank</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
+        {meRank !== null ? <Link href="/leaderboard" className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Ваше место</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
       </div>
 
       <div className="mb-3 grid grid-cols-3 gap-2">
-        <QuickLink href="/market" icon={<LineChart size={15} />} label="Trade" detail="Coins & Gifts" />
-        <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Tasks" detail="Earn balance" />
-        <QuickLink href="/vault" icon={<Gift size={15} />} label="Vault" detail="Your assets" />
+        <QuickLink href="/market" icon={<LineChart size={15} />} label="Торговать" detail="Мемкоины и подарки" />
+        <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" detail="Получать награды" />
+        <QuickLink href="/vault" icon={<Gift size={15} />} label="Портфель" detail="Ваши активы" />
       </div>
 
-      {error ? <div className="mb-3 rounded-xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Live market</div>
-            <span className="text-[10px] text-[var(--muted)]">Realtime</span>
+            <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Рынок онлайн</div>
+            <span className="text-[10px] text-[var(--muted)]">В реальном времени</span>
           </div>
           {loading ? <RowsSkeleton count={8} /> : activity.length ? (
             <div className="divide-y divide-[var(--border-soft)]">
@@ -76,31 +76,31 @@ export default function HubPage() {
                     <p className="mt-1 text-[10px] text-[var(--muted)]">{ago(item.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-right text-xs font-medium">{item.amount == null ? item.kind.toUpperCase() : money(item.amount)}</span>
+                    <span className="text-right text-xs font-medium">{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span>
                     <ArrowUpRight size={13} className="text-[var(--muted)]" />
                   </div>
                 </Link>
               ))}
             </div>
-          ) : <Empty text="No market activity yet." />}
+          ) : <Empty text="Активности на рынке пока нет." />}
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Top traders</div>
-            <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">View all</Link>
+            <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Топ трейдеров</div>
+            <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">Смотреть все</Link>
           </div>
           {loading ? <RowsSkeleton count={6} /> : leaders.length ? (
             <div className="divide-y divide-[var(--border-soft)]">
               {leaders.map((player) => (
                 <Link href={`/u/${player.id}`} key={player.id} className="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 hover:bg-[var(--panel-2)]">
                   <span className={`text-center text-[11px] font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{player.rank}</span>
-                  <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} Gifts · {player.coinTrades + player.giftTrades} trades</p></div>
+                  <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} подарков · {player.coinTrades + player.giftTrades} сделок</p></div>
                   <span className="text-xs font-semibold">{money(player.netWorth)}</span>
                 </Link>
               ))}
             </div>
-          ) : <Empty text="No ranked players yet." />}
+          ) : <Empty text="В рейтинге пока никого нет." />}
         </section>
       </div>
     </div>
@@ -108,7 +108,11 @@ export default function HubPage() {
 }
 
 function QuickLink({ href, icon, label, detail }: { href: string; icon: React.ReactNode; label: string; detail: string }) {
-  return <Link href={href} className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
+  return <Link href={href} className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-40 place-items-center px-4 text-center text-xs text-[var(--muted)]">{text}</div>; }
-function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-lg" />)}</div>; }
+function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-2xl" />)}</div>; }
+
+function activityKind(kind: ActivityItem["kind"]) {
+  return kind === "coin" ? "КОИН" : kind === "gift" ? "ПОДАРОК" : kind === "launch" ? "ЗАПУСК" : kind === "listing" ? "ЛОТ" : "ОФФЕР";
+}

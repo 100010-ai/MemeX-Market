@@ -52,8 +52,8 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
 
   return (
     <div>
-      {showTimeframes ? <div className="mb-2 flex gap-1">{timeframes.map((item) => <button key={item.key} onClick={() => setFrame(item)} className={`rounded-md px-2.5 py-1.5 text-[11px] ${frame.key === item.key ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)] hover:text-white"}`}>{item.key}</button>)}</div> : null}
-      {display.length ? <div ref={ref} className="w-full" /> : <div style={{ height }} className="grid place-items-center rounded-lg border border-dashed border-[var(--border)] text-sm text-[var(--muted)]">No trades in this market yet.</div>}
+      {showTimeframes ? <div className="mb-2 flex gap-1">{timeframes.map((item) => <button key={item.key} onClick={() => setFrame(item)} className={`rounded-xl px-2.5 py-1.5 text-[11px] ${frame.key === item.key ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)] hover:text-white"}`}>{item.key}</button>)}</div> : null}
+      {display.length ? <div ref={ref} className="w-full" /> : <div style={{ height }} className="grid place-items-center rounded-2xl border border-dashed border-[var(--border)] text-sm text-[var(--muted)]">На этом рынке пока нет сделок.</div>}
     </div>
   );
 }

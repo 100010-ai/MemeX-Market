@@ -38,7 +38,7 @@ export default function MarketPage() {
     if (!silent) setLoading(true);
     setError(null);
     try { setData(await apiFetch<MarketPayload>("/api/market")); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load market"); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось загрузить рынок"); }
     finally { if (!silent) setLoading(false); }
   }, []);
 
@@ -113,7 +113,7 @@ export default function MarketPage() {
       }));
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update watchlist");
+      setError(cause instanceof Error ? cause.message : "Не удалось обновить избранное");
     } finally {
       setWatchBusy(null);
     }
@@ -124,61 +124,61 @@ export default function MarketPage() {
       <RealtimeRefresh channelName="mxm-market-v06" tables={realtimeTables} onChange={realtimeReload} />
 
       <div className="mb-3 flex items-center gap-2">
-        <div className="grid min-w-0 flex-1 grid-cols-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-0.5">
-          <button onClick={() => setTab("gifts")} className={`flex h-9 items-center justify-center gap-2 rounded-md text-sm font-medium ${tab === "gifts" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><Gift size={15} />Gifts</button>
-          <button onClick={() => setTab("coins")} className={`flex h-9 items-center justify-center gap-2 rounded-md text-sm font-medium ${tab === "coins" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><BarChart3 size={15} />Coins</button>
+        <div className="grid min-w-0 flex-1 grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-0.5">
+          <button onClick={() => setTab("gifts")} className={`flex h-9 items-center justify-center gap-2 rounded-2xl text-sm font-medium ${tab === "gifts" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><Gift size={15} />Подарки</button>
+          <button onClick={() => setTab("coins")} className={`flex h-9 items-center justify-center gap-2 rounded-2xl text-sm font-medium ${tab === "coins" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><BarChart3 size={15} />Мемкоины</button>
         </div>
-        <button onClick={() => setWatchOnly((value) => !value)} aria-label="Show watchlist only" className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg border ${watchOnly ? "border-[var(--accent)] bg-[rgba(255,212,0,.08)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Star size={16} fill={watchOnly ? "currentColor" : "none"} /></button>
+        <button onClick={() => setWatchOnly((value) => !value)} aria-label="Показать только избранное" className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl border ${watchOnly ? "border-[var(--accent)] bg-[rgba(255,212,0,.08)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Star size={16} fill={watchOnly ? "currentColor" : "none"} /></button>
       </div>
 
       <div className="mb-2.5 flex gap-2">
-        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 focus-within:border-[#4a4d52]">
+        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-3 focus-within:border-[#4a4d52]">
           <Search size={15} className="shrink-0 text-[var(--muted)]" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "gifts" ? "Search NFT / number" : "Search coin / ticker"} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted-2)]" />
-          {query ? <button aria-label="Clear search" onClick={() => setQuery("")} className="text-[var(--muted)]"><X size={14} /></button> : null}
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "gifts" ? "Поиск подарка / номера" : "Поиск коина / тикера"} className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted-2)]" />
+          {query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} className="text-[var(--muted)]"><X size={14} /></button> : null}
         </label>
-        <Link href="/hub" className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 text-xs text-[#c7c9cd]"><Sparkles size={14} />Feed</Link>
+        <Link href="/hub" className="flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] px-3 text-xs text-[#c7c9cd]"><Sparkles size={14} />Лента</Link>
       </div>
 
       {tab === "gifts" ? (
         <>
           {!loading && data.collections.length ? <CollectionRail collections={data.collections} watched={watchedCollections} busy={watchBusy} onWatch={(name, enabled) => toggleWatch("gift_collection", name, enabled)} /> : null}
           <div className="mb-2 flex gap-2 overflow-x-auto pb-1 mxm-scrollbar-none">
-            <FilterSelect value={collection} onChange={setCollection} label="Collection" options={data.collections.map((item) => item.baseName)} />
-            <FilterSelect value={model} onChange={setModel} label="Model" options={models} />
-            <FilterSelect value={backdrop} onChange={setBackdrop} label="Backdrop" options={backdrops} />
-            <FilterSelect value={symbol} onChange={setSymbol} label="Symbol" options={symbols} />
-            <label className={`relative flex h-9 shrink-0 items-center rounded-lg border px-2.5 text-xs ${priceBand !== "all" ? "border-[#55585e] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label="Price band" value={priceBand} onChange={(event) => setPriceBand(event.target.value as PriceBand)} className="appearance-none bg-transparent pr-5 outline-none"><option value="all">Price</option><option value="under50">Under 50</option><option value="50to250">50–250</option><option value="250to1000">250–1K</option><option value="over1000">1K+</option></select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>
-            <label className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 text-xs text-[#b8bbc1]">
+            <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
+            <FilterSelect value={model} onChange={setModel} label="Модель" options={models} />
+            <FilterSelect value={backdrop} onChange={setBackdrop} label="Фон" options={backdrops} />
+            <FilterSelect value={symbol} onChange={setSymbol} label="Символ" options={symbols} />
+            <label className={`relative flex h-9 shrink-0 items-center rounded-2xl border px-2.5 text-xs ${priceBand !== "all" ? "border-[#55585e] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label="Диапазон цены" value={priceBand} onChange={(event) => setPriceBand(event.target.value as PriceBand)} className="appearance-none bg-transparent pr-5 outline-none"><option value="all">Цена</option><option value="under50">До 50</option><option value="50to250">50–250</option><option value="250to1000">250–1K</option><option value="over1000">1K+</option></select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>
+            <label className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] px-2.5 text-xs text-[#b8bbc1]">
               <ListFilter size={13} />
-              <select aria-label="Sort Gifts" value={giftSort} onChange={(event) => setGiftSort(event.target.value as GiftSort)} className="appearance-none bg-transparent pr-4 outline-none"><option value="price">Price</option><option value="newest">Newest</option><option value="offers">Offers</option><option value="number">Number</option><option value="rarity">Rarity</option></select>
+              <select aria-label="Сортировка подарков" value={giftSort} onChange={(event) => setGiftSort(event.target.value as GiftSort)} className="appearance-none bg-transparent pr-4 outline-none"><option value="price">Цена</option><option value="newest">Новые</option><option value="offers">Офферы</option><option value="number">Номер</option><option value="rarity">Редкость</option></select>
               <ChevronDown size={12} className="pointer-events-none absolute right-2" />
             </label>
           </div>
           <div className="mb-3 flex h-7 items-center justify-between gap-3 text-[10px] text-[var(--muted)]">
-            <span>{loading ? "Loading listings…" : `${gifts.length} listings · ${data.collections.length} collections${watchOnly ? " · watchlist" : ""}`}</span>
-            {hasGiftFilters ? <button onClick={resetGiftFilters} className="flex items-center gap-1 text-[#c8cbd0]"><SlidersHorizontal size={11} />Reset</button> : null}
+            <span>{loading ? "Загрузка лотов…" : `${gifts.length} лотов · ${data.collections.length} коллекций${watchOnly ? " · избранное" : ""}`}</span>
+            {hasGiftFilters ? <button onClick={resetGiftFilters} className="flex items-center gap-1 text-[#c8cbd0]"><SlidersHorizontal size={11} />Сбросить</button> : null}
           </div>
         </>
       ) : (
         <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 gap-1 overflow-x-auto mxm-scrollbar-none">{(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 rounded-lg px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Market cap" : value}</button>)}</div>
-          <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 text-xs font-semibold text-black"><Plus size={14} />Create</Link>
+          <div className="flex min-w-0 gap-1 overflow-x-auto mxm-scrollbar-none">{(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}</div>
+          <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 rounded-2xl bg-[var(--accent)] px-3 text-xs font-semibold text-black"><Plus size={14} />Создать</Link>
         </div>
       )}
 
-      {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       {tab === "gifts" ? (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>{loading ? <GridSkeleton /> : gifts.length ? <div className="market-grid grid gap-2.5">{gifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <EmptyMarket icon={<Gift />} title={watchOnly ? "Watchlist is empty" : "No listings found"} text={watchOnly ? "Star a Gift collection to keep its listings in one place." : "Try another filter or sync your Telegram Gifts in Vault."} action={<Link href={watchOnly ? "/market" : "/vault"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className="inline-flex rounded-lg bg-[var(--panel-3)] px-4 py-2.5 text-sm font-medium">{watchOnly ? "Show all" : "Open Vault"}</Link>} />}</div>
+          <div>{loading ? <GridSkeleton /> : gifts.length ? <div className="market-grid grid gap-2.5">{gifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавляй коллекции в избранное, чтобы быстро следить за их лотами." : "Измени фильтры или синхронизируй подарки Telegram в портфеле."} action={<Link href={watchOnly ? "/market" : "/vault"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className="inline-flex rounded-2xl bg-[var(--panel-3)] px-4 py-2.5 text-sm font-medium">{watchOnly ? "Показать всё" : "Открыть портфель"}</Link>} />}</div>
           <MarketSide activity={data.activity} collections={data.collections} />
         </div>
       ) : (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)]">
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-3 py-3"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "Trending" : coinSort === "gainers" ? "Top gainers" : coinSort === "volume" ? "Volume" : coinSort === "marketcap" ? "Market cap" : "New coins"}</div><span className="text-[9px] text-[var(--muted)]">{coins.length} assets</span></div>
-            {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "No watched coins" : "No coins yet"} text={watchOnly ? "Star a coin from the market or its trading page." : "Coins appear after a player launches one."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-lg px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Show all" : "Create coin"}</Link>} />}
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-3 py-3"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "В тренде" : coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{coins.length} активов</span></div>
+            {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное на маркете или на странице торговли." : "Коины появятся после запуска игроками."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
           </div>
           <MarketSide activity={data.activity} collections={data.collections} />
         </div>
@@ -189,29 +189,33 @@ export default function MarketPage() {
 
 function FilterSelect({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) {
   const active = value !== "all";
-  return <label className={`relative flex h-9 shrink-0 items-center rounded-lg border px-2.5 text-xs ${active ? "border-[#55585e] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="max-w-32 appearance-none bg-transparent pr-5 outline-none"><option value="all">{label}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>;
+  return <label className={`relative flex h-9 shrink-0 items-center rounded-2xl border px-2.5 text-xs ${active ? "border-[#55585e] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="max-w-32 appearance-none bg-transparent pr-5 outline-none"><option value="all">{label}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>;
 }
 
 function CollectionRail({ collections, watched, busy, onWatch }: { collections: GiftCollection[]; watched: Set<string>; busy: string | null; onWatch: (name: string, enabled: boolean) => void }) {
-  return <div className="mb-3 flex gap-2 overflow-x-auto pb-1 mxm-scrollbar-none">{collections.slice(0, 12).map((item) => { const active = watched.has(item.baseName); return <div key={item.baseName} className="w-[188px] shrink-0 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-2.5"><div className="flex items-start justify-between gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-0"><p className="truncate text-xs font-medium">{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.listedCount} listed · {item.holderCount} holders</p></Link><button disabled={Boolean(busy)} onClick={() => onWatch(item.baseName, !active)} aria-label={active ? "Remove collection from watchlist" : "Add collection to watchlist"} className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${active ? "bg-[rgba(255,212,0,.09)] text-[var(--accent)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}><Star size={12} fill={active ? "currentColor" : "none"} /></button></div><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="mt-2 flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Floor</p><p className="mt-0.5 text-xs font-semibold">{item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></Link></div>; })}</div>;
+  return <div className="mb-3 flex gap-2 overflow-x-auto pb-1 mxm-scrollbar-none">{collections.slice(0, 12).map((item) => { const active = watched.has(item.baseName); return <div key={item.baseName} className="w-[188px] shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2.5"><div className="flex items-start justify-between gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-0"><p className="truncate text-xs font-medium">{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.listedCount} в продаже · {item.holderCount} владельцев</p></Link><button disabled={Boolean(busy)} onClick={() => onWatch(item.baseName, !active)} aria-label={active ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-7 w-7 shrink-0 place-items-center rounded-2xl ${active ? "bg-[rgba(255,212,0,.09)] text-[var(--accent)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}><Star size={12} fill={active ? "currentColor" : "none"} /></button></div><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="mt-2 flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Флор</p><p className="mt-0.5 text-xs font-semibold">{item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></Link></div>; })}</div>;
 }
 
 function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (enabled: boolean) => void }) {
   const flowTotal = coin.buyVolume24h + coin.sellVolume24h;
   const buyShare = flowTotal > 0 ? Math.round((coin.buyVolume24h / flowTotal) * 100) : 0;
   return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto]">
-    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} holders · {buyShare}% buys</p></div></Link>
+    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} владельцев · {buyShare}% покупок</p></div></Link>
     <Link href={`/coin/${coin.id}`} className="text-right md:text-left"><p className="text-xs font-medium">{price(coin.currentPrice)}</p><p className={`text-[10px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></Link>
-    <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Market cap</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
-    <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">24h volume</p><p className="mt-0.5 text-xs">{money(coin.volume24h)}</p></Link>
-    <button disabled={busy} onClick={() => onWatch(!watched)} aria-label={watched ? "Remove coin from watchlist" : "Add coin to watchlist"} className={`grid h-8 w-8 place-items-center rounded-md ${watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={watched ? "currentColor" : "none"} /></button>
+    <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Капитализация</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
+    <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Объём 24ч</p><p className="mt-0.5 text-xs">{money(coin.volume24h)}</p></Link>
+    <button disabled={busy} onClick={() => onWatch(!watched)} aria-label={watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center rounded-2xl ${watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={watched ? "currentColor" : "none"} /></button>
   </div>;
 }
 
 function MarketSide({ activity, collections }: { activity: ActivityItem[]; collections: GiftCollection[] }) {
-  return <aside className="hidden space-y-3 lg:block"><section className="rounded-lg border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Collections</div><div className="divide-y divide-[var(--border-soft)]">{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[10px] text-[var(--muted)]">Floor {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} listed</p></Link>)}</div></section><section className="rounded-lg border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Live feed</div><div className="divide-y divide-[var(--border-soft)]">{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><p className="truncate text-[11px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[10px] text-[var(--muted)]"><span>{item.amount == null ? item.kind : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
+  return <aside className="hidden space-y-3 lg:block"><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Коллекции</div><div className="divide-y divide-[var(--border-soft)]">{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[10px] text-[var(--muted)]">Флор {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} в продаже</p></Link>)}</div></section><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Лента рынка</div><div className="divide-y divide-[var(--border-soft)]">{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><p className="truncate text-[11px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[10px] text-[var(--muted)]"><span>{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
 }
 
-function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-9 text-center"><div className="mx-auto grid h-10 w-10 place-items-center rounded-lg bg-[var(--panel-2)] text-[var(--muted)]">{icon}</div><p className="mt-3 text-sm font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
-function GridSkeleton() { return <div className="market-grid grid gap-2.5">{Array.from({ length: 8 }, (_, index) => <div key={index} className="overflow-hidden rounded-[7px] border border-[var(--border)] bg-[var(--panel)]"><div className="mxm-skeleton aspect-square" /><div className="p-2"><div className="mxm-skeleton h-4 rounded" /><div className="mxm-skeleton mt-2 h-8 rounded" /></div></div>)}</div>; }
-function RowsSkeleton() { return <div className="p-3"><div className="mxm-skeleton h-14 rounded-lg" /><div className="mxm-skeleton mt-2 h-14 rounded-lg" /><div className="mxm-skeleton mt-2 h-14 rounded-lg" /></div>; }
+function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-9 text-center"><div className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-[var(--panel-2)] text-[var(--muted)]">{icon}</div><p className="mt-3 text-sm font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
+function GridSkeleton() { return <div className="market-grid grid gap-2.5">{Array.from({ length: 8 }, (_, index) => <div key={index} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="mxm-skeleton aspect-square" /><div className="p-2"><div className="mxm-skeleton h-4 rounded" /><div className="mxm-skeleton mt-2 h-8 rounded" /></div></div>)}</div>; }
+function RowsSkeleton() { return <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div>; }
+
+function activityKind(kind: ActivityItem["kind"]) {
+  return kind === "coin" ? "коин" : kind === "gift" ? "подарок" : kind === "launch" ? "запуск" : kind === "listing" ? "лот" : "оффер";
+}

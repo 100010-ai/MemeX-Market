@@ -2,15 +2,28 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-let client: SupabaseClient | null = null;
+type RealtimeConfig = { enabled: true; url: string; key: string } | { enabled: false; reason: string };
 
-export function getSupabaseBrowser() {
-  if (client) return client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) throw new Error("Public Supabase Realtime credentials are not configured");
-  client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+let clientPromise: Promise<SupabaseClient | null> | null = null;
+
+async function loadRealtimeConfig(): Promise<RealtimeConfig> {
+  const response = await fetch("/api/realtime/config", { cache: "no-store", credentials: "same-origin" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : `Не удалось получить конфигурацию Realtime (${response.status})`);
+  return payload as RealtimeConfig;
+}
+
+export function getSupabaseBrowser(): Promise<SupabaseClient | null> {
+  if (clientPromise) return clientPromise;
+  clientPromise = loadRealtimeConfig().then((config) => {
+    if (!config.enabled) {
+      console.warn(`[MXM] Supabase Realtime отключён: ${config.reason}`);
+      return null;
+    }
+    return createClient(config.url, config.key, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: { params: { eventsPerSecond: 10 } },
+    });
   });
-  return client;
+  return clientPromise;
 }

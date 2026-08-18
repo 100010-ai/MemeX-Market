@@ -56,7 +56,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
       id: `coin-${row.id}`,
       kind: "coin",
       actorId: String(row.profile_id),
-      label: `${displayName(user)} ${row.side === "buy" ? "bought" : "sold"}`,
+      label: `${displayName(user)} ${row.side === "buy" ? "купил" : "продал"}`,
       detail: `$${coin.symbol}`,
       amount: Number(row.quote_amount),
       createdAt: String(row.created_at),
@@ -72,7 +72,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
       id: `gift-${row.id}`,
       kind: "gift",
       actorId: String(row.buyer_profile_id),
-      label: `${displayName(user)} bought`,
+      label: `${displayName(user)} купил`,
       detail: `${gift.base_name} #${Number(gift.gift_number)}`,
       amount: Number(row.price),
       createdAt: String(row.created_at),
@@ -86,18 +86,18 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
     if (row.kind === "launch") {
       const coin = eventCoins.get(String(row.coin_id));
       if (!coin || typeof coin.symbol !== "string" || !coin.symbol) throw new Error(`Market event ${row.id} coin is missing`);
-      items.push({ id: `event-${row.id}`, kind: "launch", actorId: String(row.actor_profile_id), label: `${actorName} launched`, detail: `$${coin.symbol}`, amount: null, createdAt: String(row.created_at), href: `/coin/${row.coin_id}` });
+      items.push({ id: `event-${row.id}`, kind: "launch", actorId: String(row.actor_profile_id), label: `${actorName} запустил`, detail: `$${coin.symbol}`, amount: null, createdAt: String(row.created_at), href: `/coin/${row.coin_id}` });
     } else if (row.kind === "listing") {
       const gift = eventGifts.get(String(row.virtual_gift_id));
       if (!gift || typeof gift.base_name !== "string" || !gift.base_name) throw new Error(`Market event ${row.id} Gift is missing`);
-      items.push({ id: `event-${row.id}`, kind: "listing", actorId: String(row.actor_profile_id), label: `${actorName} listed`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: row.amount == null ? null : Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
+      items.push({ id: `event-${row.id}`, kind: "listing", actorId: String(row.actor_profile_id), label: `${actorName} выставил`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: row.amount == null ? null : Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
     } else if (row.kind === "offer") {
       // Null amount is a private offer-state refresh (cancel/reject). It should refresh
       // subscribers but must not create misleading public feed copy.
       if (row.amount == null) continue;
       const gift = eventGifts.get(String(row.virtual_gift_id));
       if (!gift || typeof gift.base_name !== "string" || !gift.base_name) throw new Error(`Market event ${row.id} Gift is missing`);
-      items.push({ id: `event-${row.id}`, kind: "offer", actorId: String(row.actor_profile_id), label: `${actorName} offered`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
+      items.push({ id: `event-${row.id}`, kind: "offer", actorId: String(row.actor_profile_id), label: `${actorName} предложил`, detail: `${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.amount), createdAt: String(row.created_at), href: `/gifts/${row.virtual_gift_id}` });
     } else {
       throw new Error(`Unsupported market event kind: ${row.kind}`);
     }

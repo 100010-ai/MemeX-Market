@@ -29,11 +29,11 @@ export function ago(input: string) {
   if (!Number.isFinite(timestamp)) throw new Error("Invalid timestamp");
   const delta = Math.max(0, Date.now() - timestamp);
   const minutes = Math.floor(delta / 60_000);
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1) return "сейчас";
+  if (minutes < 60) return `${minutes} мин`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
+  if (hours < 24) return `${hours} ч`;
+  return `${Math.floor(hours / 24)} д`;
 }
 
 export function rgbIntToHex(value: number) {

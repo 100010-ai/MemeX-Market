@@ -33,18 +33,18 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     async function authenticate() {
       try {
         const webApp = window.Telegram?.WebApp;
-        if (!webApp?.initData) throw new Error("MXM must be opened from @MemeXMarketBot in Telegram.");
+        if (!webApp?.initData) throw new Error("Открой MXM через @MemeXMarketBot в Telegram.");
         webApp.ready();
         webApp.expand();
-        webApp.setHeaderColor?.("#101112");
-        webApp.setBackgroundColor?.("#101112");
+        webApp.setHeaderColor?.("#06080a");
+        webApp.setBackgroundColor?.("#06080a");
         const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),
         });
         if (!cancelled) setProfile(result.profile);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Telegram authentication failed");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Не удалось войти через Telegram");
       } finally {
         if (!cancelled) setLoading(false);
       }

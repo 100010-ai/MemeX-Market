@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "MemeX Market",
-  description: "MXM is a multiplayer trading game for meme coins and Telegram collectible gifts.",
+  description: "MXM — многопользовательская торговая игра с мемкоинами и коллекционными подарками Telegram.",
 };
 
 export const viewport: Viewport = {
@@ -15,12 +15,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#101112",
+  themeColor: "#06080a",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <TelegramProvider><AppShell>{children}</AppShell></TelegramProvider>
