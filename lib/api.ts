@@ -21,7 +21,9 @@ const exactErrors: Record<string, string> = {
 function localizeApiError(message: string): string {
   const exact = exactErrors[message];
   if (exact) return exact;
-  if (message.startsWith("You need $")) return "Недостаточно доступного баланса для этой операции.";
+  if (message.startsWith("You need $") || message.includes("virtual TON available")) return "Недостаточно доступного виртуального TON для этой операции.";
+  if (/Minimum (buy|sell).*\$?0\.01/i.test(message)) return "Минимальная сумма сделки — 0.01 виртуального TON.";
+  if (/\$50|50 MXM cash/i.test(message)) return "Для запуска мемкоина нужно 50 виртуальных TON.";
   if (message.startsWith("Buyer no longer has")) return "У покупателя больше недостаточно доступного баланса.";
   if (message.includes("already burned") || message.includes("is burned")) return "Этот подарок помечен Telegram как сожжённый и не торгуется.";
   if (message.includes("Telegram") && message.toLowerCase().includes("gift") && message.toLowerCase().includes("missing")) return "Telegram не вернул обязательные данные подарка.";

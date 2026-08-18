@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
+import { ensureGlobalGiftMarket, globalResaleCatalogConfigured } from "@/lib/telegram-resale";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const profile = await requireProfile();
@@ -33,14 +35,29 @@ export async function GET(request: NextRequest) {
       }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
     }
 
-    const [giftsResult, collectionsResult, watchlistResult] = await Promise.all([
-      supabase.from("gift_market_overview").select("*").eq("status", "listed").eq("is_burned", false).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }).limit(120),
-      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(80),
-      watchlistPromise,
-    ]);
-    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error;
-    if (firstError) throw firstError;
+    const queryGiftMarket = () => Promise.all([
+      supabase.from("gift_market_overview").select("*").eq("status", "listed").eq("is_burned", false).not("telegram_name", "is", null).order("listing_price", { ascending: true }).limit(72),
+      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(48),
+    ] as const);
 
+    let [giftsResult, collectionsResult] = await queryGiftMarket();
+    if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
+
+    // First-ever production visit must not see an invented demo market. If the
+    // real virtual market is empty and MTProto is configured, populate a small,
+    // bounded set of genuine Telegram resale collectibles, then query again.
+    if (!(giftsResult.data || []).length && globalResaleCatalogConfigured()) {
+      try {
+        await ensureGlobalGiftMarket({ reason: "first-market-open" });
+        [giftsResult, collectionsResult] = await queryGiftMarket();
+        if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
+      } catch (bootstrapError) {
+        console.error("global Gift market bootstrap", bootstrapError);
+      }
+    }
+
+    const watchlistResult = await watchlistPromise;
+    if (watchlistResult.error) throw watchlistResult.error;
     const rawGifts = giftsResult.data || [];
     const visibleCollections = new Set(rawGifts.map((row: any) => String(row.base_name)));
     return NextResponse.json({

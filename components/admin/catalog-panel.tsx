@@ -135,7 +135,7 @@ export function AdminCatalogPanel() {
                   {item.estimatedValue != null ? (
                     <>
                       {" "}
-                      · ориентир {money(item.estimatedValue).replace("$", "")}
+                      · ориентир {money(item.estimatedValue)}
                     </>
                   ) : null}
                 </p>

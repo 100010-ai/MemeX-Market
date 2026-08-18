@@ -1,14 +1,20 @@
+function decimal(value: number, maximumFractionDigits: number, minimumFractionDigits = 0) {
+  return new Intl.NumberFormat("en-US", { useGrouping: true, maximumFractionDigits, minimumFractionDigits }).format(value);
+}
+
 export function money(value: number, maximumFractionDigits = 2) {
   if (!Number.isFinite(value)) throw new Error("Cannot format a non-finite monetary value");
-  if (Math.abs(value) >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
-  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(value) >= 10_000) return `$${(value / 1_000).toFixed(1)}K`;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits }).format(value);
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B TON`;
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(2)}M TON`;
+  if (abs >= 10_000) return `${sign}${(abs / 1_000).toFixed(1)}K TON`;
+  return `${decimal(value, maximumFractionDigits)} TON`;
 }
 
 export function compact(value: number) {
   if (!Number.isFinite(value)) throw new Error("Cannot format a non-finite number");
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(value);
+  return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 2 }).format(value);
 }
 
 export function percent(value: number) {
@@ -20,8 +26,8 @@ export function percent(value: number) {
 export function price(value: number) {
   if (!Number.isFinite(value)) throw new Error("Cannot format a non-finite price");
   if (value >= 1) return money(value, 4);
-  if (value >= 0.01) return `$${value.toFixed(4)}`;
-  return `$${value.toPrecision(4)}`;
+  if (value >= 0.01) return `${value.toFixed(4)} TON`;
+  return `${value.toPrecision(4)} TON`;
 }
 
 export function ago(input: string) {

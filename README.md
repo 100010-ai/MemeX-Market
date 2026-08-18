@@ -1,133 +1,130 @@
-# MemeX Market (MXM) v0.7.0
+# MemeX Market (MXM) v0.8.0
 
-Telegram Mini App for a multiplayer simulated market built with **Next.js, TypeScript, Tailwind CSS, Supabase and Vercel**.
+**MemeX Market** — Telegram Mini App с двумя связанными виртуальными рынками:
 
-MXM has two connected markets:
+- **Telegram Gifts** — реальные collectible Gifts из Telegram используются как проверенные визуальные/metadata-ассеты, а владелец, листинг, офферы, сделки и PnL внутри MXM существуют отдельно и полностью виртуальны.
+- **Мемкоины** — создаются игроками и торгуются через серверный AMM с реальными для MXM сделками, котировками, позициями и свечами.
 
-- **Coins** — player-created meme coins with server-side AMM trading, positions, OHLC candles, volume, holders and market cap.
-- **Gifts** — MXM ownership/trading around exact metadata and media synced from Telegram Unique Gifts. The collectible in Telegram is never transferred by MXM.
+Базовая игровая валюта — **виртуальный TON**. Новый профиль получает **100 виртуальных TON**. Это не настоящий TON, не криптовалюта на блокчейне, не выводится и не обменивается на реальные активы.
 
-A new profile starts with **$100 MXM cash**. There are no seeded market assets, generated Gift media, synthetic listings, browser dev accounts or demo prices.
+В активном продукте нет demo/mock/fake market data, случайных цен, сгенерированных свечей, фейковых пользователей или запасных NFT-картинок. Если источник недоступен или данных нет, интерфейс показывает loading/empty/error state.
 
+## v0.8 — Global Telegram Resale + Virtual TON
 
+### Глобальный каталог Telegram Gifts
 
+Главный Gift Market больше не зависит от `MARKET_CATALOG_TELEGRAM_IDS` и не требует, чтобы игрок владел Gift в своём Telegram.
 
-## v0.7 — Global Gift Market, performance, coin media and local God Mode
+Сервер использует MTProto user session:
 
-- **Global virtual Telegram Gift market:** player ownership in Telegram is no longer required for the main market. Real Telegram Gift metadata/media is imported into system inventory from `MARKET_CATALOG_TELEGRAM_IDS`, while ownership, listings, offers and trades inside MXM remain virtual.
-- **No market-data fallbacks:** no fake Gifts, prices, trades, candles, rankings or activity are generated. Empty/error states stay empty/error states.
-- **Much faster market path:** Gifts and Coins load independently, the mobile market no longer blocks on the expensive live-feed query, real market responses are briefly reused client-side then revalidated, Realtime refreshes are debounced, and the heavy market/portfolio SQL views were rewritten around grouped aggregates instead of repeated per-row subqueries.
-- **Telegram Gift media:** compact cards prefer real Telegram thumbnails, media loads only near the viewport, TGS is not booted for every off-screen card, Telegram file metadata is cached, file responses are streamed instead of buffered, and media authorization no longer performs a profile DB query for every image.
-- **Memecoin images:** users can upload PNG/JPEG/WebP logos (max 2 MB). The client scales the real selected image down to max 512 px for a lighter market avatar; the server still verifies MIME + magic bytes and stores it in Supabase Storage.
-- **Mobile UI:** Gift filters are one horizontally swipeable rail again; native selects were replaced with smooth bottom-sheet selectors; Portfolio and Orders tabs also scroll horizontally instead of squeezing/wrapping; typography and surfaces remain compact/dark/rounded.
-- **Russian tasks:** existing gameplay missions are localized in the migration; the old personal Gift-sync mission is disabled because sync is not required to trade.
-- **Security:** shorter Telegram initData acceptance window, active-ban enforcement, same-origin checks for mutations, DB-backed rate limits, reserved-balance checks, server-only financial mutations, security headers, and admin audit logging.
-- **Local God Mode:** `/control` works only on loopback `localhost`/`127.0.0.1`, only when explicitly enabled, and requires a signed HttpOnly local session. It loads the complete control datasets in pages and can modify balances and XP, ban/unban, hide/unhide players from leaderboards, create/edit/delete tasks, create/hide/stop/delete memecoins, upload coin images, sync the real Telegram catalog, list/unlist Gifts, transfer virtual Gift ownership, inspect the complete audit stream and explicitly sign out.
+1. получает реальные базовые Telegram Gift types;
+2. выбирает только/прежде всего типы с resale inventory;
+3. ежедневно ротирует порядок коллекций;
+4. проверяет ограниченное число коллекций, а не весь каталог;
+5. получает реальные unique Gifts, которые сейчас присутствуют в Telegram resale;
+6. принимает только Gifts с точным slug, номером, model/symbol/backdrop, rarity, Telegram media identity и реальной TON resale price;
+7. зеркалирует реальные Telegram media в Supabase Storage;
+8. создаёт отдельный виртуальный MXM instance, если его ещё нет;
+9. стартовый виртуальный listing получает цену, наблюдавшуюся в Telegram resale в TON в момент импорта.
 
-### Upgrade database
+После появления Gift в MXM Telegram ownership и MXM ownership полностью независимы. Сделка внутри MXM **не покупает, не передаёт и не изменяет настоящий Telegram Gift**.
 
-If the project already has migrations through `006_market_drops.sql`, run only:
+### Как первый игрок не попадает в пустой рынок
+
+Вместо seed/demo данных используется ограниченный bootstrap реального Telegram resale:
+
+- целевой минимум по умолчанию: `12` активных Gift listings — достаточно, чтобы первый экран не был пустым, но initial bootstrap не тащил лишние media;
+- при абсолютно пустом рынке сервер может проверить до `32` реальных Gift collections, но импортирует только нужное небольшое количество;
+- из одной коллекции берётся максимум `4` подходящих unique Gifts;
+- для первоначальной доступности новым игрокам по умолчанию импортируются Gifts с наблюдавшейся resale price не выше `95 TON`;
+- рынок сортирует Telegram resale по цене, поэтому bootstrap старается наполнить стартовый рынок доступными реальными collectible Gifts;
+- после появления достаточной виртуальной ликвидности повторный bootstrap не запускается на каждом запросе.
+
+Если Telegram/MTProto не настроен или Telegram не вернул подходящие реальные Gifts, MXM **не генерирует замену**.
+
+### Производительность каталога
+
+- Global sync защищён Postgres lock, поэтому несколько инстансов не запускают один и тот же импорт параллельно.
+- Статус и ошибки сохраняются в `catalog_sync_runs` / `catalog_sync_state`.
+- Одинаковые model/symbol media внутри одного sync переиспользуются через in-memory cache.
+- Storage path строится по Telegram unique file identity, поэтому одинаковые media не дублируются для каждого Gift.
+- model и symbol одного Gift зеркалируются параллельно.
+- Market API автоматически делает bootstrap только когда Gift Market действительно пуст.
+
+## Горизонтальные вкладки и фильтры
+
+Все длинные мобильные rails сделаны реальным horizontal swipe-контейнером:
+
+- Gift filters: `Коллекция / Модель / Фон / Символ / Цена / Сортировка`;
+- категории мемкоинов;
+- Portfolio tabs;
+- Orders tabs;
+- Leaderboard tabs;
+- trait tabs коллекций;
+- Gift detail tabs;
+- Hub quick actions;
+- административные market rails.
+
+Корневая причина старой проблемы была в `touch-action` на `body`, который мешал горизонтальному жесту в Telegram WebView. В v0.8 `body` разрешает жесты, а `.mxm-hscroll` имеет `overflow-x:auto`, `flex-wrap:nowrap`, `flex-shrink:0`, momentum scrolling и скрытый scrollbar. Элементы не переносятся и не обрезаются без возможности свайпа.
+
+## Мемкоины
+
+- Создание мемкоина — реальная серверная операция.
+- Launch fee: **50 виртуальных TON**.
+- Можно загрузить свою PNG/JPEG/WebP картинку.
+- Клиент уменьшает выбранное изображение до разумного размера, сервер повторно валидирует MIME/magic bytes.
+- Изображение хранится в Supabase Storage.
+- Buy/Sell использует серверный quote: amount out, execution price, fee и price impact.
+- Свечи строятся только из завершённых MXM trades.
+- Если сделок недостаточно, fake candles не создаются.
+
+## Задания
+
+Задания хранятся в Supabase и отображаются на русском. Progress/reward/status берутся с backend. Старое обязательное задание на синхронизацию собственной Telegram Gift-коллекции отключено: владение реальным Gift не требуется для торговли.
+
+## Безопасность
+
+- Telegram `initData` проверяется сервером.
+- Активный бан проверяется при авторизации/операциях.
+- Финансовому состоянию клиента нельзя доверять: balance, ownership, quote, price, reserved balance и PnL проверяются сервером/SQL RPC.
+- Gift buy/list/offer/resolve выполняются транзакционно.
+- Pending offers резервируют виртуальный TON.
+- Mutating routes имеют same-origin protection и DB-backed rate limiting.
+- Критичные операции защищены от двойного расходования состоянием БД.
+- Server secrets не имеют `NEXT_PUBLIC_` префикса.
+- Добавлены security headers.
+- Локальная God Mode пишет audit log.
+
+## Локальная God Mode админка
+
+`/control` предназначена только для локального управления и не должна открываться на production domain.
+
+Она позволяет:
+
+- видеть игроков и их баланс/XP;
+- устанавливать или изменять баланс виртуального TON;
+- банить и разбанивать;
+- скрывать/возвращать любого игрока в leaderboard, включая администратора;
+- создавать, включать, выключать и удалять задания;
+- создавать/останавливать/скрывать/удалять мемкоины;
+- задавать creator и изображения коинов;
+- вручную запускать Global Telegram Resale sync;
+- видеть статус/ошибки global catalog sync;
+- видеть Telegram resale source и observed TON price у Gift;
+- листить/снимать/передавать виртуальный Gift;
+- читать полный admin audit.
+
+## Supabase migration
+
+### Если уже установлен v0.7
+
+Запустить только:
 
 ```text
-supabase/migrations/007_v07_control_performance.sql
+supabase/migrations/008_v08_global_resale_virtual_ton.sql
 ```
 
-If `006_market_drops.sql` was never applied, apply `006` first and then `007`. `007` is defensive about `profiles.is_system`, but `006` also contains the global catalog bootstrap behavior.
-
-### Local control panel
-
-Create `.env.local` from `.env.example` and set at minimum:
-
-```text
-MXM_LOCAL_ADMIN_ENABLED=true
-MXM_LOCAL_ADMIN_TOKEN=<long random local token>
-SESSION_SECRET=<32+ character random secret>
-```
-
-Run `npm run dev` and open `http://localhost:3000/control`. The route deliberately returns unavailable for non-loopback requests, including a normal Vercel domain. Do **not** configure the local God Mode variables in Vercel Production.
-
-## v0.6.2 — Mobile UI hotfix
-
-- Исправлена сломанная вкладочная панель портфеля: счётчики больше не переносятся на вторую строку, длинные подписи сокращены и не ломают сетку на узком Telegram WebView.
-- Исправлены мобильные отступы и прокрутка: страница имеет корректный нижний запас под fixed navigation, горизонтальные rails получили touch scrolling, а фильтры Gifts больше не требуют горизонтальной прокрутки — на телефоне они складываются в две колонки.
-- Убран лишний набор кнопок из мобильного header: остались только профиль и баланс.
-- Убран пользовательский UI синхронизации Telegram Gifts из профиля и портфеля. Backend sync/diagnostics сохранён для служебного импорта, но игровой интерфейс больше не заставляет игрока владеть подарком в Telegram.
-- Уменьшена типографика на мобильных экранах, отключено автоматическое увеличение текста WebView.
-- Акцентный цвет заменён с ярко-жёлтого на приглушённый золотой `#c6aa58`.
-- Фон затемнён до `#050607`, поверхности и активные элементы сделаны мягче и более скруглёнными.
-- `/api/health` сообщает версию `0.6.2`.
-- Изменений схемы Supabase в v0.6.2 нет. Если база уже обновлена до v0.6.1, SQL запускать не нужно.
-
-## v0.6.1 — Russian UI + Realtime config fix
-
-- Интерфейс переведён на русский язык: маркет, торговля, портфель, задания, рейтинг, профили, офферы и диагностика.
-- Визуальная система стала темнее и мягче: более глубокий фон, скруглённые поверхности, кнопки, фильтры, карточки и нижняя навигация.
-- Supabase Realtime больше не является причиной падения всего Mini App. Конфигурация Realtime запрашивается через серверный `/api/realtime/config`.
-- Для Realtime принимаются `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` или `SUPABASE_ANON_KEY`. URL берётся из `NEXT_PUBLIC_SUPABASE_URL` либо `SUPABASE_URL`.
-- Если публичный ключ Realtime действительно не задан, основной серверный API продолжает показывать реальные данные Supabase; Realtime просто не запускается. Никакого polling, mock/fake market data или подстановки активов нет.
-- `/api/health` теперь сообщает `realtimeConfigured` и версию `0.6.1`.
-- Тексты заданий в базе переводятся миграцией `005_v061_ru_ui.sql`.
-
-### Обновление с v0.6
-
-Выполните только:
-
-```text
-supabase/migrations/005_v061_ru_ui.sql
-```
-
-Кодовую миграцию Realtime применять в Supabase не требуется — это исправление Next.js/Vercel-конфигурации.
-
-## v0.5 — Real Market Core
-
-- Strict Telegram Gift sync with a persisted diagnostics run for every attempt.
-- Gift sync validates Telegram identity, number, model, symbol, backdrop, rarity, sticker identity, dimensions and media kind before upsert.
-- Model + symbol media are rendered from Telegram file IDs; backdrop colors come from Telegram metadata.
-- Burned Gifts are made non-tradeable and any open listing/offers are closed.
-- Gift collection candles are rebuilt from completed MXM Gift sales and then maintained at one-minute OHLC resolution.
-- Gift market cards expose live offer depth and use only actual listings/market observations.
-- Pending Gift offers reserve MXM cash. Coin buys, coin launches, Gift buys and new offers can spend only the remaining available balance.
-- Gift RPCs reject burned assets and keep ownership/balance changes transactional.
-- Gift detail UI now includes collection/model/backdrop/symbol floors, offers, activity and price history.
-- Market UI is denser and closer to a Telegram-native marketplace: compact filters, sorting, Gift grid, collection stats and live feed.
-- Leaderboard now has Overall, total realized PnL, Gift PnL, Coin PnL, collection value and creator market-cap boards.
-- Vault/Profile expose available vs reserved balance and detailed Telegram Gift sync results.
-- Gift offer changes publish a public-safe `market_events` invalidation while private `gift_offers` rows stay server-only.
-- Added private `/admin` diagnostics for Telegram Gift source health and sync failures.
-- Added more event-driven daily/weekly Gift missions.
-
-## Upgrading an existing MXM database
-
-### From v0.4.1
-
-Run only:
-
-```text
-supabase/migrations/003_v05_real_market_core.sql
-supabase/migrations/004_v06_exchange_retention.sql
-supabase/migrations/005_v061_ru_ui.sql
-supabase/migrations/006_market_drops.sql
-supabase/migrations/007_v07_control_performance.sql
-```
-
-### From the old v0.2 schema
-
-Run, in order:
-
-```text
-supabase/migrations/002_remove_legacy_placeholders.sql
-supabase/migrations/003_v05_real_market_core.sql
-supabase/migrations/004_v06_exchange_retention.sql
-supabase/migrations/005_v061_ru_ui.sql
-supabase/migrations/006_market_drops.sql
-supabase/migrations/007_v07_control_performance.sql
-```
-
-If an old attempt at `002_remove_legacy_placeholders.sql` failed on a dependent view, use the corrected `002` included here and run it from the beginning. Its transaction rolls back a failed attempt instead of leaving a half-migrated schema.
-
-### Fresh Supabase project
-
-Run all migrations in order:
+### Fresh database
 
 ```text
 supabase/migrations/001_init.sql
@@ -137,37 +134,63 @@ supabase/migrations/004_v06_exchange_retention.sql
 supabase/migrations/005_v061_ru_ui.sql
 supabase/migrations/006_market_drops.sql
 supabase/migrations/007_v07_control_performance.sql
+supabase/migrations/008_v08_global_resale_virtual_ton.sql
 ```
 
-`supabase/seed.sql` intentionally inserts **no market assets**.
+`supabase/seed.sql` не должен содержать рыночные активы.
 
-## 1. Requirements
+## Environment
 
-- Node.js 20.9+.
-- A Supabase project.
-- A Telegram bot, e.g. `@MemeXMarketBot`.
-- A Vercel project connected to the repository.
-
-## 2. Environment
-
-Copy `.env.example` to `.env.local` locally, and configure the same values in Vercel:
-
-```bash
+```env
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-# Optional compatibility aliases:
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+
 TELEGRAM_BOT_TOKEN=123456789:AA...
-SESSION_SECRET=replace-with-a-long-random-secret-at-least-32-characters
-NEXT_PUBLIC_APP_NAME=MemeX Market
+SESSION_SECRET=replace-with-a-random-secret-at-least-32-characters
+
+# MTProto user session for global Telegram resale catalogue
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
+TELEGRAM_USER_SESSION=replace-with-exported-mtcute-session
+
+# Bounded real-catalog bootstrap/rotation
+MARKET_BOOTSTRAP_MIN_LISTINGS=12
+MARKET_CATALOG_TARGET_LISTINGS=36
+MARKET_CATALOG_COLLECTIONS_PER_SYNC=12
+MARKET_BOOTSTRAP_SCAN_COLLECTIONS=32
+MARKET_CATALOG_ITEMS_PER_COLLECTION=4
+MARKET_BOOTSTRAP_MAX_PRICE_TON=95
+
 ADMIN_TELEGRAM_IDS=123456789
+
+# Local machine only
+MXM_LOCAL_ADMIN_ENABLED=true
+MXM_LOCAL_ADMIN_TOKEN=replace-with-a-long-local-token-minimum-24-characters
 ```
 
-`SUPABASE_SECRET_KEY`, `TELEGRAM_BOT_TOKEN` and `SESSION_SECRET` are server-only. `ADMIN_TELEGRAM_IDS` is optional; when unset, `/admin` is unavailable to everyone.
+`TELEGRAM_USER_SESSION`, `TELEGRAM_API_HASH`, `SUPABASE_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `SESSION_SECRET` и `MXM_LOCAL_ADMIN_TOKEN` — server-only secrets.
 
-## 3. Install and run
+`MARKET_CATALOG_TELEGRAM_IDS` в v0.8 больше не используется.
+
+## Создание Telegram user session
+
+Global resale API требует авторизованную Telegram user session, поэтому одного Bot Token недостаточно.
+
+1. Получи `TELEGRAM_API_ID` и `TELEGRAM_API_HASH` для своего Telegram API application.
+2. Локально задай эти две переменные.
+3. Выполни:
+
+```bash
+npm run telegram:session
+```
+
+4. Скрипт попросит телефон, код Telegram и при необходимости 2FA password.
+5. Полученную длинную строку сохрани как `TELEGRAM_USER_SESSION` в server environment.
+
+Никогда не публикуй эту строку: она даёт доступ к авторизованной Telegram session.
+
+## Локальный запуск
 
 ```bash
 npm install
@@ -177,134 +200,35 @@ npm run build
 npm run dev
 ```
 
-The authenticated app must be opened from Telegram. There is deliberately no fake browser login route.
-
-## 4. BotFather setup
-
-1. Create/configure `@MemeXMarketBot` in BotFather.
-2. Deploy the Next.js project to Vercel.
-3. Set the bot's Mini App/menu-button URL to the Vercel HTTPS URL.
-4. Open MXM from the bot inside Telegram.
-
-The app posts Telegram `initData` to `/api/auth/telegram`. The server validates it, updates the profile in Supabase and issues a signed HTTP-only session cookie.
-
-## 5. Telegram Gift pipeline
-
-`POST /api/gifts/sync` performs a strict paginated sync.
-
-For every Telegram Unique Gift it requires and stores:
-
-- Telegram `gift_id`, unique `name`, base/collection name and number;
-- model name, rarity, file ID, thumbnail and static/animated/video flags;
-- symbol name, rarity, file ID, thumbnail and static/animated/video flags;
-- backdrop name, rarity and Telegram colors;
-- premium/burned/blockchain flags;
-- the observed Telegram Gift payload for diagnostics;
-- `last_seen_at`.
-
-Each run is written to `gift_sync_runs` with page counts, Telegram totals, imported/updated counts and the exact failure message if the sync fails.
-
-Telegram media is proxied only after the file ID is known to `gift_assets`:
+God Mode:
 
 ```text
-/api/telegram/file/[fileId]
-/api/telegram/tgs/[fileId]
+http://localhost:3000/control
 ```
 
-If required Telegram source data is missing or inconsistent, sync fails. MXM does not invent replacement artwork or Gift metadata.
+Для production не включай `MXM_LOCAL_ADMIN_ENABLED`.
 
-## 6. Market transaction model
-
-### Cash reservation
-
-Pending Gift offers reserve cash. The profile has:
-
-- `balance` — total MXM cash;
-- `reservedBalance` — sum of pending Gift offers;
-- `availableBalance` — spendable cash after reservations.
-
-The database RPCs enforce this server-side for:
-
-- Coin buys;
-- Coin launch fee;
-- Gift Buy Now;
-- Gift offers.
-
-### Gift market
-
-- listing/unlisting: `list_virtual_gift`;
-- Buy Now: `buy_virtual_gift`;
-- offer/update offer: `create_gift_offer`;
-- accept/reject: `resolve_gift_offer`;
-- cancel own offer: `cancel_gift_offer`.
-
-Completed sales update ownership, balances, realized PnL, missions, market activity and Gift collection candles inside Postgres.
-
-### Coin market
-
-Coins use a constant-product AMM. Buy/sell mutations are server RPCs and completed trades update holdings, market state and minute OHLC candles.
-
-## 7. Main routes
+## Основные маршруты
 
 ```text
-/market              Gifts + Coins market
-/gifts/[id]          Gift details / trade / offers / activity / chart
-/coin/[id]           Coin candles / buy / sell / holders
-/create               Launch a meme coin
-/orders               Incoming/outgoing Gift offers + listings
-/hub                  Live market feed
-/tasks                Onboarding / daily / weekly missions
-/vault                Net worth / holdings / Gifts / listings / history
-/leaderboard          Six global ranking boards
-/profile              Current Telegram profile + Gift sync
-/u/[id]               Public player profile
-/admin                 Private diagnostics, gated by ADMIN_TELEGRAM_IDS
+/market                 Gifts + Memecoins
+/gifts/[id]             Gift details / offers / activity / chart
+/collections/[name]     Gift collection
+/coin/[id]              Memecoin trading
+/create                  Create memecoin + custom image
+/orders                  Offers and listings
+/hub                     Market activity
+/tasks                   Russian missions
+/vault                   Portfolio
+/leaderboard             Rankings
+/profile                 Telegram profile
+/u/[id]                  Public player profile
+/admin                   In-app diagnostics admin
+/control                 Loopback-only God Mode
 ```
 
-## 8. Realtime
+## Принцип данных
 
-The client uses Supabase Realtime as an invalidation signal for market-facing changes, including:
+**Допустимо:** loading skeleton, empty state, error state, retry.
 
-- `coins`
-- `trades`
-- `virtual_gifts`
-- `gift_trades`
-- `market_events` (including public-safe Gift offer invalidation)
-
-`gift_offers` is deliberately not exposed through public Realtime. Offer create/cancel/reject writes an `offer` event to `market_events`; completed offer purchases also emit the normal ownership/trade changes. After an event the page refetches its server API contract. Realtime data is never trusted as the authoritative balance/ownership state.
-
-## 9. Economy in this build
-
-- New account: **$100**.
-- Coin launch: **$50**.
-- Coin trading fee: **0.5%**.
-- Coin supply: **1,000,000,000**.
-- Gift/coin market prices only change from player market activity.
-- Gift `estimatedValue` only uses available MXM observations (collection/trait floors and collection last sale). With no observations it remains `NULL`/Unpriced.
-- Burned Telegram Gifts cannot be listed, offered on, bought or counted as active Gift portfolio value.
-
-## 10. Diagnostics
-
-Set your Telegram numeric ID in `ADMIN_TELEGRAM_IDS` and open `/admin` inside the Mini App.
-
-Diagnostics show:
-
-- player count;
-- Telegram Gift asset count;
-- active/burned/missing-media source counts;
-- listings and pending offers;
-- Gift/Coin trade counts;
-- latest 20 Telegram Gift sync runs and exact errors.
-
-The diagnostics table is server-only behind RLS and is read with the Supabase server credential.
-
-## 11. Project layout
-
-```text
-app/                    Next.js App Router UI + API routes
-components/             MXM shell, Gift media/cards, chart, realtime
-lib/                    Telegram auth/sync, Supabase, mapping, feed
-supabase/migrations/    schema + v0.4 cleanup + v0.5 market core
-docs/                   architecture + database upgrade notes
-supabase/seed.sql       intentionally contains no market data
-```
+**Недопустимо:** fake Gift, emoji вместо media, случайная цена, synthetic candle, sample user, demo trade, generated activity, hardcoded portfolio или клиентский баланс как источник истины.

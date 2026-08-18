@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const supabase = getSupabaseAdmin();
   try {
-    const [profileRows, missionRows, coinRows, giftRows, auditRows, syncRunRows] = await Promise.all([
+    const [profileRows, missionRows, coinRows, giftRows, auditRows, syncRunRows, catalogRunRows, catalogStateRows] = await Promise.all([
       fetchAll((from, to) =>
         supabase
           .from("profiles")
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       fetchAll((from, to) =>
         supabase
           .from("gift_market_overview")
-          .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at")
+          .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at,catalog_source,telegram_resale_price_ton,resale_seen_at")
           .order("created_at", { ascending: false })
           .range(from, to),
       ),
@@ -65,6 +65,19 @@ export async function GET(request: Request) {
           .from("gift_sync_runs")
           .select("id,telegram_id,status,unique_imported,virtual_created,error_message,started_at,finished_at")
           .order("started_at", { ascending: false })
+          .range(from, to),
+      ),
+      fetchAll((from, to) =>
+        supabase
+          .from("catalog_sync_runs")
+          .select("id,source,status,reason,collections_scanned,resale_gifts_seen,assets_upserted,virtual_listings_created,media_objects_uploaded,skipped_without_ton_price,error_message,started_at,finished_at")
+          .order("started_at", { ascending: false })
+          .range(from, to),
+      ),
+      fetchAll((from, to) =>
+        supabase
+          .from("catalog_sync_state")
+          .select("key,locked_until,last_started_at,last_finished_at,last_success_at,last_error,updated_at")
           .range(from, to),
       ),
     ]);
@@ -85,6 +98,8 @@ export async function GET(request: Request) {
       gifts: giftRows,
       audit: auditRows,
       syncRuns: syncRunRows,
+      catalogRuns: catalogRunRows,
+      catalogState: catalogStateRows[0] || null,
       checkedAt: new Date().toISOString(),
     });
   } catch (error) {

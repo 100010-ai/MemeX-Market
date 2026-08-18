@@ -1,44 +1,51 @@
-# Supabase upgrade to MXM v0.5
+# Supabase upgrade — MXM v0.8
 
-## Existing v0.4.1 database
+## v0.7 → v0.8
 
-Run:
-
-```text
-supabase/migrations/003_v05_real_market_core.sql
-```
-
-## Old v0.2 database
-
-Run:
+Выполнить только:
 
 ```text
-supabase/migrations/002_remove_legacy_placeholders.sql
-supabase/migrations/003_v05_real_market_core.sql
+008_v08_global_resale_virtual_ton.sql
 ```
 
-The corrected `002` tears down dependent legacy views before dropping `demo_emoji` / `reference_price`, then recreates the current v0.4.1 schema.
+Миграция:
+
+- добавляет source/TON/media metadata для `gift_assets`;
+- создаёт `catalog_sync_state` и `catalog_sync_runs`;
+- добавляет DB lock RPC для global catalog sync;
+- создаёт hidden system treasury profile для первичного виртуального inventory;
+- добавляет `seed_global_catalog_gift`;
+- создаёт/настраивает public `gift-media` Storage bucket;
+- расширяет `gift_market_overview` global-resale полями;
+- обновляет пользовательскую ошибку создания мемкоина под virtual TON.
+
+Миграция не вставляет demo market assets.
 
 ## Fresh database
 
-Run:
+Запустить по порядку:
 
 ```text
-supabase/migrations/001_init.sql
-supabase/migrations/002_remove_legacy_placeholders.sql
-supabase/migrations/003_v05_real_market_core.sql
+001_init.sql
+002_remove_legacy_placeholders.sql
+003_v05_real_market_core.sql
+004_v06_exchange_retention.sql
+005_v061_ru_ui.sql
+006_market_drops.sql
+007_v07_control_performance.sql
+008_v08_global_resale_virtual_ton.sql
 ```
 
-`003` adds Gift sync diagnostics, Telegram symbol-media flags, burned-state handling, cash reservation for open Gift offers, minute Gift candles, offer depth, separate PnL leaderboard metrics and additional missions.
+## После миграции
 
-No migration in the v0.5 path inserts demo market assets.
+Настроить server environment:
 
-## v0.5 -> v0.6
-
-Run:
-
-```sql
-supabase/migrations/004_v06_exchange_retention.sql
+```text
+TELEGRAM_API_ID
+TELEGRAM_API_HASH
+TELEGRAM_USER_SESSION
 ```
 
-This migration adds persistent watchlists, XP progression/ledger and richer real coin-market metrics. It backfills XP deterministically from already completed MXM activity. It does not seed coins, Gifts, listings, trades or prices.
+Проверить `/api/health`: `globalResaleCatalogConfigured` должен быть `true`.
+
+Перед публичным запуском рекомендуется один раз открыть локальный `/control` и выполнить `Обновить Telegram Resale`, чтобы первый пользователь не ждал initial sync. Даже без prewarm пустой Gift Market имеет automatic bootstrap при первом market request.

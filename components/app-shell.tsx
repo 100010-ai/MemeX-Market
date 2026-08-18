@@ -59,7 +59,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-4">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="hidden lg:block"><p className="text-xs font-semibold">MemeX Market</p><p className="text-[10px] text-[var(--muted)]">Виртуальный рынок MXM</p></div>
-            <Link href="/vault" className="ml-auto flex h-9 items-center gap-1.5 rounded-[17px] border border-[var(--border)] bg-[var(--panel)] px-3 text-xs font-medium lg:ml-auto" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(profile.balance).replace("$", "")}</Link>
+            <Link href="/vault" className="ml-auto flex h-9 items-center gap-1.5 rounded-[17px] border border-[var(--border)] bg-[var(--panel)] px-3 text-xs font-medium lg:ml-auto" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(profile.balance)}</Link>
           </div>
         </header>
         <main key={pathname} className="mxm-page-enter min-h-0 px-2.5 py-3 md:px-4 md:py-4">{children}</main>

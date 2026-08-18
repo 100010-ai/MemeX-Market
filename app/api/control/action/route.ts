@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation } from "@/lib/security";
-import { getOrCreateSystemProfile, marketCatalogTelegramIds } from "@/lib/admin";
-import { syncTelegramGifts } from "@/lib/gifts";
+import { ensureGlobalGiftMarket } from "@/lib/telegram-resale";
 
 export const runtime = "nodejs";
 const ACTOR = "local-god-mode";
@@ -172,20 +171,9 @@ export async function POST(request: Request) {
     }
 
     if (action === "catalog.sync") {
-      const telegramIds = marketCatalogTelegramIds();
-      if (!telegramIds.length) return NextResponse.json({ error: "MARKET_CATALOG_TELEGRAM_IDS не настроен" }, { status: 400 });
-      const results: Array<Record<string, unknown>> = [];
-      for (const telegramId of telegramIds) {
-        try {
-          const systemProfile = await getOrCreateSystemProfile(telegramId);
-          const result = await syncTelegramGifts(systemProfile.id, telegramId);
-          results.push({ telegramId, ok: true, ...result });
-        } catch (error) {
-          results.push({ telegramId, ok: false, error: error instanceof Error ? error.message : "Ошибка синхронизации" });
-        }
-      }
-      await audit("catalog.sync", "catalog", undefined, { results });
-      return NextResponse.json({ ok: true, results });
+      const result = await ensureGlobalGiftMarket({ force: true, reason: "local-control" });
+      await audit("catalog.sync", "telegram_resale_catalog", undefined, { result });
+      return NextResponse.json({ ok: true, result });
     }
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });

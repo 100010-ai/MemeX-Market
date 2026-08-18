@@ -1,93 +1,121 @@
-# MXM v0.5 Architecture
+# MXM v0.8 Architecture
 
-## Runtime
+## 1. Два независимых слоя Telegram Gift
+
+### Telegram source asset
+
+`gift_assets` хранит проверенное описание реально существующего collectible Gift:
+
+- Telegram slug / base gift id / number;
+- collection title;
+- model / symbol / backdrop;
+- rarity per mille;
+- Telegram file identities;
+- mirrored model/symbol media URLs;
+- raw normalized Telegram source payload;
+- catalog source;
+- observed Telegram resale TON price and timestamp.
+
+### MXM virtual instance
+
+`virtual_gifts` хранит только игровое состояние:
+
+- MXM owner;
+- acquired price;
+- listing price/status;
+- last sale;
+- timestamps.
+
+`gift_offers`, `gift_trades`, `gift_collection_candles` продолжают виртуальный lifecycle. Настоящий Telegram owner не меняется при сделке MXM.
+
+## 2. Global Telegram Resale ingestion
+
+Основной source v0.8 — Telegram global resale via MTProto user session.
+
+Pipeline:
 
 ```text
-Telegram Mini App
-      │ signed initData
-      ▼
-Next.js 16 / Vercel
-      │
-      ├── authenticated route handlers
-      │      ├── Telegram initData verification
-      │      ├── Telegram Gift sync + media proxy
-      │      ├── admin diagnostics
-      │      └── Supabase RPC transactions
-      │
-      └── client UI
-             ├── Tailwind CSS
-             ├── lightweight-charts
-             └── Supabase Realtime invalidation
-                    │
-                    ▼
-             Supabase / Postgres
+Telegram getStarGiftOptions
+        ↓
+bounded daily rotation of base Gift types
+        ↓
+Telegram getStarGiftResaleOptions(sort=price)
+        ↓
+strict validation of exact collectible metadata + TON resale price
+        ↓
+mirror genuine Telegram model/symbol media to Supabase Storage
+        ↓
+gift_assets upsert
+        ↓
+seed_global_catalog_gift()
+        ↓
+small system-owned virtual MXM listing
 ```
 
-## Trust boundary
+Весь Telegram catalog не копируется. `MARKET_BOOTSTRAP_*` и `MARKET_CATALOG_*` ограничивают scan/import. При пустом рынке scan может быть шире обычного, но persisted listings всё равно ограничены target/minimum.
 
-The browser never receives the Telegram bot token or Supabase secret key. Balance, holdings, ownership, offers, rewards and coin launch state can only mutate through server handlers + database RPCs.
+## 3. Bootstrap первого пользователя
 
-## Telegram Gift source model
+`GET /api/market?scope=gifts` сначала читает текущий рынок. Если активных Gift listings нет и MTProto настроен, один запрос может вызвать `ensureGlobalGiftMarket()`.
 
-`gift_assets` is observed Telegram source data. MXM requires the unique Gift identity, model, symbol, backdrop, rarities and Telegram sticker IDs before the asset is accepted. `telegram_payload` retains the observed source object for diagnostics and `last_seen_at` records the latest successful observation.
+Postgres advisory-style state lock через `catalog_sync_state` не позволяет нескольким serverless requests одновременно запускать импорт. После sync Market выполняет новый authoritative query.
 
-`virtual_gifts` is MXM market state. It stores the MXM owner, acquisition cost, listing price, last sale and listing status. This is intentionally separate from Telegram custody.
+Если sync не удался, API не вставляет альтернативные данные.
 
-`gift_sync_runs` is server-only observability. Every sync is `running → succeeded|failed` and captures counts plus the exact failure text.
+## 4. Virtual TON
 
-## No source-data substitution
+`profiles.balance` остаётся numeric ledger, но продуктовая единица v0.8 — **virtual TON**.
 
-The Gift renderer accepts only Telegram file IDs from `gift_assets`. Static stickers are proxied directly, video stickers render as video, and TGS stickers are decoded through the authenticated TGS route and rendered by Lottie. A failed Telegram media request renders an error state; it is not replaced by emoji/generated art.
+- signup: 100 virtual TON;
+- memecoin launch: 50 virtual TON;
+- Gift listing/offers/trades: virtual TON;
+- memecoin AMM reserves/quotes/trades: virtual TON;
+- portfolio/net worth/PnL/leaderboard: virtual TON.
 
-## Cash reservation
+Это внутренняя игровая единица с TON denomination. Она не является настоящим on-chain TON и не имеет redemption flow.
 
-A pending Gift offer is a cash commitment. `pending_gift_offer_total` is used by spend RPCs so that one player cannot create multiple offers and then spend the same cash on coins, coin launch or Buy Now.
+## 5. Транзакции и баланс
 
-Client `availableBalance` is informational. Postgres performs the authoritative check under row locks.
+Client не является source of truth.
 
-## Gift transactions
+Gift buy/list/offer/resolve и coin buy/sell/create завершаются серверно/SQL RPC. Pending Gift offers входят в `reservedBalance`; spendable amount вычисляется как available balance после reservations.
 
-`list_virtual_gift`, `create_gift_offer`, `buy_virtual_gift` and `resolve_gift_offer` reject assets currently marked burned by Telegram.
+Database locking/state guards предотвращают повторную продажу одного instance и расход уже зарезервированного баланса.
 
-A completed Gift sale atomically:
+## 6. Realtime
 
-1. validates current ownership/listing/offer state;
-2. validates spendable balance after other pending offers;
-3. moves MXM cash;
-4. moves MXM Gift ownership;
-5. closes conflicting pending offers;
-6. records `gift_trades` + seller realized PnL;
-7. updates the collection candle;
-8. advances relevant missions.
+Supabase Realtime используется как invalidation signal, а не как authoritative financial state.
 
-## Gift market observations
+После события UI повторно запрашивает backend contract. `gift_offers` остаются private; публичное изменение офферов инвалидируется через `market_events`.
 
-`gift_market_overview` exposes the current Gift, listing, live offer depth and an estimated value derived only from observations that exist. Active floors exclude burned assets.
+## 7. Media performance
 
-`gift_collection_overview` is calculated from non-burned Gift assets and reports item/holder/listing counts, floor, last sale, 24h volume/trades and 24h movement.
+- cards lazy-load Gift media;
+- static thumbnail используется там, где Telegram его дал;
+- TGS запускается только у видимого/близкого к viewport media;
+- Telegram file proxy stream-ит response;
+- global MTProto importer зеркалирует media по Telegram unique file identity;
+- одинаковые media переиспользуются во время одного sync;
+- model/symbol одного Gift скачиваются параллельно.
 
-`gift_collection_candles` are rebuilt from completed Gift sales during the v0.5 migration and maintained at one-minute resolution afterwards.
+## 8. Horizontal mobile rails
 
-## Coins
+`.mxm-hscroll` — единый primitive для длинных mobile tabs/filters.
 
-Player-created coins use the Postgres constant-product AMM. `buy_coin` respects Gift-offer cash reservations. Coin trades maintain holdings, market state, trade history and minute candles.
+Он использует:
 
-## Leaderboard
+```text
+flex-wrap: nowrap
+overflow-x: auto
+children: flex: 0 0 auto
+white-space: nowrap
+-webkit-overflow-scrolling: touch
+```
 
-The v0.5 view calculates cash, Coin value, non-burned Gift value, net worth, Coin/Gift realized PnL separately, total realized PnL, trade counts, Gift count and creator market cap.
+`body` не блокирует horizontal pan. Это важно для Telegram WebView.
 
-## Realtime
+## 9. Local God Mode
 
-Realtime events invalidate API state; they do not become the trusted state themselves. Market, Gift detail, Orders and Vault subscribe to the relevant market tables and refetch their authenticated API representation. Private `gift_offers` rows are not published; offer mutations emit a public-safe `market_events` invalidation instead.
+`/control` доступен только loopback host при `MXM_LOCAL_ADMIN_ENABLED=true` и после локальной token-auth. Session — signed HttpOnly + SameSite Strict. Все mutations идут через server route и пишутся в `admin_audit_logs`.
 
-## Admin diagnostics
-
-`/admin` is not linked as a public navigation item. The API allows only Telegram IDs listed in `ADMIN_TELEGRAM_IDS`. It reports aggregate market health and recent `gift_sync_runs`; it does not expose server secrets.
-
-## v0.6 exchange and retention layer
-
-- `user_watchlist` persists followed meme coins and Telegram Gift collections. Gift watches target `base_name`, so ownership transfers do not invalidate them.
-- `profile_xp_events` is an idempotent XP ledger. XP is awarded by database triggers only for completed coin trades, completed Gift trades, coin launches and claimed missions.
-- `profiles.xp` is a materialized total rebuilt from the XP ledger during the v0.6 migration and incremented transactionally for new events.
-- Coin quote previews are calculated server-side from the same constant-product reserves and 0.5% fee used by the trading RPCs. Quotes are informative; the mutation RPC remains the source of truth and re-checks balance/reserves under row locks.
-- Gift collection pages use `gift_collection_overview`, `gift_collection_candles`, actual completed `gift_trades` and current `gift_market_overview` listings. No collection price series is synthesized.
+God Mode не должен быть включён на production Vercel environment.

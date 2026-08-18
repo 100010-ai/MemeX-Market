@@ -101,7 +101,7 @@ export default function CreatePage() {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Info icon={<Sparkles size={13} />} label="Стартовая капитализация" value="$100" />
+          <Info icon={<Sparkles size={13} />} label="Стартовая капитализация" value="100 TON" />
           <Info icon={<ShieldCheck size={13} />} label="Торговая механика" value="AMM" />
         </div>
         <div className="mt-2 rounded-[18px] border border-[var(--border-soft)] bg-[var(--surface)] p-3 text-[10px] leading-4 text-[var(--muted)]">Цена и свечи не генерируются. После запуска график меняется только от реальных виртуальных сделок игроков внутри MXM.</div>

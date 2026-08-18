@@ -98,14 +98,18 @@ export type GiftAsset = {
   backdropText: string;
   modelFileId: string;
   modelThumbFileId: string | null;
+  modelMediaUrl: string | null;
   symbolFileId: string;
   symbolThumbFileId: string | null;
+  symbolMediaUrl: string | null;
   symbolMediaKind: GiftMediaKind;
   mediaKind: GiftMediaKind;
   isPremium: boolean;
   isBurned: boolean;
   isFromBlockchain: boolean;
   lastSeenAt: string;
+  catalogSource: "profile_sync" | "telegram_resale";
+  telegramResalePriceTon: number | null;
   bestOffer: number | null;
   offerCount: number;
   ownerId: string;

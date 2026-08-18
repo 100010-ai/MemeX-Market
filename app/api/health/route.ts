@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { globalResaleCatalogConfigured } from "@/lib/telegram-resale";
 
 export async function GET() {
   const realtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -12,7 +13,9 @@ export async function GET() {
     ok: true,
     app: "MemeX Market",
     short: "MXM",
-    version: "0.7.0",
+    version: "0.8.0",
+    currency: "virtual TON",
+    globalResaleCatalogConfigured: globalResaleCatalogConfigured(),
     realtimeConfigured: Boolean(realtimeUrl && realtimeKey),
   });
 }

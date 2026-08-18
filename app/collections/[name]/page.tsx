@@ -77,7 +77,7 @@ export default function GiftCollectionPage() {
             </div>
             <div className="text-right">
               <p className="text-[10px] text-[var(--muted)]">Флор</p>
-              <p className="mt-1 flex items-center justify-end gap-1 text-base font-semibold"><Gem size={14} fill="currentColor" />{c.floorPrice == null ? "—" : money(c.floorPrice).replace("$", "")}</p>
+              <p className="mt-1 flex items-center justify-end gap-1 text-base font-semibold"><Gem size={14} fill="currentColor" />{c.floorPrice == null ? "—" : money(c.floorPrice)}</p>
               <p className={`mt-1 text-[11px] ${c.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(c.change24h)} 24h</p>
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function GiftCollectionPage() {
           <section className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3"><CoinChart candles={data.candles} height={320} baseFrame="1h" /></section>
 
           <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
-            <div className="grid grid-cols-3 border-b border-[var(--border-soft)] p-1">
+            <div className="mxm-hscroll gap-1 border-b border-[var(--border-soft)] p-1">
               <TraitTabButton active={traitTab === "models"} onClick={() => setTraitTab("models")}>Модели</TraitTabButton>
               <TraitTabButton active={traitTab === "backdrops"} onClick={() => setTraitTab("backdrops")}>Фоны</TraitTabButton>
               <TraitTabButton active={traitTab === "symbols"} onClick={() => setTraitTab("symbols")}>Символы</TraitTabButton>
@@ -114,7 +114,7 @@ export default function GiftCollectionPage() {
         <aside className="space-y-3">
           <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:sticky lg:top-[72px]">
             <div className="border-b border-[var(--border-soft)] px-3 py-3 text-xs font-medium">Последние продажи</div>
-            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 18).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price).replace("$", "")}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Завершённых продаж пока нет.</div>}
+            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 18).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price)}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Завершённых продаж пока нет.</div>}
           </section>
         </aside>
       </div>
@@ -127,7 +127,7 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 }
 
 function TraitTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} className={`rounded-2xl py-2 text-[11px] ${active ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>{children}</button>;
+  return <button onClick={onClick} className={`shrink-0 rounded-2xl px-4 py-2 text-[11px] whitespace-nowrap ${active ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>{children}</button>;
 }
 
 function TraitTable({ rows }: { rows: GiftTraitGroup[] }) {

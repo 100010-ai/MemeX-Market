@@ -163,12 +163,12 @@ export default function MarketPage() {
       {tab === "gifts" ? (
         <>
           {!loading && data.collections.length ? <CollectionRail collections={data.collections} watched={watchedCollections} busy={watchBusy} onWatch={(name, enabled) => toggleWatch("gift_collection", name, enabled)} /> : null}
-          <div className="mxm-hscroll mb-2 flex flex-nowrap gap-1.5">
+          <div className="mxm-hscroll mb-2 gap-1.5 pb-1">
             <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
             <FilterSelect value={model} onChange={setModel} label="Модель" options={models} />
             <FilterSelect value={backdrop} onChange={setBackdrop} label="Фон" options={backdrops} />
             <FilterSelect value={symbol} onChange={setSymbol} label="Символ" options={symbols} />
-            <SelectSheet label="Цена" value={priceBand} onChange={(value) => setPriceBand(value as PriceBand)} options={[{ value: "all", label: "Любая цена" }, { value: "under50", label: "До 50" }, { value: "50to250", label: "50–250" }, { value: "250to1000", label: "250–1K" }, { value: "over1000", label: "1K+" }]} />
+            <SelectSheet label="Цена" value={priceBand} onChange={(value) => setPriceBand(value as PriceBand)} options={[{ value: "all", label: "Любая цена" }, { value: "under50", label: "До 50 TON" }, { value: "50to250", label: "50–250 TON" }, { value: "250to1000", label: "250–1K TON" }, { value: "over1000", label: "1K+ TON" }]} />
             <SelectSheet label="Сортировка" value={giftSort} onChange={(value) => setGiftSort(value as GiftSort)} icon={<ListFilter size={12} />} options={[{ value: "price", label: "Цена" }, { value: "newest", label: "Сначала новые" }, { value: "offers", label: "Больше офферов" }, { value: "number", label: "По номеру" }, { value: "rarity", label: "По редкости" }]} />
           </div>
           <div className="mb-3 flex h-7 items-center justify-between gap-3 text-[10px] text-[var(--muted)]">
@@ -177,8 +177,8 @@ export default function MarketPage() {
           </div>
         </>
       ) : (
-        <div className="mb-3 flex items-start gap-2">
-          <div className="mxm-hscroll flex min-w-0 flex-1 flex-nowrap gap-1">{(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 whitespace-nowrap rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}</div>
+        <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
+          {(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 whitespace-nowrap rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
           <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 rounded-[17px] bg-[var(--accent)] px-3 text-xs font-semibold text-black"><Plus size={14} />Создать</Link>
         </div>
       )}

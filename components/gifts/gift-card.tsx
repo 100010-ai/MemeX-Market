@@ -22,7 +22,7 @@ export function GiftCard({ gift, showOwner = false }: { gift: GiftAsset; showOwn
         </div>
         <div className="mt-2.5 flex items-center gap-1.5">
           <span className="flex h-8 min-w-0 flex-1 items-center rounded-[18px] bg-[var(--panel-2)] px-2.5 text-xs font-medium">
-            {displayValue == null ? <span className="truncate text-[var(--muted)]">Без цены</span> : <><Gem size={12} className="mr-1 shrink-0 text-[#d9dde2]" fill="currentColor" /><span className="truncate">{valueLabel}{money(displayValue).replace("$", "")}</span></>}
+            {displayValue == null ? <span className="truncate text-[var(--muted)]">Без цены</span> : <><Gem size={12} className="mr-1 shrink-0 text-[#d9dde2]" fill="currentColor" /><span className="truncate">{valueLabel}{money(displayValue)}</span></>}
           </span>
           {isListed ? <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[18px] bg-[var(--panel-2)] text-[var(--muted)] group-active:text-white"><ShoppingCart size={15} /></span> : null}
         </div>

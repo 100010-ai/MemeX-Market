@@ -53,7 +53,7 @@ export default function HubPage() {
         {meRank !== null ? <Link href="/leaderboard" className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Ваше место</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
       </div>
 
-      <div className="mb-3 grid grid-cols-3 gap-1.5">
+      <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
         <QuickLink href="/market" icon={<LineChart size={15} />} label="Торговать" detail="Мемкоины и подарки" />
         <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" detail="Получать награды" />
         <QuickLink href="/vault" icon={<Gift size={15} />} label="Портфель" detail="Ваши активы" />
@@ -108,7 +108,7 @@ export default function HubPage() {
 }
 
 function QuickLink({ href, icon, label, detail }: { href: string; icon: React.ReactNode; label: string; detail: string }) {
-  return <Link href={href} className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
+  return <Link href={href} className="w-[148px] shrink-0 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-40 place-items-center px-4 text-center text-xs text-[var(--muted)]">{text}</div>; }
 function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-2xl" />)}</div>; }
