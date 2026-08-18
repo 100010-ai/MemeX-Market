@@ -33,6 +33,20 @@ export function tierForWorth(netWorth: number) {
   return "Newbie";
 }
 
+export function progressionForXp(rawXp: number) {
+  const xp = Math.max(0, Math.floor(rawXp));
+  const level = Math.max(1, Math.floor(Math.sqrt(xp / 25)) + 1);
+  const levelStart = 25 * Math.pow(level - 1, 2);
+  const nextLevelAt = 25 * Math.pow(level, 2);
+  const span = Math.max(1, nextLevelAt - levelStart);
+  return {
+    xp,
+    level,
+    levelProgress: Math.max(0, Math.min(1, (xp - levelStart) / span)),
+    xpForNextLevel: Math.max(0, nextLevelAt - xp),
+  };
+}
+
 export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
   const id = requiredString(profileRow.id, "id");
   const supabase = getSupabaseAdmin();
@@ -52,6 +66,7 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
   const netWorth = requiredNumber(leaderboardResult.data.net_worth, "net_worth");
   const firstName = requiredString(profileRow.first_name, "first_name");
   const joinedAt = requiredString(profileRow.created_at, "created_at");
+  const progression = progressionForXp(requiredNumber(profileRow.xp ?? 0, "xp"));
 
   return {
     id,
@@ -70,5 +85,6 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
     tier: tierForWorth(netWorth),
     joinedAt,
     lastGiftSyncAt: profileRow.last_gift_sync_at == null ? null : String(profileRow.last_gift_sync_at),
+    ...progression,
   };
 }

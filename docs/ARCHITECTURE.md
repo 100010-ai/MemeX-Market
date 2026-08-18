@@ -83,3 +83,11 @@ Realtime events invalidate API state; they do not become the trusted state thems
 ## Admin diagnostics
 
 `/admin` is not linked as a public navigation item. The API allows only Telegram IDs listed in `ADMIN_TELEGRAM_IDS`. It reports aggregate market health and recent `gift_sync_runs`; it does not expose server secrets.
+
+## v0.6 exchange and retention layer
+
+- `user_watchlist` persists followed meme coins and Telegram Gift collections. Gift watches target `base_name`, so ownership transfers do not invalidate them.
+- `profile_xp_events` is an idempotent XP ledger. XP is awarded by database triggers only for completed coin trades, completed Gift trades, coin launches and claimed missions.
+- `profiles.xp` is a materialized total rebuilt from the XP ledger during the v0.6 migration and incremented transactionally for new events.
+- Coin quote previews are calculated server-side from the same constant-product reserves and 0.5% fee used by the trading RPCs. Quotes are informative; the mutation RPC remains the source of truth and re-checks balance/reserves under row locks.
+- Gift collection pages use `gift_collection_overview`, `gift_collection_candles`, actual completed `gift_trades` and current `gift_market_overview` listings. No collection price series is synthesized.

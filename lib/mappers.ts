@@ -49,6 +49,11 @@ export function mapCoin(row: Record<string, any>): Coin {
     tradeCount24h: requiredNumber(row.trade_count_24h, "coin trade count"),
     createdAt: requiredString(row.created_at, "coin created_at"),
     creatorName: nullableString(row.creator_name),
+    liquidity: requiredNumber(row.liquidity, "coin liquidity"),
+    allTimeVolume: requiredNumber(row.all_time_volume, "coin all-time volume"),
+    athPrice: requiredNumber(row.ath_price, "coin ATH"),
+    buyVolume24h: requiredNumber(row.buy_volume_24h, "coin 24h buy volume"),
+    sellVolume24h: requiredNumber(row.sell_volume_24h, "coin 24h sell volume"),
   };
 }
 

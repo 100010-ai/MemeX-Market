@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarDays, Gift, LockKeyhole, RefreshCw, Trophy, UserRound } from "lucide-react";
+import { CalendarDays, Gift, LockKeyhole, RefreshCw, Sparkles, Trophy, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
 import { money } from "@/lib/format";
@@ -30,7 +30,7 @@ export default function ProfilePage() {
           {profile.photoUrl ? <img src={profile.photoUrl} alt="Telegram profile" className="h-14 w-14 rounded-xl object-cover" /> : <span className="grid h-14 w-14 place-items-center rounded-xl border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><UserRound size={22} /></span>}
           <div className="min-w-0 flex-1"><h1 className="truncate text-lg font-semibold">{profile.firstName} {profile.lastName || ""}</h1><p className="text-xs text-[var(--muted)]">{profile.username ? `@${profile.username}` : `Telegram ${profile.telegramId}`}</p><span className="mt-1.5 inline-block rounded-md bg-[var(--panel-2)] px-2 py-1 text-[10px] text-[var(--accent)]">{profile.tier}</span></div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric label="Net worth" value={money(profile.netWorth)} /><Metric label="Available" value={money(profile.availableBalance)} /><Metric label="Gifts" value={money(profile.giftValue)} /><Metric label="Coins" value={money(profile.coinValue)} /></div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric label="Net worth" value={money(profile.netWorth)} /><Metric label="Available" value={money(profile.availableBalance)} /><Metric label="Gifts" value={money(profile.giftValue)} /><Metric label="Coins" value={money(profile.coinValue)} /></div><div className="mt-2 rounded-lg bg-[var(--surface)] p-3"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--panel-2)] text-[var(--accent)]"><Sparkles size={14} /></span><div><p className="text-xs font-medium">Level {profile.level}</p><p className="text-[9px] text-[var(--muted)]">{profile.xp} XP · {profile.xpForNextLevel} to next level</p></div></div><span className="text-[10px] text-[var(--muted)]">Market activity</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--panel-2)]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div></div>
         {profile.reservedBalance > 0 ? <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--surface)] px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />Open Gift offers</span><span>{money(profile.reservedBalance)} reserved</span></div> : null}
         <Link href={`/u/${profile.id}`} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--panel-2)] py-2.5 text-xs hover:bg-[var(--panel-3)]"><UserRound size={14} />Public profile</Link>
       </section>
@@ -40,7 +40,7 @@ export default function ProfilePage() {
         <div className="p-3"><p className="text-xs leading-5 text-[var(--muted)]">Refresh your collection from Telegram. Names, numbers, traits, rarity and media are synced directly.</p><button onClick={sync} disabled={syncing} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] py-2.5 text-xs font-semibold text-black disabled:opacity-50"><RefreshCw size={14} className={syncing ? "animate-spin" : ""} />{syncing ? "Syncing…" : "Sync Telegram Gifts"}</button>{message ? <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{message}</p> : null}<p className="mt-2 text-[10px] text-[var(--muted-2)]">Last successful sync: {profile.lastGiftSyncAt ? new Date(profile.lastGiftSyncAt).toLocaleString() : "never"}</p></div>
       </section>
 
-      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-xs"><Row icon={<Trophy size={14} />} label="Tier" value={profile.tier} /><Row icon={<CalendarDays size={14} />} label="Joined" value={new Date(profile.joinedAt).toLocaleDateString()} /><Row icon={<Gift size={14} />} label="Telegram Gift" value="Stays in Telegram" /></section>
+      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-xs"><Row icon={<Trophy size={14} />} label="Tier" value={profile.tier} /><Row icon={<Sparkles size={14} />} label="Level" value={`${profile.level} · ${profile.xp} XP`} /><Row icon={<CalendarDays size={14} />} label="Joined" value={new Date(profile.joinedAt).toLocaleDateString()} /><Row icon={<Gift size={14} />} label="Telegram Gift" value="Stays in Telegram" /></section>
     </div>
   );
 }

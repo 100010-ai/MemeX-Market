@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.5.0
+# MemeX Market (MXM) v0.6.0
 
 Telegram Mini App for a multiplayer simulated market built with **Next.js, TypeScript, Tailwind CSS, Supabase and Vercel**.
 
@@ -8,6 +8,20 @@ MXM has two connected markets:
 - **Gifts** — MXM ownership/trading around exact metadata and media synced from Telegram Unique Gifts. The collectible in Telegram is never transferred by MXM.
 
 A new profile starts with **$100 MXM cash**. There are no seeded market assets, generated Gift media, synthetic listings, browser dev accounts or demo prices.
+
+## v0.6 — Exchange & Retention
+
+- Persistent **watchlist** for meme coins and Telegram Gift collections.
+- Dedicated Gift collection pages with floor, 24h volume, holders, sales candles, trait floors and live listings.
+- Coin market sorting for Trending, Gainers, Volume, Market Cap and New.
+- Server-derived AMM quote preview before every coin trade: output, execution price, 0.5% fee, price impact and projected post-trade price.
+- Richer coin metrics from actual reserves/trades: liquidity, ATH, all-time volume and 24h buy/sell flow.
+- Persistent XP/level progression driven by completed trades, coin launches and claimed missions.
+- Historical XP backfill is deterministic from existing MXM activity.
+- Profile, Tasks and desktop shell expose level/XP progress.
+- Route error boundary with the exact application error instead of a blank render.
+- `/api/health` reports the correct v0.6 version.
+- Still **no seeded assets, fake Gift media, generated prices, dev login or market-data fallbacks**.
 
 ## v0.5 — Real Market Core
 
@@ -29,12 +43,21 @@ A new profile starts with **$100 MXM cash**. There are no seeded market assets, 
 
 ## Upgrading an existing MXM database
 
-### From v0.4.1
+### From v0.5
 
 Run only:
 
 ```text
+supabase/migrations/004_v06_exchange_retention.sql
+```
+
+### From v0.4.1
+
+Run, in order:
+
+```text
 supabase/migrations/003_v05_real_market_core.sql
+supabase/migrations/004_v06_exchange_retention.sql
 ```
 
 ### From the old v0.2 schema
@@ -44,6 +67,7 @@ Run, in order:
 ```text
 supabase/migrations/002_remove_legacy_placeholders.sql
 supabase/migrations/003_v05_real_market_core.sql
+supabase/migrations/004_v06_exchange_retention.sql
 ```
 
 If an old attempt at `002_remove_legacy_placeholders.sql` failed on a dependent view, use the corrected `002` included here and run it from the beginning. Its transaction rolls back a failed attempt instead of leaving a half-migrated schema.
@@ -56,6 +80,7 @@ Run all migrations in order:
 supabase/migrations/001_init.sql
 supabase/migrations/002_remove_legacy_placeholders.sql
 supabase/migrations/003_v05_real_market_core.sql
+supabase/migrations/004_v06_exchange_retention.sql
 ```
 
 `supabase/seed.sql` intentionally inserts **no market assets**.
@@ -166,7 +191,8 @@ Coins use a constant-product AMM. Buy/sell mutations are server RPCs and complet
 ```text
 /market              Gifts + Coins market
 /gifts/[id]          Gift details / trade / offers / activity / chart
-/coin/[id]           Coin candles / buy / sell / holders
+/collections/[name]  Gift collection floor / traits / candles / listings
+/coin/[id]           Coin candles / quote preview / buy / sell / holders
 /create               Launch a meme coin
 /orders               Incoming/outgoing Gift offers + listings
 /hub                  Live market feed
@@ -221,7 +247,7 @@ The diagnostics table is server-only behind RLS and is read with the Supabase se
 app/                    Next.js App Router UI + API routes
 components/             MXM shell, Gift media/cards, chart, realtime
 lib/                    Telegram auth/sync, Supabase, mapping, feed
-supabase/migrations/    schema + v0.4 cleanup + v0.5 market core
+supabase/migrations/    schema + v0.4 cleanup + v0.5 market core + v0.6 exchange/retention
 docs/                   architecture + database upgrade notes
 supabase/seed.sql       intentionally contains no market data
 ```

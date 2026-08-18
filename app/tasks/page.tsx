@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Clock3, Flame, Gem, Gift, Trophy } from "lucide-react";
+import { Check, Clock3, Flame, Gem, Gift, Sparkles, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -17,7 +17,7 @@ export default function TasksPage() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { refreshProfile, haptic } = useTelegramProfile();
+  const { profile, refreshProfile, haptic } = useTelegramProfile();
 
   async function load() { const result = await apiFetch<{ missions: Mission[] }>("/api/tasks"); setMissions(result.missions); }
   useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Could not load tasks")); }, []);
@@ -34,9 +34,7 @@ export default function TasksPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <section className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3">
-        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Remaining rewards</p><p className="mt-1 text-[10px] text-[var(--muted)]">Complete market objectives to earn balance.</p></div><div className="text-right"><p className="flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available).replace("$", "")}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{claimable.length} ready</p></div></div>
-      </section>
+      <section className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Remaining rewards</p><p className="mt-1 text-[10px] text-[var(--muted)]">Complete market objectives to earn balance and XP.</p></div><div className="text-right"><p className="flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available).replace("$", "")}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{claimable.length} ready</p></div></div>{profile ? <div className="mt-3 flex items-center gap-2 border-t border-[var(--border-soft)] pt-3"><Sparkles size={13} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Level {profile.level}</span><div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[10px]">{profile.xp} XP</span></div> : null}</section>
 
       {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
 

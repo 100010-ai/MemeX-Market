@@ -15,6 +15,10 @@ export type Profile = {
   tier: string;
   joinedAt: string;
   lastGiftSyncAt: string | null;
+  xp: number;
+  level: number;
+  levelProgress: number;
+  xpForNextLevel: number;
 };
 
 export type Coin = {
@@ -31,6 +35,12 @@ export type Coin = {
   tradeCount24h: number;
   createdAt: string;
   creatorName: string | null;
+  liquidity: number;
+  allTimeVolume: number;
+  athPrice: number;
+  buyVolume24h: number;
+  sellVolume24h: number;
+  sparkline?: number[];
 };
 
 export type Candle = {
@@ -205,6 +215,8 @@ export type PublicProfile = {
   photoUrl: string | null;
   joinedAt: string;
   tier: string;
+  xp: number;
+  level: number;
   rank: number | null;
   netWorth: number;
   realizedPnl: number;
@@ -214,4 +226,40 @@ export type PublicProfile = {
   giftCount: number;
   createdCoins: Coin[];
   showcase: GiftAsset[];
+};
+
+
+export type CoinQuote = {
+  side: "buy" | "sell";
+  inputAmount: number;
+  outputAmount: number;
+  executionPrice: number;
+  currentPrice: number;
+  priceImpact: number;
+  feeAmount: number;
+  projectedPrice: number;
+};
+
+export type Watchlist = {
+  coinIds: string[];
+  giftCollections: string[];
+};
+
+export type GiftTraitGroup = {
+  name: string;
+  count: number;
+  listedCount: number;
+  floorPrice: number | null;
+  rarityPerMille: number | null;
+};
+
+export type GiftCollectionDetail = {
+  collection: GiftCollection;
+  gifts: GiftAsset[];
+  candles: Candle[];
+  models: GiftTraitGroup[];
+  backdrops: GiftTraitGroup[];
+  symbols: GiftTraitGroup[];
+  recentSales: GiftTrade[];
+  watched: boolean;
 };

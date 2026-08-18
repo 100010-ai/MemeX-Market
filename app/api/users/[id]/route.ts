@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireProfile, tierForWorth } from "@/lib/auth";
+import { progressionForXp, requireProfile, tierForWorth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
 
@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const [leaderResult, profileResult, coinsResult, giftsResult] = await Promise.all([
       supabase.from("leaderboard").select("*").eq("id", id).maybeSingle(),
-      supabase.from("profiles").select("id,username,first_name,photo_url,created_at").eq("id", id).maybeSingle(),
+      supabase.from("profiles").select("id,username,first_name,photo_url,created_at,xp").eq("id", id).maybeSingle(),
       supabase.from("market_overview").select("*").eq("creator_profile_id", id).order("market_cap", { ascending: false }).limit(12),
       supabase.from("gift_market_overview").select("*").eq("owner_profile_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("estimated_value", { ascending: false, nullsFirst: false }).limit(8),
     ]);
@@ -22,6 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (rankResult.error) throw rankResult.error;
     const row: any = leaderResult.data;
     const person: any = profileResult.data;
+    const progression = progressionForXp(Number(person.xp || 0));
     return NextResponse.json({
       profile: {
         id: String(person.id),
@@ -31,6 +32,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         photoUrl: person.photo_url || null,
         joinedAt: person.created_at,
         tier: tierForWorth(Number(row.net_worth)),
+        xp: progression.xp,
+        level: progression.level,
         rank: Number(rankResult.count || 0) + 1,
         netWorth: Number(row.net_worth),
         realizedPnl: Number(row.realized_pnl),

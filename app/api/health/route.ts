@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  return NextResponse.json({ ok: true, app: "MemeX Market", short: "MXM", version: "0.4.0" });
+  return NextResponse.json({ ok: true, app: "MemeX Market", short: "MXM", version: "0.6.0" });
 }
