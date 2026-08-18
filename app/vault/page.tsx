@@ -37,7 +37,7 @@ export default function VaultPage() {
       <section className="mb-3 rounded-[22px] border border-[var(--border)] bg-[var(--panel)] p-3">
         <div>
           <p className="text-[10px] text-[var(--muted)]">Капитал</p>
-          <h1 className="mt-1 text-xl font-semibold tracking-[-.02em]">{money(data.profile.netWorth)}</h1>
+          <h1 className="mt-1 text-base font-semibold tracking-[-.02em]">{money(data.profile.netWorth)}</h1>
           <p className={`mt-1 text-[11px] ${data.profile.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{data.profile.pnl >= 0 ? "+" : ""}{money(data.profile.pnl)} с начала игры</p>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-1.5"><Allocation label="Баланс" value={data.profile.balance} pct={cashPct} /><Allocation label="Подарки" value={data.profile.giftValue} pct={giftPct} /><Allocation label="Мемкоины" value={data.profile.coinValue} pct={coinPct} /></div>
