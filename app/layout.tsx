@@ -18,12 +18,17 @@ export const viewport: Viewport = {
   themeColor: "#050607",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+  modal,
+}: Readonly<{ children: React.ReactNode; modal: React.ReactNode }>) {
   return (
     <html lang="ru">
       <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
-        <TelegramProvider><AppShell>{children}</AppShell></TelegramProvider>
+        <TelegramProvider>
+          <AppShell modal={modal}>{children}</AppShell>
+        </TelegramProvider>
       </body>
     </html>
   );

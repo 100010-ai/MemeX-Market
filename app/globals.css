@@ -105,3 +105,11 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 420px) {
   html { font-size: 14.5px; }
 }
+
+.mxm-sheet-backdrop { animation: mxm-fade-in .18s ease-out; }
+.mxm-sheet-panel { animation: mxm-sheet-in .22s cubic-bezier(.32,.72,0,1); }
+@keyframes mxm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mxm-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (min-width: 768px) {
+  @keyframes mxm-sheet-in { from { transform: translateY(12px) scale(.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Activity, AlertTriangle, Coins, Gift, RefreshCw, ShoppingCart, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ago } from "@/lib/format";
+import { AdminCatalogPanel } from "@/components/admin/catalog-panel";
 
 type Metrics = {
   profiles: number;
@@ -72,6 +73,8 @@ export default function AdminPage() {
           <div className="border-b border-[var(--border-soft)] px-3 py-3"><p className="text-xs font-medium">Последние синхронизации подарков</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">Последние 20 запусков · проверено {new Date(data.checkedAt).toLocaleTimeString("ru-RU")}</p></div>
           {data.syncRuns.length ? <div className="divide-y divide-[var(--border-soft)]">{data.syncRuns.map((run) => <div key={run.id} className="p-3"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{run.user}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{ago(run.startedAt)} · {run.pagesFetched} стр. · {run.uniqueImported}/{run.uniqueReceived} импортировано</p></div><span className={`rounded-xl px-2 py-1 text-[9px] uppercase ${run.status === "succeeded" ? "bg-[#153322] text-[var(--positive)]" : run.status === "failed" ? "bg-[#351a1e] text-[var(--negative)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}>{run.status === "succeeded" ? "успешно" : run.status === "failed" ? "ошибка" : "в процессе"}</span></div>{run.errorMessage ? <p className="mt-2 break-words rounded-xl bg-[#25191b] px-2.5 py-2 text-[10px] leading-4 text-[#ff9aa4]">{run.errorMessage}</p> : null}</div>)}</div> : <div className="p-8 text-center text-xs text-[var(--muted)]">Синхронизаций пока не было.</div>}
         </section>
+
+        <AdminCatalogPanel />
       </>}
     </div>
   );

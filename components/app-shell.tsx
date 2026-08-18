@@ -20,7 +20,7 @@ function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; siz
   return <span className={`grid ${cls} place-items-center border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, loading, error } = useTelegramProfile();
 
@@ -68,6 +68,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           return <Link key={item.href} href={item.href} className={`relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 pb-1 pt-1 text-[9px] transition ${active ? "text-white" : "text-[var(--muted)]"}`}><span className={`grid h-8 w-10 place-items-center rounded-[15px] transition ${active ? "bg-[var(--panel-2)]" : "bg-transparent"}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /></span><span className="max-w-full truncate">{item.label}</span></Link>;
         })}
       </nav>
+
+      {modal}
     </div>
   );
 }

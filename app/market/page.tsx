@@ -143,13 +143,13 @@ export default function MarketPage() {
       {tab === "gifts" ? (
         <>
           {!loading && data.collections.length ? <CollectionRail collections={data.collections} watched={watchedCollections} busy={watchBusy} onWatch={(name, enabled) => toggleWatch("gift_collection", name, enabled)} /> : null}
-          <div className="mb-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
+          <div className="mxm-hscroll mb-2 flex flex-nowrap gap-1.5">
             <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
             <FilterSelect value={model} onChange={setModel} label="Модель" options={models} />
             <FilterSelect value={backdrop} onChange={setBackdrop} label="Фон" options={backdrops} />
             <FilterSelect value={symbol} onChange={setSymbol} label="Символ" options={symbols} />
-            <label className={`relative flex h-9 min-w-0 items-center rounded-[17px] border px-2.5 text-[11px] sm:w-auto ${priceBand !== "all" ? "border-[#4d5055] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label="Диапазон цены" value={priceBand} onChange={(event) => setPriceBand(event.target.value as PriceBand)} className="min-w-0 flex-1 appearance-none bg-transparent pr-5 outline-none"><option value="all">Цена</option><option value="under50">До 50</option><option value="50to250">50–250</option><option value="250to1000">250–1K</option><option value="over1000">1K+</option></select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>
-            <label className="relative flex h-9 min-w-0 items-center gap-1.5 rounded-[17px] border border-[var(--border)] bg-[var(--panel-2)] px-2.5 text-[11px] text-[#b8bbc1] sm:w-auto">
+            <label className={`relative flex h-9 shrink-0 items-center rounded-[17px] border px-2.5 text-[11px] ${priceBand !== "all" ? "border-[#4d5055] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label="Диапазон цены" value={priceBand} onChange={(event) => setPriceBand(event.target.value as PriceBand)} className="min-w-0 flex-1 appearance-none bg-transparent pr-5 outline-none"><option value="all">Цена</option><option value="under50">До 50</option><option value="50to250">50–250</option><option value="250to1000">250–1K</option><option value="over1000">1K+</option></select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>
+            <label className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-[17px] border border-[var(--border)] bg-[var(--panel-2)] px-2.5 text-[11px] text-[#b8bbc1]">
               <ListFilter size={13} className="shrink-0" />
               <select aria-label="Сортировка подарков" value={giftSort} onChange={(event) => setGiftSort(event.target.value as GiftSort)} className="min-w-0 flex-1 appearance-none bg-transparent pr-4 outline-none"><option value="price">Цена</option><option value="newest">Новые</option><option value="offers">Офферы</option><option value="number">Номер</option><option value="rarity">Редкость</option></select>
               <ChevronDown size={12} className="pointer-events-none absolute right-2" />
@@ -162,7 +162,7 @@ export default function MarketPage() {
         </>
       ) : (
         <div className="mb-3 flex items-start gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1">{(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}</div>
+          <div className="mxm-hscroll flex min-w-0 flex-1 flex-nowrap gap-1">{(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 whitespace-nowrap rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}</div>
           <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 rounded-[17px] bg-[var(--accent)] px-3 text-xs font-semibold text-black"><Plus size={14} />Создать</Link>
         </div>
       )}
@@ -189,7 +189,7 @@ export default function MarketPage() {
 
 function FilterSelect({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) {
   const active = value !== "all";
-  return <label className={`relative flex h-9 min-w-0 items-center rounded-[17px] border px-2.5 text-[11px] sm:w-auto ${active ? "border-[#4d5055] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 appearance-none bg-transparent pr-5 outline-none"><option value="all">{label}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>;
+  return <label className={`relative flex h-9 shrink-0 items-center rounded-[17px] border px-2.5 text-[11px] ${active ? "border-[#4d5055] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8bbc1]"}`}><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 appearance-none bg-transparent pr-5 outline-none"><option value="all">{label}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select><ChevronDown size={12} className="pointer-events-none absolute right-2" /></label>;
 }
 
 function CollectionRail({ collections, watched, busy, onWatch }: { collections: GiftCollection[]; watched: Set<string>; busy: string | null; onWatch: (name: string, enabled: boolean) => void }) {
