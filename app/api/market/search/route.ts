@@ -49,12 +49,13 @@ export async function GET(request: NextRequest) {
   const unique = new Map<string, Record<string, unknown>>();
   for (const result of results) {
     for (const row of result.data || []) {
-      const id = String((row as Record<string, unknown>).virtual_gift_id || "");
-      if (id && !unique.has(id)) unique.set(id, row as Record<string, unknown>);
+      const record = row as unknown as Record<string, unknown>;
+      const id = String(record.virtual_gift_id || "");
+      if (id && !unique.has(id)) unique.set(id, record);
       if (unique.size >= 60) break;
     }
     if (unique.size >= 60) break;
   }
 
-  return NextResponse.json({ gifts: [...unique.values()].map(mapGift) }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
+  return NextResponse.json({ gifts: [...unique.values()].map((row) => mapGift(row as Record<string, any>)) }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
 }

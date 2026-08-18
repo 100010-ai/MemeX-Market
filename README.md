@@ -99,3 +99,15 @@ npm run dev
 ```
 
 The authenticated application is intended to be opened through Telegram because server authentication validates Telegram `initData`.
+
+## v0.9.2 build/schema compatibility fix
+
+If `010_v09_mrkt_flow.sql` previously failed with `gift_assets.catalog_source does not exist`, run:
+
+```text
+supabase/migrations/011_v092_schema_compat.sql
+```
+
+The failed `010` transaction is rolled back by Postgres, so do not use `CASCADE`. `011` adds missing compatibility columns/tables/functions and recreates the current Gift market view without inserting demo market data.
+
+v0.9.2 also fixes Supabase select type inference in Gift detail/search and overwrites the obsolete `lib/telegram-resale.ts` with a dependency-free compatibility shim so stale repository trees cannot pull `@mtcute/node` back into Vercel type checking.

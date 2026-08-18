@@ -15,8 +15,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   try {
-    const { data: giftRow, error } = await supabase.from("gift_market_overview").select(giftMarketSelect).eq("virtual_gift_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).single();
-    if (error || !giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
+    const { data: giftRowRaw, error } = await supabase.from("gift_market_overview").select(giftMarketSelect).eq("virtual_gift_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).single();
+    if (error || !giftRowRaw) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
+    // Supabase is intentionally used without generated Database types in this project.
+    // Narrow the checked runtime row once, then use the mapper for validation.
+    const giftRow = giftRowRaw as unknown as Record<string, any>;
 
     const [tradesResult, candlesResult, offersResult, collectionResult, modelFloorResult, backdropFloorResult, symbolFloorResult, itemStatsResult, snapshot] = await Promise.all([
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", id).order("created_at", { ascending: false }).limit(80),
@@ -50,8 +53,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const cartResult = await supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).eq("virtual_gift_id", id).maybeSingle();
     if (cartResult.error) throw cartResult.error;
-    const collection = collectionResult.data;
+    const collection = collectionResult.data as unknown as Record<string, any> | null;
     if (!collection) throw new Error("Gift collection market row is missing");
+    const itemStats = itemStatsResult.data as unknown as {
+      trade_count?: number | string | null;
+      volume?: number | string | null;
+      high_sale?: number | string | null;
+      low_sale?: number | string | null;
+    } | null;
     const gift = mapGift(giftRow);
     return NextResponse.json({
       gift,
@@ -69,10 +78,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         time: Math.floor(new Date(candle.bucket_start).getTime() / 1000), open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
       })),
       itemStats: {
-        tradeCount: Number(itemStatsResult.data?.trade_count || 0),
-        volume: Number(itemStatsResult.data?.volume || 0),
-        highSale: itemStatsResult.data?.high_sale == null ? null : Number(itemStatsResult.data.high_sale),
-        lowSale: itemStatsResult.data?.low_sale == null ? null : Number(itemStatsResult.data.low_sale),
+        tradeCount: Number(itemStats?.trade_count || 0),
+        volume: Number(itemStats?.volume || 0),
+        highSale: itemStats?.high_sale == null ? null : Number(itemStats.high_sale),
+        lowSale: itemStats?.low_sale == null ? null : Number(itemStats.low_sale),
       },
       collection: {
         baseName: String(giftRow.base_name), itemCount: Number(collection.item_count), holderCount: Number(collection.holder_count), listedCount: Number(collection.listed_count),

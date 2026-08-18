@@ -121,6 +121,12 @@ $$;
 revoke execute on function public.gift_item_market_stats(uuid) from public,anon,authenticated;
 grant execute on function public.gift_item_market_stats(uuid) to service_role;
 
+-- Compatibility guard: older databases may have skipped the v0.8 catalogue
+-- migration. Do not let the v0.9 flow migration fail just because this column
+-- was not present yet. The full v0.9.2 compatibility migration repairs the
+-- remaining catalogue/NPC schema.
+alter table public.gift_assets add column if not exists catalog_source text not null default 'profile_sync';
+
 -- Diversify system liquidity across collections instead of filling the market
 -- with many consecutive assets from one collection.
 create or replace function public.npc_market_candidates(p_limit integer default 80)
