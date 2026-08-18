@@ -1,12 +1,24 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { readSession } from "@/lib/session";
 
+function requiredString(value: unknown, field: string) {
+  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`Profile field ${field} is missing`);
+  return value;
+}
+
+function requiredNumber(value: unknown, field: string) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`Profile field ${field} is invalid`);
+  return number;
+}
+
 export async function requireProfile() {
   const session = await readSession();
   if (!session) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("profiles").select("*").eq("telegram_id", session.telegramId).single();
-  if (error || !data) return null;
+  if (error) throw error;
+  if (!data) throw new Error("Authenticated Telegram profile is missing");
   return data;
 }
 
@@ -22,26 +34,33 @@ export function tierForWorth(netWorth: number) {
 }
 
 export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
+  const id = requiredString(profileRow.id, "id");
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase.from("leaderboard").select("coin_value,gift_value,net_worth").eq("id", String(profileRow.id)).maybeSingle();
-  const balance = Number(profileRow.balance ?? 0);
-  const coinValue = Number(data?.coin_value ?? 0);
-  const giftValue = Number(data?.gift_value ?? 0);
-  const netWorth = Number(data?.net_worth ?? balance + coinValue + giftValue);
+  const { data, error } = await supabase.from("leaderboard").select("coin_value,gift_value,net_worth").eq("id", id).single();
+  if (error) throw error;
+  if (!data) throw new Error("Profile is missing from leaderboard");
+
+  const balance = requiredNumber(profileRow.balance, "balance");
+  const coinValue = requiredNumber(data.coin_value, "coin_value");
+  const giftValue = requiredNumber(data.gift_value, "gift_value");
+  const netWorth = requiredNumber(data.net_worth, "net_worth");
+  const firstName = requiredString(profileRow.first_name, "first_name");
+  const joinedAt = requiredString(profileRow.created_at, "created_at");
+
   return {
-    id: String(profileRow.id),
-    telegramId: Number(profileRow.telegram_id),
-    username: profileRow.username ? String(profileRow.username) : null,
-    firstName: String(profileRow.first_name ?? "Trader"),
-    lastName: profileRow.last_name ? String(profileRow.last_name) : null,
-    photoUrl: profileRow.photo_url ? String(profileRow.photo_url) : null,
+    id,
+    telegramId: requiredNumber(profileRow.telegram_id, "telegram_id"),
+    username: profileRow.username == null ? null : String(profileRow.username),
+    firstName,
+    lastName: profileRow.last_name == null ? null : String(profileRow.last_name),
+    photoUrl: profileRow.photo_url == null ? null : String(profileRow.photo_url),
     balance,
     coinValue,
     giftValue,
     netWorth,
     pnl: netWorth - 100,
     tier: tierForWorth(netWorth),
-    joinedAt: String(profileRow.created_at ?? new Date().toISOString()),
-    lastGiftSyncAt: profileRow.last_gift_sync_at ? String(profileRow.last_gift_sync_at) : null,
+    joinedAt,
+    lastGiftSyncAt: profileRow.last_gift_sync_at == null ? null : String(profileRow.last_gift_sync_at),
   };
 }

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 
-const COOKIE_NAME = "memex_tg_session";
+const COOKIE_NAME = "mxm_tg_session";
 
 type SessionPayload = {
   telegramId: number;

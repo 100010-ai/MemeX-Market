@@ -2,10 +2,10 @@ import { createClient } from "@supabase/supabase-js";
 
 export function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
-  const serverKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serverKey = process.env.SUPABASE_SECRET_KEY;
 
   if (!url || !serverKey) {
-    throw new Error("Supabase server credentials are not configured");
+    throw new Error("SUPABASE_URL and SUPABASE_SECRET_KEY are required");
   }
 
   return createClient(url, serverKey, {

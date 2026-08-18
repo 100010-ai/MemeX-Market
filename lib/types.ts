@@ -17,6 +17,7 @@ export type Profile = {
 
 export type Coin = {
   id: string;
+  creatorId: string | null;
   name: string;
   symbol: string;
   description: string;
@@ -25,8 +26,9 @@ export type Coin = {
   volume24h: number;
   change24h: number;
   holderCount: number;
+  tradeCount24h: number;
   createdAt: string;
-  creatorName?: string | null;
+  creatorName: string | null;
 };
 
 export type Candle = {
@@ -45,6 +47,7 @@ export type Trade = {
   tokenAmount: number;
   price: number;
   createdAt: string;
+  traderId: string;
   traderName: string;
 };
 
@@ -59,13 +62,12 @@ export type Holding = {
   pnl: number;
 };
 
-export type GiftMediaKind = "static" | "animated" | "video" | "demo";
+export type GiftMediaKind = "static" | "animated" | "video";
 
 export type GiftAsset = {
   id: string;
   virtualGiftId: string;
-  source: "telegram" | "demo";
-  telegramName: string | null;
+  telegramName: string;
   giftId: string | null;
   baseName: string;
   number: number;
@@ -80,19 +82,19 @@ export type GiftAsset = {
   backdropEdge: string;
   backdropSymbol: string;
   backdropText: string;
-  modelFileId: string | null;
+  modelFileId: string;
   modelThumbFileId: string | null;
-  symbolFileId: string | null;
+  symbolFileId: string;
   symbolThumbFileId: string | null;
   mediaKind: GiftMediaKind;
-  demoEmoji: string | null;
   isPremium: boolean;
   isFromBlockchain: boolean;
-  referencePrice: number;
-  ownerId: string | null;
-  ownerName: string | null;
+  ownerId: string;
+  ownerName: string;
+  acquiredPrice: number;
   listingPrice: number | null;
   lastSalePrice: number | null;
+  estimatedValue: number | null;
   status: "owned" | "listed";
   createdAt: string;
 };
@@ -104,13 +106,16 @@ export type GiftCollection = {
   lastSalePrice: number | null;
   volume24h: number;
   change24h: number;
+  tradeCount24h: number;
 };
 
 export type GiftTrade = {
   id: string;
   price: number;
   createdAt: string;
+  buyerId: string;
   buyerName: string;
+  sellerId: string | null;
   sellerName: string | null;
 };
 
@@ -124,8 +129,17 @@ export type GiftOffer = {
   createdAt: string;
   buyerId: string;
   buyerName: string;
-  ownerId: string | null;
-  ownerName: string | null;
+  ownerId: string;
+  ownerName: string;
+};
+
+export type GiftTraitStats = {
+  collectionFloor: number | null;
+  modelFloor: number | null;
+  backdropFloor: number | null;
+  symbolFloor: number | null;
+  collectionLastSale: number | null;
+  estimatedValue: number | null;
 };
 
 export type MissionPeriod = "onboarding" | "daily" | "weekly";
@@ -145,9 +159,47 @@ export type Mission = {
 
 export type ActivityItem = {
   id: string;
-  kind: "coin" | "gift";
+  kind: "coin" | "gift" | "launch" | "listing";
+  actorId: string | null;
   label: string;
   detail: string;
-  amount: number;
+  amount: number | null;
   createdAt: string;
+  href: string;
+};
+
+export type LeaderboardPlayer = {
+  rank: number;
+  id: string;
+  isMe: boolean;
+  name: string;
+  photoUrl: string | null;
+  balance: number;
+  coinValue: number;
+  giftValue: number;
+  netWorth: number;
+  realizedPnl: number;
+  coinTrades: number;
+  giftTrades: number;
+  giftCount: number;
+  createdCoinMarketCap: number;
+};
+
+export type PublicProfile = {
+  id: string;
+  name: string;
+  username: string | null;
+  firstName: string;
+  photoUrl: string | null;
+  joinedAt: string;
+  tier: string;
+  rank: number | null;
+  netWorth: number;
+  realizedPnl: number;
+  coinValue: number;
+  giftValue: number;
+  tradeCount: number;
+  giftCount: number;
+  createdCoins: Coin[];
+  showcase: GiftAsset[];
 };

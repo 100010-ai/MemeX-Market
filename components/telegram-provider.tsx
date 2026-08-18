@@ -33,26 +33,18 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     async function authenticate() {
       try {
         const webApp = window.Telegram?.WebApp;
-        if (webApp?.initData) {
-          webApp.ready();
-          webApp.expand();
-          webApp.setHeaderColor?.("#101112");
-          webApp.setBackgroundColor?.("#101112");
-          const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
-            method: "POST",
-            body: JSON.stringify({ initData: webApp.initData }),
-          });
-          if (!cancelled) setProfile(result.profile);
-          return;
-        }
-        if (process.env.NEXT_PUBLIC_DEV_AUTH_ENABLED === "true") {
-          const result = await apiFetch<{ profile: Profile }>("/api/auth/dev", { method: "POST" });
-          if (!cancelled) setProfile(result.profile);
-          return;
-        }
-        throw new Error("Open MemeX from the Telegram bot. Local browser auth is disabled.");
+        if (!webApp?.initData) throw new Error("MXM must be opened from @MemeXMarketBot in Telegram.");
+        webApp.ready();
+        webApp.expand();
+        webApp.setHeaderColor?.("#111213");
+        webApp.setBackgroundColor?.("#111213");
+        const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
+          method: "POST",
+          body: JSON.stringify({ initData: webApp.initData }),
+        });
+        if (!cancelled) setProfile(result.profile);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Authentication failed");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Telegram authentication failed");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -78,6 +70,7 @@ declare global {
         initData: string;
         ready: () => void;
         expand: () => void;
+        close?: () => void;
         setHeaderColor?: (color: string) => void;
         setBackgroundColor?: (color: string) => void;
         HapticFeedback?: { impactOccurred: (style: "light" | "medium" | "heavy") => void };

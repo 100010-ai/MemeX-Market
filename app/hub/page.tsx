@@ -1,0 +1,114 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { Activity, ArrowUpRight, Gift, LineChart, ListChecks, Trophy } from "lucide-react";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { apiFetch } from "@/lib/api";
+import { ago, money } from "@/lib/format";
+import type { ActivityItem, LeaderboardPlayer } from "@/lib/types";
+
+const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
+
+type FeedPayload = { activity: ActivityItem[] };
+type LeaderboardPayload = { players: LeaderboardPlayer[]; meRank: number };
+
+export default function HubPage() {
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [leaders, setLeaders] = useState<LeaderboardPlayer[]>([]);
+  const [meRank, setMeRank] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
+    try {
+      const [feed, leaderboard] = await Promise.all([
+        apiFetch<FeedPayload>("/api/feed"),
+        apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall"),
+      ]);
+      setActivity(feed.activity);
+      setLeaders(leaderboard.players.slice(0, 8));
+      setMeRank(leaderboard.meRank);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load market hub");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+  const realtimeReload = useCallback(() => { void load(true); }, [load]);
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <RealtimeRefresh channelName="mxm-hub" tables={realtimeTables} onChange={realtimeReload} />
+
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Market Hub</h1>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Live MXM activity and global standings.</p>
+        </div>
+        {meRank !== null ? <Link href="/leaderboard" className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Your rank</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <QuickLink href="/market" icon={<LineChart size={15} />} label="Trade" detail="Coins & Gifts" />
+        <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Tasks" detail="Earn balance" />
+        <QuickLink href="/vault" icon={<Gift size={15} />} label="Vault" detail="Your assets" />
+      </div>
+
+      {error ? <div className="mb-3 rounded-xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+          <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
+            <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Live market</div>
+            <span className="text-[10px] text-[var(--muted)]">Realtime</span>
+          </div>
+          {loading ? <RowsSkeleton count={8} /> : activity.length ? (
+            <div className="divide-y divide-[var(--border-soft)]">
+              {activity.map((item) => (
+                <Link key={item.id} href={item.href} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-[var(--panel-2)]">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs"><span className="text-[#c8cbd0]">{item.label}</span> <span className="font-medium text-white">{item.detail}</span></p>
+                    <p className="mt-1 text-[10px] text-[var(--muted)]">{ago(item.createdAt)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-right text-xs font-medium">{item.amount == null ? item.kind.toUpperCase() : money(item.amount)}</span>
+                    <ArrowUpRight size={13} className="text-[var(--muted)]" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : <Empty text="No market activity yet." />}
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+          <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
+            <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Top traders</div>
+            <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">View all</Link>
+          </div>
+          {loading ? <RowsSkeleton count={6} /> : leaders.length ? (
+            <div className="divide-y divide-[var(--border-soft)]">
+              {leaders.map((player) => (
+                <Link href={`/u/${player.id}`} key={player.id} className="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 hover:bg-[var(--panel-2)]">
+                  <span className={`text-center text-[11px] font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{player.rank}</span>
+                  <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} Gifts · {player.coinTrades + player.giftTrades} trades</p></div>
+                  <span className="text-xs font-semibold">{money(player.netWorth)}</span>
+                </Link>
+              ))}
+            </div>
+          ) : <Empty text="No ranked players yet." />}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function QuickLink({ href, icon, label, detail }: { href: string; icon: React.ReactNode; label: string; detail: string }) {
+  return <Link href={href} className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
+}
+function Empty({ text }: { text: string }) { return <div className="grid min-h-40 place-items-center px-4 text-center text-xs text-[var(--muted)]">{text}</div>; }
+function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-lg" />)}</div>; }

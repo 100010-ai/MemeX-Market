@@ -5,8 +5,8 @@ import { TelegramProvider } from "@/components/telegram-provider";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
-  title: "MemeX — Virtual Telegram Market",
-  description: "A multiplayer virtual market for meme coins and Telegram collectible gift replicas.",
+  title: "MemeX Market — Virtual Telegram Trading",
+  description: "MXM is a multiplayer virtual market for meme coins and simulated Telegram collectible gifts.",
 };
 
 export const viewport: Viewport = {
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <Script src="https://telegram.org/js/telegram-web-app.js?63" strategy="beforeInteractive" />
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <TelegramProvider><AppShell>{children}</AppShell></TelegramProvider>
       </body>
     </html>

@@ -1,29 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Crown, Gift, LineChart, Trophy } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Crown, Gift, LineChart, Trophy, TrendingUp } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { money, percent } from "@/lib/format";
+import { money } from "@/lib/format";
+import type { LeaderboardPlayer } from "@/lib/types";
 
-type Player = { rank: number; id: string; isMe: boolean; name: string; photoUrl: string | null; balance: number; coinValue: number; giftValue: number; netWorth: number; pnl: number; coinTrades: number; giftTrades: number };
+type Board = "overall" | "pnl" | "gifts" | "coins";
+const tabs: { key: Board; label: string; icon: typeof Trophy }[] = [
+  { key: "overall", label: "Overall", icon: Crown },
+  { key: "pnl", label: "PnL", icon: TrendingUp },
+  { key: "gifts", label: "Gifts", icon: Gift },
+  { key: "coins", label: "Creators", icon: LineChart },
+];
 
 export default function LeaderboardPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [metric, setMetric] = useState<"overall" | "gifts" | "coins">("overall");
+  const [board, setBoard] = useState<Board>("overall");
+  const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
+  const [meRank, setMeRank] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { apiFetch<{ players: Player[] }>("/api/leaderboard").then((r) => setPlayers(r.players)).catch((e) => setError(e instanceof Error ? e.message : "Could not load leaderboard")); }, []);
-  const sorted = useMemo(() => [...players].sort((a, b) => metric === "gifts" ? b.giftValue - a.giftValue : metric === "coins" ? b.coinValue - a.coinValue : b.netWorth - a.netWorth).map((p, i) => ({ ...p, shownRank: i + 1 })), [players, metric]);
+
+  useEffect(() => {
+    setLoading(true); setError(null);
+    apiFetch<{ players: LeaderboardPlayer[]; meRank: number }>(`/api/leaderboard?board=${board}`)
+      .then((result) => { setPlayers(result.players); setMeRank(result.meRank); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load leaderboard"))
+      .finally(() => setLoading(false));
+  }, [board]);
+
+  function value(player: LeaderboardPlayer) {
+    if (board === "pnl") return player.realizedPnl;
+    if (board === "gifts") return player.giftValue;
+    if (board === "coins") return player.createdCoinMarketCap;
+    return player.netWorth;
+  }
+
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-3 flex items-center justify-between"><div><h1 className="text-lg font-semibold">Leaderboard</h1><p className="text-xs text-[var(--muted)]">Shared multiplayer economy ranking.</p></div><Trophy size={20} className="text-[var(--accent)]" /></div>
-      <div className="mb-3 grid grid-cols-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-1"><Tab active={metric === "overall"} onClick={() => setMetric("overall")} icon={<Crown size={13} />} label="Overall" /><Tab active={metric === "gifts"} onClick={() => setMetric("gifts")} icon={<Gift size={13} />} label="Gifts" /><Tab active={metric === "coins"} onClick={() => setMetric("coins")} icon={<LineChart size={13} />} label="Coins" /></div>
-      {error ? <div className="rounded-lg bg-[rgba(255,91,104,.08)] p-3 text-xs text-[var(--negative)]">{error}</div> : null}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]"><div className="divide-y divide-[var(--border-soft)]">{sorted.map((p) => {
-        const value = metric === "gifts" ? p.giftValue : metric === "coins" ? p.coinValue : p.netWorth;
-        return <div key={p.id} className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 ${p.isMe ? "bg-[rgba(255,216,61,.05)]" : ""}`}><div className={`text-center text-xs font-semibold ${p.shownRank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{p.shownRank}</div><div className="flex min-w-0 items-center gap-2.5">{p.photoUrl ? <img src={p.photoUrl} alt="" className="h-9 w-9 rounded-lg object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--panel-2)] text-xs">{p.name.replace("@", "").slice(0,1).toUpperCase()}</span>}<div className="min-w-0"><p className="truncate text-sm font-medium">{p.name}{p.isMe ? <span className="ml-1.5 text-[10px] text-[var(--accent)]">YOU</span> : null}</p><p className="text-[10px] text-[var(--muted)]">{p.giftTrades} gift · {p.coinTrades} coin trades</p></div></div><div className="text-right"><p className="text-sm font-semibold">{money(value)}</p><p className={`text-[10px] ${p.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(p.pnl)}</p></div></div>;
-      })}{!sorted.length && !error ? <p className="p-8 text-center text-sm text-[var(--muted)]">No players yet.</p> : null}</div></div>
+      <div className="mb-3 flex items-center justify-between gap-3"><div><h1 className="text-lg font-semibold">Leaderboard</h1><p className="mt-0.5 text-xs text-[var(--muted)]">Global MXM rankings.</p></div>{meRank ? <div className="rounded-lg bg-[var(--panel-2)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Your rank</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></div> : null}</div>
+      <div className="mb-3 grid grid-cols-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.key} onClick={() => setBoard(tab.key)} className={`flex items-center justify-center gap-1 rounded-lg py-2 text-[11px] ${board === tab.key ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><Icon size={13} /><span className="hidden sm:inline">{tab.label}</span></button>; })}</div>
+      {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        {loading ? <div className="p-3"><div className="mxm-skeleton h-14 rounded-lg" /><div className="mxm-skeleton mt-2 h-14 rounded-lg" /><div className="mxm-skeleton mt-2 h-14 rounded-lg" /></div> : players.length ? <div className="divide-y divide-[var(--border-soft)]">{players.map((player) => <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 hover:bg-[var(--panel-2)] ${player.isMe ? "bg-[rgba(255,214,0,.04)]" : ""}`}><div className={`text-center text-xs font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{player.rank}</div><div className="flex min-w-0 items-center gap-2.5">{player.photoUrl ? <img src={player.photoUrl} alt="" className="h-9 w-9 rounded-lg object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--panel-2)] text-xs">{player.name.replace("@", "").slice(0, 1).toUpperCase()}</span>}<div className="min-w-0"><p className="truncate text-sm font-medium">{player.name}{player.isMe ? <span className="ml-1.5 text-[9px] text-[var(--accent)]">YOU</span> : null}</p><p className="text-[10px] text-[var(--muted)]">{player.giftCount} Gifts · {player.coinTrades + player.giftTrades} trades</p></div></div><div className="text-right"><p className={`text-sm font-semibold ${board === "pnl" ? player.realizedPnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]" : ""}`}>{money(value(player))}</p><p className="text-[10px] text-[var(--muted)]">{board === "coins" ? "created cap" : board}</p></div></Link>)}</div> : <div className="p-10 text-center text-sm text-[var(--muted)]">No players yet.</div>}
+      </div>
     </div>
   );
 }
-
-function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) { return <button onClick={onClick} className={`flex items-center justify-center gap-1.5 rounded-md py-2 text-xs ${active ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>{icon}{label}</button>; }

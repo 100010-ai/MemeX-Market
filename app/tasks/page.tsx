@@ -19,7 +19,7 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
 
-  async function load() { const r = await apiFetch<{ missions: Mission[] }>("/api/tasks"); setMissions(r.missions); }
+  async function load() { const result = await apiFetch<{ missions: Mission[] }>("/api/tasks"); setMissions(result.missions); }
   useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Could not load tasks")); }, []);
 
   async function claim(id: string) {
@@ -29,22 +29,20 @@ export default function TasksPage() {
     finally { setBusy(null); }
   }
 
-  const completed = useMemo(() => missions.filter((m) => m.claimed).length, [missions]);
+  const claimable = useMemo(() => missions.filter((mission) => mission.progress >= mission.target && !mission.claimed).length, [missions]);
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3">
-        <div className="flex items-center justify-between gap-3"><div><h1 className="text-lg font-semibold">Tasks</h1><p className="mt-0.5 text-xs text-[var(--muted)]">Small rewards keep a broke trader from getting permanently soft-locked.</p></div><div className="rounded-lg bg-[var(--panel-2)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Completed</p><p className="text-sm font-semibold">{completed}/{missions.length}</p></div></div>
-      </div>
-      {error ? <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--negative)]">{error}</div> : null}
+      <div className="mb-3 flex items-center justify-between gap-3"><div><h1 className="text-lg font-semibold">Tasks</h1><p className="mt-0.5 text-xs text-[var(--muted)]">Daily and weekly market objectives.</p></div><div className="rounded-lg bg-[var(--panel-2)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Claimable</p><p className="text-sm font-semibold text-[var(--accent)]">{claimable}</p></div></div>
+      {error ? <div className="mb-3 rounded-lg border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
       {(["onboarding", "daily", "weekly"] as MissionPeriod[]).map((period) => {
-        const items = missions.filter((m) => m.period === period);
+        const items = missions.filter((mission) => mission.period === period);
         if (!items.length) return null;
         const Icon = sectionMeta[period].icon;
-        return <section key={period} className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--panel)]"><div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3"><div className="flex items-center gap-2 text-sm font-medium"><Icon size={15} className={period === "daily" ? "text-[#ff754b]" : "text-[var(--accent)]"} />{sectionMeta[period].title}</div>{period !== "onboarding" ? <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><Clock3 size={11} /> auto resets</span> : null}</div><div className="divide-y divide-[var(--border-soft)]">{items.map((m) => {
-          const done = m.progress >= m.target;
-          const pct = Math.min(100, (m.progress / m.target) * 100);
-          return <div key={m.id} className="p-3"><div className="flex items-center gap-3"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${m.claimed ? "bg-[rgba(40,207,131,.12)] text-[var(--positive)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}>{m.claimed ? <Check size={17} /> : <Gift size={17} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-medium">{m.title}</p><span className="shrink-0 text-[11px] text-[var(--accent)]">◆ {money(m.reward).replace("$", "")}</span></div><p className="mt-0.5 text-[11px] text-[var(--muted)]">{m.description}</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} /></div><div className="mt-1 flex items-center justify-between text-[10px] text-[var(--muted)]"><span>{m.progress}/{m.target}</span>{done && !m.claimed ? <button onClick={() => claim(m.id)} disabled={busy !== null} className="rounded-md bg-[var(--accent)] px-2.5 py-1 font-semibold text-black">{busy === m.id ? "Claiming…" : "Claim"}</button> : <span>{m.claimed ? "Claimed" : "In progress"}</span>}</div></div></div></div>;
+        return <section key={period} className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--panel)]"><div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3"><div className="flex items-center gap-2 text-sm font-medium"><Icon size={15} className={period === "daily" ? "text-[#ff754b]" : "text-[var(--accent)]"} />{sectionMeta[period].title}</div>{period !== "onboarding" ? <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><Clock3 size={11} />auto reset</span> : null}</div><div className="divide-y divide-[var(--border-soft)]">{items.map((mission) => {
+          const done = mission.progress >= mission.target;
+          const pct = Math.min(100, mission.progress / mission.target * 100);
+          return <div key={mission.id} className="p-3"><div className="flex items-center gap-3"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${mission.claimed ? "bg-[rgba(37,203,129,.12)] text-[var(--positive)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}>{mission.claimed ? <Check size={17} /> : <Gift size={17} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-medium">{mission.title}</p><span className="shrink-0 text-[11px] text-[var(--accent)]">◆ {money(mission.reward).replace("$", "")}</span></div><p className="mt-0.5 text-[11px] text-[var(--muted)]">{mission.description}</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} /></div><div className="mt-1 flex items-center justify-between text-[10px] text-[var(--muted)]"><span>{mission.progress}/{mission.target}</span>{done && !mission.claimed ? <button onClick={() => claim(mission.id)} disabled={busy !== null} className="rounded-md bg-[var(--accent)] px-2.5 py-1 font-semibold text-black">{busy === mission.id ? "Claiming…" : "Claim"}</button> : <span>{mission.claimed ? "Claimed" : "In progress"}</span>}</div></div></div></div>;
         })}</div></section>;
       })}
     </div>
