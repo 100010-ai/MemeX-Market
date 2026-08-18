@@ -12,7 +12,7 @@ export async function GET() {
     ok: true,
     app: "MemeX Market",
     short: "MXM",
-    version: "0.6.1",
+    version: "0.6.2",
     realtimeConfigured: Boolean(realtimeUrl && realtimeKey),
   });
 }

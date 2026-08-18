@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.6.1
+# MemeX Market (MXM) v0.6.2
 
 Telegram Mini App for a multiplayer simulated market built with **Next.js, TypeScript, Tailwind CSS, Supabase and Vercel**.
 
@@ -9,6 +9,19 @@ MXM has two connected markets:
 
 A new profile starts with **$100 MXM cash**. There are no seeded market assets, generated Gift media, synthetic listings, browser dev accounts or demo prices.
 
+
+
+## v0.6.2 — Mobile UI hotfix
+
+- Исправлена сломанная вкладочная панель портфеля: счётчики больше не переносятся на вторую строку, длинные подписи сокращены и не ломают сетку на узком Telegram WebView.
+- Исправлены мобильные отступы и прокрутка: страница имеет корректный нижний запас под fixed navigation, горизонтальные rails получили touch scrolling, а фильтры Gifts больше не требуют горизонтальной прокрутки — на телефоне они складываются в две колонки.
+- Убран лишний набор кнопок из мобильного header: остались только профиль и баланс.
+- Убран пользовательский UI синхронизации Telegram Gifts из профиля и портфеля. Backend sync/diagnostics сохранён для служебного импорта, но игровой интерфейс больше не заставляет игрока владеть подарком в Telegram.
+- Уменьшена типографика на мобильных экранах, отключено автоматическое увеличение текста WebView.
+- Акцентный цвет заменён с ярко-жёлтого на приглушённый золотой `#c6aa58`.
+- Фон затемнён до `#050607`, поверхности и активные элементы сделаны мягче и более скруглёнными.
+- `/api/health` сообщает версию `0.6.2`.
+- Изменений схемы Supabase в v0.6.2 нет. Если база уже обновлена до v0.6.1, SQL запускать не нужно.
 
 ## v0.6.1 — Russian UI + Realtime config fix
 

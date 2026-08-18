@@ -47,13 +47,13 @@ export default function HubPage() {
 
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Хаб рынка</h1>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">Живая активность MXM и глобальный рейтинг.</p>
+          <h1 className="text-base font-semibold">Хаб рынка</h1>
+          <p className="mt-0.5 text-[11px] text-[var(--muted)]">Живая активность MXM и глобальный рейтинг.</p>
         </div>
-        {meRank !== null ? <Link href="/leaderboard" className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Ваше место</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
+        {meRank !== null ? <Link href="/leaderboard" className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[10px] text-[var(--muted)]">Ваше место</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
       </div>
 
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <div className="mb-3 grid grid-cols-3 gap-1.5">
         <QuickLink href="/market" icon={<LineChart size={15} />} label="Торговать" detail="Мемкоины и подарки" />
         <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" detail="Получать награды" />
         <QuickLink href="/vault" icon={<Gift size={15} />} label="Портфель" detail="Ваши активы" />
@@ -62,7 +62,7 @@ export default function HubPage() {
       {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
+        <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
             <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Рынок онлайн</div>
             <span className="text-[10px] text-[var(--muted)]">В реальном времени</span>
@@ -85,7 +85,7 @@ export default function HubPage() {
           ) : <Empty text="Активности на рынке пока нет." />}
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
+        <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
             <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Топ трейдеров</div>
             <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">Смотреть все</Link>
@@ -108,7 +108,7 @@ export default function HubPage() {
 }
 
 function QuickLink({ href, icon, label, detail }: { href: string; icon: React.ReactNode; label: string; detail: string }) {
-  return <Link href={href} className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
+  return <Link href={href} className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-40 place-items-center px-4 text-center text-xs text-[var(--muted)]">{text}</div>; }
 function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-2xl" />)}</div>; }

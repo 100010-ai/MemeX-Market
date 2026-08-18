@@ -36,8 +36,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         if (!webApp?.initData) throw new Error("Открой MXM через @MemeXMarketBot в Telegram.");
         webApp.ready();
         webApp.expand();
-        webApp.setHeaderColor?.("#06080a");
-        webApp.setBackgroundColor?.("#06080a");
+        webApp.setHeaderColor?.("#050607");
+        webApp.setBackgroundColor?.("#050607");
         const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),
