@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Flame, Gift, ListFilter, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { ActivityItem, Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
@@ -21,12 +21,15 @@ type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
 const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null });
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
-const MARKET_CACHE_MS = 20_000;
+const MARKET_CACHE_MS = 30_000;
+const GIFT_PAGE_SIZE = 36;
 
 export default function MarketPage() {
   const [data, setData] = useState<MarketPayload>(() => emptyMarketPayload());
   const [tab, setTab] = useState<"gifts" | "coins">("gifts");
   const [query, setQuery] = useState("");
+  const [marketNow] = useState(() => Date.now());
+  const deferredQuery = useDeferredValue(query);
   const [watchOnly, setWatchOnly] = useState(false);
   const [collection, setCollection] = useState("all");
   const [model, setModel] = useState("all");
@@ -48,7 +51,7 @@ export default function MarketPage() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const bootstrapInFlight = useRef(false);
   const activeTabRef = useRef(tab);
-  activeTabRef.current = tab;
+  useEffect(() => { activeTabRef.current = tab; }, [tab]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const loadSeq = useRef(0);
   const scopeDataRef = useRef<Partial<Record<"gifts" | "coins", MarketPayload>>>({});
@@ -69,7 +72,7 @@ export default function MarketPage() {
     if (!silent) setError(null);
     if (cacheFresh && !silent) silent = true;
     try {
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&t=${forced ? Date.now() : 0}`);
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced ? Date.now() : 0}`);
       if (seq !== loadSeq.current) return;
       marketCache.set(tab, { at: Date.now(), payload });
       scopeDataRef.current[tab] = payload;
@@ -111,7 +114,7 @@ export default function MarketPage() {
     if (tab !== "gifts" || loadingMore || data.nextOffset == null || !data.marketSeed || query.trim().length >= 2) return;
     setLoadingMore(true);
     try {
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=gifts&offset=${data.nextOffset}&limit=72&seed=${encodeURIComponent(data.marketSeed)}`);
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=gifts&offset=${data.nextOffset}&limit=${GIFT_PAGE_SIZE}&seed=${encodeURIComponent(data.marketSeed)}`);
       if (activeTabRef.current !== "gifts") return;
       setData((current) => {
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
@@ -146,7 +149,7 @@ export default function MarketPage() {
     if (!node || tab !== "gifts" || data.nextOffset == null || query.trim().length >= 2) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreGifts();
-    }, { rootMargin: "500px 0px" });
+    }, { rootMargin: "280px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
   }, [tab, data.nextOffset, query, loadMoreGifts]);
@@ -187,8 +190,8 @@ export default function MarketPage() {
   const hasGiftFilters = collection !== "all" || model !== "all" || backdrop !== "all" || symbol !== "all" || priceBand !== "all" || giftSort !== "random" || giftView !== "all" || watchOnly;
 
   const gifts = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const source = query.trim().length >= 2 && remoteGiftSearch ? remoteGiftSearch : data.gifts;
+    const q = deferredQuery.trim().toLowerCase();
+    const source = deferredQuery.trim().length >= 2 && remoteGiftSearch ? remoteGiftSearch : data.gifts;
     return source.filter((gift) => {
       if (gift.isBurned) return false;
       if (watchOnly && !watchedCollections.has(gift.baseName)) return false;
@@ -199,7 +202,7 @@ export default function MarketPage() {
       if (symbol !== "all" && gift.symbolName !== symbol) return false;
       if (giftView === "deals" && !(gift.listingPrice != null && gift.estimatedValue != null && gift.estimatedValue > 0 && gift.listingPrice <= gift.estimatedValue * 0.78)) return false;
       if (giftView === "rare" && Math.min(gift.modelRarityPerMille, gift.backdropRarityPerMille, gift.symbolRarityPerMille) > 30) return false;
-      if (giftView === "new" && Date.now() - new Date(gift.createdAt).getTime() > 48 * 60 * 60 * 1000) return false;
+      if (giftView === "new" && marketNow - new Date(gift.createdAt).getTime() > 48 * 60 * 60 * 1000) return false;
       if (giftView === "offers" && gift.offerCount < 1) return false;
       const listing = gift.listingPrice;
       if (listing == null) return false;
@@ -216,10 +219,10 @@ export default function MarketPage() {
       if (giftSort === "offers") return b.offerCount - a.offerCount || Number(a.listingPrice) - Number(b.listingPrice);
       return Number(a.listingPrice) - Number(b.listingPrice);
     });
-  }, [data.gifts, remoteGiftSearch, query, collection, model, backdrop, symbol, priceBand, giftSort, giftView, watchOnly, watchedCollections]);
+  }, [data.gifts, remoteGiftSearch, deferredQuery, collection, model, backdrop, symbol, priceBand, giftSort, giftView, watchOnly, watchedCollections, marketNow]);
 
   const coins = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return data.coins.filter((coin) => {
       if (watchOnly && !watchedCoins.has(coin.id)) return false;
       return !q || `${coin.name} ${coin.symbol}`.toLowerCase().includes(q);
@@ -230,7 +233,7 @@ export default function MarketPage() {
       if (coinSort === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       return b.volume24h - a.volume24h || b.tradeCount24h - a.tradeCount24h || b.holderCount - a.holderCount;
     });
-  }, [data.coins, query, watchOnly, watchedCoins, coinSort]);
+  }, [data.coins, deferredQuery, watchOnly, watchedCoins, coinSort]);
 
   function switchTab(next: "gifts" | "coins") {
     if (next === tab) return;
@@ -294,7 +297,7 @@ export default function MarketPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={900} />
+      <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={1500} />
 
       <div className="mb-3 flex items-center gap-3 border-b border-[var(--border-soft)]">
         <div className="grid min-w-0 flex-1 grid-cols-2">
@@ -360,7 +363,7 @@ export default function MarketPage() {
         </div>
       )}
 
-      {tab === "gifts" && data.cartIds.length ? <Link href="/cart" className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-[17px] border border-[rgba(198,170,88,.25)] bg-[rgba(19,20,22,.96)] px-4 py-2.5 text-[11px] font-semibold shadow-[0_10px_34px_rgba(0,0,0,.45)] backdrop-blur-xl lg:bottom-5"><ShoppingCart size={14} className="text-[var(--accent)]"/><span>Корзина · {data.cartIds.length}</span></Link> : null}
+      {tab === "gifts" && data.cartIds.length ? <Link href="/cart" className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-[17px] border border-[rgba(198,170,88,.25)] bg-[rgba(19,20,22,.96)] px-4 py-2.5 text-[11px] font-semibold mxm-floating-glass shadow-[0_10px_28px_rgba(0,0,0,.38)] lg:bottom-5"><ShoppingCart size={14} className="text-[var(--accent)]"/><span>Корзина · {data.cartIds.length}</span></Link> : null}
     </div>
   );
 }

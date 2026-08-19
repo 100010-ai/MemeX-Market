@@ -85,11 +85,20 @@ button:disabled { cursor: not-allowed; }
 @media (min-width: 900px) { .market-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .mxm-skeleton {
-  background: linear-gradient(90deg, #0d1013 25%, #171c21 50%, #0d1013 75%);
-  background-size: 200% 100%;
-  animation: mxm-shimmer 1.2s infinite linear;
+  position: relative;
+  overflow: hidden;
+  background: #0d1013;
 }
-@keyframes mxm-shimmer { to { background-position: -200% 0; } }
+.mxm-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.055) 48%, transparent 100%);
+  transform: translate3d(-105%,0,0);
+  animation: mxm-shimmer 1.35s infinite ease-in-out;
+  will-change: transform;
+}
+@keyframes mxm-shimmer { to { transform: translate3d(105%,0,0); } }
 
 .mxm-scrollbar-none { scrollbar-width: none; }
 .mxm-scrollbar-none::-webkit-scrollbar { display: none; }
@@ -104,7 +113,6 @@ button:disabled { cursor: not-allowed; }
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  scroll-behavior: smooth;
   touch-action: pan-x pan-y;
   cursor: grab;
   padding-inline-end: 10px;
@@ -121,12 +129,12 @@ button:disabled { cursor: not-allowed; }
   html { font-size: 14.5px; }
 }
 
-.mxm-sheet-backdrop { animation: mxm-fade-in .18s ease-out; }
-.mxm-sheet-panel { animation: mxm-sheet-in .22s cubic-bezier(.32,.72,0,1); }
+.mxm-sheet-backdrop { animation: mxm-fade-in .16s ease-out; }
+.mxm-sheet-panel { animation: mxm-sheet-in .24s cubic-bezier(.16,1,.3,1); }
 @keyframes mxm-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes mxm-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes mxm-sheet-in { from { transform: translate3d(0,18px,0); opacity: .72; } to { transform: translate3d(0,0,0); opacity: 1; } }
 @media (min-width: 768px) {
-  @keyframes mxm-sheet-in { from { transform: translateY(12px) scale(.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+  @keyframes mxm-sheet-in { from { transform: translate3d(0,10px,0) scale(.985); opacity: 0; } to { transform: translate3d(0,0,0) scale(1); opacity: 1; } }
 }
 
 /* v0.7 — denser motion system and local control UI. */
@@ -142,8 +150,49 @@ button:disabled { cursor: not-allowed; }
   transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 .mxm-input:focus { border-color: #4d535a; background: #0d1013; box-shadow: 0 0 0 3px rgba(255,255,255,.025); }
-.mxm-page-enter { animation: mxm-page-enter .18s ease-out both; }
-@keyframes mxm-page-enter { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.mxm-page-enter { animation: mxm-page-enter .17s cubic-bezier(.16,1,.3,1) both; }
+@keyframes mxm-page-enter { from { opacity: .72; transform: translate3d(0,3px,0); } to { opacity: 1; transform: translate3d(0,0,0); } }
+
+/* v0.18 — mobile performance budget. Keep scrolling on the compositor and
+   keep expensive media/layout work away from off-screen market cards. */
+.mxm-gift-card {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 310px;
+}
+.mxm-gift-media {
+  contain: paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.mxm-gift-media canvas,
+.mxm-gift-media svg,
+.mxm-gift-media img,
+.mxm-gift-media video {
+  display: block;
+}
+.mxm-glassbar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.mxm-overlay-backdrop {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.mxm-floating-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (min-width: 900px) {
+  .mxm-glassbar { -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .mxm-overlay-backdrop { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .mxm-floating-glass { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+}
+@media (pointer: coarse) {
+  .mxm-page-enter { animation-duration: .14s; }
+  .mxm-gift-card { box-shadow: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }

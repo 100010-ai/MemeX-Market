@@ -31,7 +31,7 @@ export function RouteModal({ children }: { children: React.ReactNode }) {
       <button
         aria-label="Закрыть"
         onClick={close}
-        className="mxm-sheet-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="mxm-sheet-backdrop mxm-overlay-backdrop absolute inset-0 bg-black/72"
       />
       <div
         role="dialog"

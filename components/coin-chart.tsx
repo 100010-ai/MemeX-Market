@@ -144,24 +144,35 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
     })));
 
     const byTime = new Map(display.map((candle) => [Number(candle.time), candle]));
+    let crosshairRaf = 0;
+    let pendingTimestamp: number | null = null;
     const crosshairHandler = (param: any) => {
-      if (param.time == null) {
-        setInspect(null);
-        return;
-      }
-      const timestamp = typeof param.time === "number" ? param.time : Number(param.time);
-      setInspect(Number.isFinite(timestamp) ? byTime.get(timestamp) || null : null);
+      pendingTimestamp = param.time == null ? null : (typeof param.time === "number" ? param.time : Number(param.time));
+      if (crosshairRaf) return;
+      crosshairRaf = window.requestAnimationFrame(() => {
+        crosshairRaf = 0;
+        const timestamp = pendingTimestamp;
+        setInspect(timestamp != null && Number.isFinite(timestamp) ? byTime.get(timestamp) || null : null);
+      });
     };
     chart.subscribeCrosshairMove(crosshairHandler);
     chart.timeScale().fitContent();
 
+    let resizeRaf = 0;
     const observer = new ResizeObserver(([entry]) => {
-      chart.resize(Math.max(1, Math.floor(entry.contentRect.width)), height);
+      const width = Math.max(1, Math.floor(entry.contentRect.width));
+      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
+      resizeRaf = window.requestAnimationFrame(() => {
+        resizeRaf = 0;
+        chart.resize(width, height);
+      });
     });
     observer.observe(container);
 
     return () => {
       observer.disconnect();
+      if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
+      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
       chart.unsubscribeCrosshairMove(crosshairHandler);
       chartRef.current = null;
       chart.remove();

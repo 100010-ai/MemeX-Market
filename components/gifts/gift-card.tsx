@@ -14,7 +14,7 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
-    <article className="group relative min-w-0 overflow-hidden rounded-[17px] border border-[var(--border)] bg-[var(--panel)] shadow-[inset_0_1px_0_rgba(255,255,255,.02)] transition active:scale-[.995]">
+    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[17px] border border-[var(--border)] bg-[var(--panel)] shadow-[inset_0_1px_0_rgba(255,255,255,.02)] transition-transform duration-150 ease-out active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block">
         <GiftMedia gift={gift} compact className="aspect-square w-full" />
         <div className="px-2.5 pt-2.5">

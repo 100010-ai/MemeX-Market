@@ -45,7 +45,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           {nav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} className={`flex items-center gap-3 rounded-[18px] px-3 py-2.5 text-xs transition ${active ? "bg-[var(--panel-2)] text-white" : "text-[var(--muted)] hover:bg-[var(--panel)] hover:text-white"}`}><Icon size={17} />{item.label}</Link>;
+            return <Link key={item.href} href={item.href} className={`flex items-center gap-3 rounded-[18px] px-3 py-2.5 text-xs transition-colors duration-150 ${active ? "bg-[var(--panel-2)] text-white" : "text-[var(--muted)] hover:bg-[var(--panel)] hover:text-white"}`}><Icon size={17} />{item.label}</Link>;
           })}
           <Link href="/leaderboard" className={`flex items-center gap-3 rounded-[18px] px-3 py-2.5 text-xs transition ${pathname.startsWith("/leaderboard") ? "bg-[var(--panel-2)] text-white" : "text-[var(--muted)] hover:bg-[var(--panel)] hover:text-white"}`}><Trophy size={17} />Рейтинг</Link>
         </nav>
@@ -56,7 +56,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       </aside>
 
       <div className="min-w-0 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0">
-        <header className="sticky top-0 z-40 border-b border-[var(--border-soft)] bg-[rgba(5,6,7,.88)] backdrop-blur-2xl">
+        <header className="sticky top-0 z-40 border-b border-[var(--border-soft)] mxm-glassbar bg-[rgba(5,6,7,.96)]">
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-4">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="hidden lg:block"><p className="text-xs font-semibold">MemeX Market</p><p className="text-[10px] text-[var(--muted)]">Виртуальный рынок MXM</p></div>
@@ -66,11 +66,11 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         <main key={pathname} className="mxm-page-enter min-h-0 px-2.5 py-3 md:px-4 md:py-4">{children}</main>
       </div>
 
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 border-t border-[var(--border-soft)] bg-[rgba(7,9,11,.96)] px-1 pt-1 backdrop-blur-2xl lg:hidden">
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 border-t border-[var(--border-soft)] mxm-glassbar bg-[rgba(7,9,11,.985)] px-1 pt-1 lg:hidden">
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
-          return <Link key={item.href} href={item.href} className={`relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 pb-1 pt-1 text-[8px] min-[390px]:text-[9px] transition ${active ? "text-white" : "text-[var(--muted)]"}`}><span className="grid h-8 w-10 place-items-center"><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /></span><span className="max-w-full truncate">{item.label}</span></Link>;
+          return <Link key={item.href} href={item.href} className={`relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 pb-1 pt-1 text-[8px] min-[390px]:text-[9px] transition-colors duration-150 ${active ? "text-white" : "text-[var(--muted)]"}`}><span className="grid h-8 w-10 place-items-center"><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /></span><span className="max-w-full truncate">{item.label}</span></Link>;
         })}
       </nav>
 

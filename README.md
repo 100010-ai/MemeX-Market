@@ -1,6 +1,20 @@
-# MemeX Market (MXM) v0.17.0
+# MemeX Market (MXM) v0.18.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
+
+## v0.18 — Mobile FPS + smooth motion
+
+- Compact Telegram/TON Gift animations now use a strict mobile animation budget: only the visible row is animated on touch devices.
+- Off-screen Lottie/video media is paused or destroyed; all active media pauses while the user scrolls and resumes shortly after scrolling stops.
+- Market-card Lottie uses the Canvas renderer and medium curve quality, while the NFT detail keeps the higher-fidelity SVG renderer.
+- Added shared viewport observers and a small parsed-Lottie LRU cache to avoid dozens of independent observers, repeated JSON parsing and runaway animation loops.
+- Gift cards use CSS containment/content-visibility so off-screen cards are skipped by layout/paint where supported.
+- Mobile backdrop blur was removed from sticky bars/sheets; desktop keeps the glass effect.
+- Skeleton shimmer was moved from background-position repainting to compositor transforms.
+- Gift pagination is 36 per page instead of 72, with a smaller prefetch window, reducing DOM/memory pressure without removing infinite scrolling.
+- Market filtering uses `useDeferredValue`, realtime refresh is less aggressive and idle-scheduled, and chart pointer/resize updates are animation-frame throttled.
+- Page/sheet/card transitions were retuned to short transform/opacity animations for smoother interaction.
+- No database migration is required when upgrading from v0.17.
 
 ## v0.17 — Build fix + TonAPI auth fallback
 
@@ -171,3 +185,13 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 - Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
 
 No new database migration is required beyond `014_v012_tonapi_polish.sql`.
+
+
+## v0.18 Performance
+
+- Gift animations are viewport-aware and pause while scrolling or when the app is hidden.
+- Compact Lottie cards use Canvas and a device-aware concurrent animation budget.
+- Parsed Lottie payloads use a small LRU cache; off-screen animations are destroyed.
+- Market pagination is reduced to 36 items per page to keep the mobile DOM small.
+- Mobile glass blur is disabled, skeletons use compositor transforms, and gift cards use CSS containment/content-visibility.
+- Search filtering is deferred and chart pointer/resize updates are animation-frame throttled.

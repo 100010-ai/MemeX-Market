@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
-    const limit = intParam(request.nextUrl.searchParams.get("limit"), 72, 12, 120);
+    const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 72);
     const suppliedSeed = request.nextUrl.searchParams.get("seed")?.trim();
     const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed)
       ? suppliedSeed

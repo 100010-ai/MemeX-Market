@@ -6,7 +6,7 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser";
 export function RealtimeRefresh({ channelName, tables, onChange, debounceMs = 350 }: { channelName: string; tables: string[]; onChange: () => void; debounceMs?: number }) {
   const tableKey = tables.join("|");
   const callbackRef = useRef(onChange);
-  callbackRef.current = onChange;
+  useEffect(() => { callbackRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,8 +20,13 @@ export function RealtimeRefresh({ channelName, tables, onChange, debounceMs = 35
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        lastRun = Date.now();
-        callbackRef.current();
+        const run = () => {
+          if (cancelled || document.visibilityState === "hidden") return;
+          lastRun = Date.now();
+          callbackRef.current();
+        };
+        if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 650 });
+        else run();
       }, wait);
     };
 
