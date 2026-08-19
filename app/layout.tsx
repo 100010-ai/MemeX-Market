@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "MemeX Market",
-  description: "MXM — многопользовательская торговая игра с мемкоинами и коллекционными подарками Telegram.",
+  description: "MXM — рынок коллекционных подарков Telegram и мемкоинов.",
 };
 
 export const viewport: Viewport = {
@@ -15,7 +15,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#050607",
+  themeColor: "#07090c",
 };
 
 export default function RootLayout({

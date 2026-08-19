@@ -68,8 +68,8 @@ function prepareWebApp() {
   if (!webApp) return;
   webApp.ready();
   webApp.expand();
-  webApp.setHeaderColor?.("#050607");
-  webApp.setBackgroundColor?.("#050607");
+  webApp.setHeaderColor?.("#07090c");
+  webApp.setBackgroundColor?.("#07090c");
 }
 
 function warmCurrentRoute(pathname: string) {
@@ -80,7 +80,6 @@ function warmCurrentRoute(pathname: string) {
   if (pathname.startsWith("/orders")) void prefetchApi("/api/orders", { cacheMs: 8_000 });
   else if (pathname.startsWith("/vault") || pathname.startsWith("/portfolio")) void prefetchApi("/api/portfolio", { cacheMs: 8_000 });
   else if (pathname.startsWith("/tasks")) void prefetchApi("/api/tasks", { cacheMs: 8_000 });
-  else if (pathname.startsWith("/games")) void prefetchApi("/api/games", { cacheMs: 8_000 });
   else if (pathname.startsWith("/hub")) void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
 }
 

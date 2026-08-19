@@ -34,7 +34,7 @@ export default function VaultPage() {
     <div className="mx-auto max-w-5xl">
       <RealtimeRefresh channelName="mxm-vault" tables={realtimeTables} onChange={realtimeReload} />
 
-      <section className="mb-4 border-b border-[var(--border-soft)] pb-4">
+      <section className="mxm-summary-card mb-4 p-4">
         <div>
           <p className="text-[10px] text-[var(--muted)]">Капитал</p>
           <h1 className="mt-1 text-base font-semibold tracking-[-.02em]">{money(data.profile.netWorth)}</h1>
@@ -46,7 +46,7 @@ export default function VaultPage() {
 
       {message ? <div className="mb-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">{message}</div> : null}
 
-      <div className="mxm-hscroll mb-3 flex flex-nowrap gap-4 border-b border-[var(--border-soft)]">
+      <div className="mxm-segment mb-3 overflow-x-auto">
         <Tab label="Подарки" count={data.gifts.length} active={tab === "gifts"} onClick={() => setTab("gifts")} />
         <Tab label="Мемкоины" count={data.holdings.length} active={tab === "coins"} onClick={() => setTab("coins")} />
         <Tab label="Лоты" count={listed.length} active={tab === "listed"} onClick={() => setTab("listed")} />
@@ -54,9 +54,9 @@ export default function VaultPage() {
       </div>
 
       {tab === "gifts" || tab === "listed" ? (
-        (tab === "listed" ? listed : data.gifts).length ? <div className="market-grid grid gap-2">{(tab === "listed" ? listed : data.gifts).map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <Empty title={tab === "listed" ? "Лотов нет" : "Подарков нет"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2 text-xs font-medium">Маркет</Link> : undefined} />
+        (tab === "listed" ? listed : data.gifts).length ? <div className="market-grid grid gap-2">{(tab === "listed" ? listed : data.gifts).map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <Empty title={tab === "listed" ? "Лотов нет" : "Подарков нет"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Маркет</Link> : undefined} />
       ) : tab === "coins" ? (
-        data.holdings.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{data.holdings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Мемкоинов нет" action={<Link href="/market" className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2 text-xs font-medium">Маркет</Link>} />
+        data.holdings.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{data.holdings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Мемкоинов нет" action={<Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Маркет</Link>} />
       ) : (
         data.history.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{data.history.map((item) => <Link href={item.href} key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{item.label}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{ago(item.createdAt)} · {item.kind === "coin" ? "мемкоин" : "подарок"}</p></div><div className="text-right"><p className="text-xs">{money(item.amount)}</p>{item.pnl !== 0 ? <p className={`text-[10px] ${item.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{item.pnl > 0 ? "+" : ""}{money(item.pnl)}</p> : null}</div></Link>)}</div></div> : <Empty title="История пуста" />
       )}
@@ -69,9 +69,9 @@ function Allocation({ label, value, pct }: { label: string; value: number; pct: 
 }
 
 function Tab({ label, count, active, onClick }: { label: string; count?: number; active: boolean; onClick: () => void }) {
-  return <button onClick={onClick} className={`flex h-9 shrink-0 items-center justify-center gap-1 border-b px-1 text-[10px] whitespace-nowrap ${active ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}><span>{label}</span>{typeof count === "number" ? <span className={`shrink-0 text-[9px] ${active ? "text-white" : "text-[var(--muted-2)]"}`}>{count}</span> : null}</button>;
+  return <button onClick={onClick} className={`mxm-segment-button ${active ? "is-active" : ""}`}><span>{label}</span>{typeof count === "number" ? <span className={`shrink-0 text-[9px] ${active ? "text-white" : "text-[var(--muted-2)]"}`}>{count}</span> : null}</button>;
 }
 
 function Empty({ title, action }: { title: string; action?: React.ReactNode }) {
-  return <div className="border-y border-[var(--border-soft)] p-8 text-center"><WalletCards size={22} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">{title}</p>{action ? <div className="mt-4">{action}</div> : null}</div>;
+  return <div className="mxm-card p-8 text-center"><WalletCards size={22} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">{title}</p>{action ? <div className="mt-4">{action}</div> : null}</div>;
 }

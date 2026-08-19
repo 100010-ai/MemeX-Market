@@ -12,7 +12,7 @@
 - Global density pass shortened labels/copy and tightened navigation, profile, vault, tasks, hub, market, collections and game controls.
 - Release audit checks migrations 017 + 018, game engine, fast snapshot, market pagination, media path and secrets.
 
-**Required DB migration after v0.30:** `supabase/migrations/018_v040_games_speed_compact.sql`.
+**Required DB migration after v0.40:** `supabase/migrations/019_v041_remove_games_interface.sql`.
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -213,3 +213,11 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 - Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
 
 No new database migration is required beyond `014_v012_tonapi_polish.sql`.
+
+
+## v0.41 — UI cleanup and temporary game removal
+
+- Games are removed from navigation and public API routes for now. Existing historical `game_rounds` data is preserved.
+- Apply `019_v041_remove_games_interface.sql` to disable the game mission.
+- Mobile navigation is reduced to five primary destinations and uses a floating compact bar.
+- Market controls, filters, cards, top bar and desktop sidebar received a unified dark product UI pass.

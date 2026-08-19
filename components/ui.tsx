@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-[16px] border border-[var(--border)] bg-[var(--panel)] shadow-[inset_0_1px_0_rgba(255,255,255,.02)] ${className}`}>{children}</section>;
+  return <section className={`mxm-card ${className}`}>{children}</section>;
 }
 
 export function SectionTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
@@ -33,11 +33,11 @@ export function CoinAvatar({ symbol, imageUrl = null, size = "md" }: { symbol: s
 }
 
 export function PrimaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`rounded-[15px] bg-[var(--accent)] px-3.5 py-2.5 text-xs font-semibold text-[#151515] transition hover:bg-[var(--accent-hover)] active:scale-[.985] disabled:opacity-40 ${className}`}>{children}</button>;
+  return <button {...props} className={`rounded-[14px] bg-[var(--accent)] px-3.5 py-2.5 text-[11px] font-semibold text-[#0b0d10] transition hover:bg-[var(--accent-hover)] active:scale-[.985] disabled:opacity-40 ${className}`}>{children}</button>;
 }
 
 export function SecondaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`rounded-[15px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 text-xs text-[var(--text)] transition hover:bg-[var(--panel-3)] active:scale-[.985] disabled:opacity-40 ${className}`}>{children}</button>;
+  return <button {...props} className={`rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] text-[var(--text)] transition hover:bg-[var(--panel-3)] active:scale-[.985] disabled:opacity-40 ${className}`}>{children}</button>;
 }
 
 export function Chip({ children, active = false }: { children: ReactNode; active?: boolean }) {
