@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.10.0
+# MemeX Market (MXM) v0.11.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -83,3 +83,25 @@ npm run lint
 npm run build
 npm run dev
 ```
+
+## v0.11 — Telegram Session Fix + Visible Games + Finite Genesis Gift Market
+
+- Telegram auth is now session-first: normal page navigation reuses the signed MXM cookie and does not call `/api/auth/telegram` again.
+- The Telegram auth rate-limit is keyed by the validated Telegram user instead of one shared `anonymous` bucket, removing random `Слишком много попыток входа` screens for legitimate users.
+- `/games` is now a first-class bottom/desktop navigation destination.
+- The Gift market starts from a finite **Genesis pool** made only from verified real Telegram Gift assets already present in `gift_assets`.
+- Genesis assets are released by system market makers once. Purchased system inventory is never automatically replenished; after the primary pool is bought, supply comes from player listings/offers.
+- Rarity tiers are derived from real Telegram `rarity_per_mille` metadata. They are used only to mix the initial release order and pricing; no Gift traits are generated.
+- Gift cards expose the rarest real trait percentage without a synthetic rarity badge.
+- Default Gift order is stable-random per market session. The market uses incremental loading so all active listings can be browsed without downloading the entire catalogue on first paint.
+- Local God Mode `Выпустить Genesis` can release up to 1000 remaining verified Genesis assets in one administrative run.
+
+### Database upgrade from v0.10
+
+Run only:
+
+```text
+supabase/migrations/013_v011_genesis_market_auth.sql
+```
+
+`013` creates no demo/mock/fallback Gifts. If the verified Telegram catalogue is empty, the Genesis pool stays empty instead of inventing assets.

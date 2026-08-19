@@ -10,17 +10,24 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
-    if (!(await enforceRateLimit(request, "telegram-auth", "anonymous", 20, 600))) return NextResponse.json({ error: "Слишком много попыток входа. Попробуйте позже." }, { status: 429 });
     const body = await request.json();
     const initData = typeof body.initData === "string" ? body.initData : "";
     if (!initData) return NextResponse.json({ error: "initData is required" }, { status: 400 });
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) return NextResponse.json({ error: "Telegram bot is not configured" }, { status: 500 });
+
+    // Validate first so the rate-limit key belongs to the actual signed
+    // Telegram user. The old anonymous key accidentally pooled every player
+    // into one global bucket and caused random 429 screens.
     const validated = validateTelegramInitData(initData, botToken, 60 * 15);
     if (!validated.ok) return NextResponse.json({ error: validated.reason }, { status: 401 });
-
     const { user } = validated;
+
+    if (!(await enforceRateLimit(request, "telegram-auth", user.id, 12, 300))) {
+      return NextResponse.json({ error: "Слишком много попыток входа. Попробуйте через минуту." }, { status: 429, headers: { "retry-after": "60" } });
+    }
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.rpc("sync_telegram_profile", {
       p_telegram_id: user.id,

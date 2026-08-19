@@ -10,6 +10,8 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
   const isListed = gift.status === "listed";
   const displayValue = isListed ? gift.listingPrice : gift.estimatedValue;
   const valueLabel = isListed ? "" : "≈ ";
+  const rarestPermille = Math.min(gift.modelRarityPerMille, gift.symbolRarityPerMille, gift.backdropRarityPerMille);
+  const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
     <article className="group relative min-w-0 overflow-hidden rounded-[17px] border border-[var(--border)] bg-[var(--panel)] shadow-[inset_0_1px_0_rgba(255,255,255,.02)] transition active:scale-[.995]">
@@ -19,7 +21,7 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
           <div className="truncate text-xs font-medium text-white">{gift.baseName}</div>
           <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-[var(--muted)]">
             <span>#{gift.number}</span>
-            {showOwner ? <span className="truncate">{gift.ownerName}</span> : gift.offerCount > 0 ? <span className="flex items-center gap-1"><MessageSquareMore size={10} />{gift.offerCount}</span> : null}
+            {showOwner ? <span className="truncate">{gift.ownerName}</span> : gift.offerCount > 0 ? <span className="flex items-center gap-1"><MessageSquareMore size={10} />{gift.offerCount}</span> : <span title="Самый редкий trait">редк. {rarityLabel}</span>}
           </div>
         </div>
       </Link>

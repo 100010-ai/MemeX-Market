@@ -1,11 +1,31 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
-import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
+import { mapCoin, mapGift } from "@/lib/mappers";
+import { ensureGenesisGiftMarket } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+function intParam(value: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+
+function mapCollection(row: any) {
+  return {
+    baseName: String(row.base_name),
+    itemCount: Number(row.item_count),
+    holderCount: Number(row.holder_count),
+    listedCount: Number(row.listed_count),
+    floorPrice: row.floor_price == null ? null : Number(row.floor_price),
+    lastSalePrice: row.last_sale_price == null ? null : Number(row.last_sale_price),
+    volume24h: Number(row.volume_24h),
+    change24h: Number(row.change_24h),
+    tradeCount24h: Number(row.trade_count_24h),
+  };
+}
 
 export async function GET(request: NextRequest) {
   const profile = await requireProfile();
@@ -30,6 +50,10 @@ export async function GET(request: NextRequest) {
         coins: (coinsResult.data || []).map(mapCoin),
         gifts: [],
         collections: [],
+        totalGifts: 0,
+        nextOffset: null,
+        marketSeed: null,
+        genesis: null,
         watchlist: {
           coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
           giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
@@ -38,48 +62,51 @@ export async function GET(request: NextRequest) {
       }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
     }
 
-    const queryGiftMarket = () => Promise.all([
-      supabase.from("gift_market_overview").select(giftMarketSelect).eq("status", "listed").eq("is_burned", false).not("telegram_name", "is", null).order("listing_price", { ascending: true }).limit(72),
-      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(48),
-    ] as const);
+    const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
+    const limit = intParam(request.nextUrl.searchParams.get("limit"), 72, 12, 120);
+    const suppliedSeed = request.nextUrl.searchParams.get("seed")?.trim();
+    const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed)
+      ? suppliedSeed
+      : crypto.randomBytes(18).toString("base64url");
 
-    let [giftsResult, collectionsResult] = await queryGiftMarket();
-    if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
-
-    // Keep a small amount of system liquidity available without blocking the
-    // market on external Telegram requests. NPCs can only list real Gift assets
-    // that were already verified and imported into gift_assets via Bot API.
-    if ((giftsResult.data || []).length < 14) {
+    // Finite Genesis release: every top-level market opening may release the
+    // next small batch, but sold system inventory is NEVER replenished.
+    if (offset === 0) {
       try {
-        const liquidity = await ensureNpcMarketLiquidity({ targetListings: 26 });
-        if (liquidity.created > 0) {
-          [giftsResult, collectionsResult] = await queryGiftMarket();
-          if (giftsResult.error || collectionsResult.error) throw giftsResult.error || collectionsResult.error;
-        }
-      } catch (npcError) {
-        console.error("NPC Gift liquidity", npcError);
+        await ensureGenesisGiftMarket({ batchSize: 12 });
+      } catch (genesisError) {
+        // Catalogue may be empty/not initialized. Market should still load its
+        // authoritative DB state instead of replacing it with fake data.
+        console.error("Genesis Gift release", genesisError);
       }
     }
 
-    const [watchlistResult, cartResult] = await Promise.all([watchlistPromise, cartPromise]);
-    if (watchlistResult.error || cartResult.error) throw watchlistResult.error || cartResult.error;
-    const rawGifts = giftsResult.data || [];
-    const visibleCollections = new Set(rawGifts.map((row: any) => String(row.base_name)));
+    const [giftsResult, countResult, collectionsResult, watchlistResult, cartResult, genesisResult] = await Promise.all([
+      supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: offset, p_limit: limit }),
+      supabase.rpc("gift_market_listed_count"),
+      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(120),
+      watchlistPromise,
+      cartPromise,
+      supabase.rpc("gift_genesis_public_state"),
+    ]);
+
+    const firstError = giftsResult.error || countResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error;
+    if (firstError) throw firstError;
+
+    const rawGifts = (giftsResult.data || []) as any[];
+    const totalGifts = Number(countResult.data || 0);
+    const nextOffset = offset + rawGifts.length < totalGifts ? offset + rawGifts.length : null;
+    const visibleCollections = new Set(rawGifts.map((row) => String(row.base_name)));
+
     return NextResponse.json({
       scope,
       coins: [],
       gifts: rawGifts.map(mapGift),
-      collections: (collectionsResult.data || []).filter((row: any) => visibleCollections.has(String(row.base_name))).map((row: any) => ({
-        baseName: String(row.base_name),
-        itemCount: Number(row.item_count),
-        holderCount: Number(row.holder_count),
-        listedCount: Number(row.listed_count),
-        floorPrice: row.floor_price == null ? null : Number(row.floor_price),
-        lastSalePrice: row.last_sale_price == null ? null : Number(row.last_sale_price),
-        volume24h: Number(row.volume_24h),
-        change24h: Number(row.change_24h),
-        tradeCount24h: Number(row.trade_count_24h),
-      })),
+      collections: (collectionsResult.data || []).filter((row: any) => visibleCollections.has(String(row.base_name))).map(mapCollection),
+      totalGifts,
+      nextOffset,
+      marketSeed,
+      genesis: genesisResult.data || null,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
         giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
