@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { Profile } from "@/lib/types";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, prefetchApi } from "@/lib/api";
 
 type TelegramContextValue = {
   profile: Profile | null;
@@ -72,6 +72,18 @@ function prepareWebApp() {
   webApp.setBackgroundColor?.("#050607");
 }
 
+function warmCurrentRoute(pathname: string) {
+  if (pathname === "/" || pathname.startsWith("/market")) {
+    void prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 12_000, timeoutMs: 18_000 });
+    return;
+  }
+  if (pathname.startsWith("/orders")) void prefetchApi("/api/orders", { cacheMs: 8_000 });
+  else if (pathname.startsWith("/vault") || pathname.startsWith("/portfolio")) void prefetchApi("/api/portfolio", { cacheMs: 8_000 });
+  else if (pathname.startsWith("/tasks")) void prefetchApi("/api/tasks", { cacheMs: 8_000 });
+  else if (pathname.startsWith("/games")) void prefetchApi("/api/games", { cacheMs: 8_000 });
+  else if (pathname.startsWith("/hub")) void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
+}
+
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isControl = pathname.startsWith("/control");
@@ -125,6 +137,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         try {
           const sessionProfile = await existingSession();
           if (sessionProfile) {
+            warmCurrentRoute(pathname);
             if (!cancelled) setProfile(sessionProfile);
             return;
           }
@@ -148,6 +161,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),
         });
+        warmCurrentRoute(pathname);
         if (!cancelled) setProfile(result.profile);
       } catch (cause) {
         if (!cancelled && !profile) setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
@@ -163,6 +177,11 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     // profile patches must never restart Telegram authentication.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isControl, authNonce]);
+
+
+  useEffect(() => {
+    if (profile && !isControl) warmCurrentRoute(pathname);
+  }, [profile?.id, isControl, pathname]);
 
   const value = useMemo(() => ({ profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;

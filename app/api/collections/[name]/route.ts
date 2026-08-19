@@ -3,7 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
-const INITIAL_LISTING_LIMIT = 72;
+const INITIAL_LISTING_LIMIT = 36;
 
 function displayName(row: { username?: unknown; first_name?: unknown } | undefined, label: string) {
   if (!row) throw new Error(`${label} profile is missing`);
@@ -47,6 +47,7 @@ function mapTraitStats(rows: Record<string, unknown>[], type: "model" | "backdro
 
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
+  const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { name } = await params;
@@ -56,11 +57,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
 
   try {
     const [collectionResult, traitStatsResult, listedResult, candlesResult, salesResult, watchedResult] = await Promise.all([
-      supabase.from("gift_collection_overview").select("*").eq("base_name", baseName).maybeSingle(),
+      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_collection_trait_stats", { p_base_name: baseName }),
       supabase.from("gift_market_overview").select(giftMarketSelect, { count: "exact" }).eq("base_name", baseName).eq("is_burned", false).eq("status", "listed").not("telegram_name", "is", null).order("listing_price", { ascending: true }).range(0, INITIAL_LISTING_LIMIT - 1),
-      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(1200),
-      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id,gift_assets!inner(base_name,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(40),
+      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(480),
+      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id,gift_assets!inner(base_name,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(24),
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift_collection").eq("gift_collection", baseName).maybeSingle(),
     ]);
 
@@ -99,7 +100,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
         sellerName: trade.seller_profile_id == null ? null : names.get(String(trade.seller_profile_id)) || (() => { throw new Error("Seller profile is missing from collection sales"); })(),
       })),
       watched: Boolean(watchedResult.data),
-    });
+    }, { headers: { "server-timing": `collection;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {
     console.error("gift collection detail", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить коллекцию" }, { status: 500 });

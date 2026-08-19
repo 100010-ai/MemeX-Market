@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
+import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
 import { maybeMaintainGiftMarket } from "@/lib/market/maintenance";
@@ -36,64 +37,76 @@ function mapCollection(row: Record<string, unknown>): GiftCollection {
 }
 
 export async function GET(request: NextRequest) {
-  const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const startedAt = Date.now();
+  const session = await readSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const scope = request.nextUrl.searchParams.get("scope") === "coins" ? "coins" : "gifts";
-  if (scope === "gifts") await maybeMaintainGiftMarket();
+
+  // Expiry is already enforced in every market view/RPC. Cleanup therefore
+  // happens after the response and can never extend first paint latency.
+  if (scope === "gifts") after(() => maybeMaintainGiftMarket());
 
   try {
-    const watchlistPromise = supabase.from("user_watchlist").select("kind,coin_id,gift_collection").eq("profile_id", profile.id);
-    const cartPromise = supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id);
-
     if (scope === "coins") {
+      const profile = await requireProfile();
+      if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const [coinsResult, watchlistResult, cartResult] = await Promise.all([
-        supabase.from("market_overview").select("*").eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(90),
-        watchlistPromise,
-        cartPromise,
+        supabase.from("market_overview").select("id,creator_profile_id,name,symbol,description,current_price,market_cap,status,created_at,total_supply,token_reserve,quote_reserve,volume_24h,change_24h,holder_count,trade_count_24h,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,image_url").eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(72),
+        supabase.from("user_watchlist").select("kind,coin_id,gift_collection").eq("profile_id", profile.id),
+        supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       ]);
       const firstError = coinsResult.error || watchlistResult.error || cartResult.error;
       if (firstError) throw firstError;
       return NextResponse.json({
         scope,
         coins: (coinsResult.data || []).map(mapCoin),
-        gifts: [],
-        collections: [],
-        totalGifts: 0,
-        nextOffset: null,
-        marketSeed: null,
-        bootstrapRecommended: false,
-        genesis: null,
+        gifts: [], collections: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null,
         watchlist: {
           coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
           giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
         },
         cartIds: (cartResult.data || []).map((row) => String(row.virtual_gift_id)),
-      }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
+      }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-coins;dur=${Date.now() - startedAt}` } });
     }
 
     const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
-    const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 72);
+    const limit = intParam(request.nextUrl.searchParams.get("limit"), 24, 12, 72);
     const suppliedSeed = request.nextUrl.searchParams.get("seed")?.trim();
-    const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed)
-      ? suppliedSeed
-      : crypto.randomBytes(18).toString("base64url");
+    const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed) ? suppliedSeed : crypto.randomBytes(18).toString("base64url");
+
+    // Infinite-scroll requests only need the next cards. Avoid watchlist/cart,
+    // collection analytics, genesis and COUNT(*) on every page.
+    if (offset > 0 || request.nextUrl.searchParams.get("lean") === "1") {
+      const giftsResult = await supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: offset, p_limit: Math.min(72, limit + 1) });
+      if (giftsResult.error) throw giftsResult.error;
+      const rows = (giftsResult.data || []) as Array<Record<string, unknown>>;
+      const hasMore = rows.length > limit;
+      const rawGifts = hasMore ? rows.slice(0, limit) : rows;
+      return NextResponse.json({
+        gifts: rawGifts.map(mapGift),
+        nextOffset: hasMore ? offset + rawGifts.length : null,
+        marketSeed,
+      }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-lean;dur=${Date.now() - startedAt}` } });
+    }
+
+    const profile = await requireProfile();
+    if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const [giftsResult, countResult, collectionsResult, watchlistResult, cartResult, genesisResult] = await Promise.all([
-      supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: offset, p_limit: limit }),
+      supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: 0, p_limit: limit }),
       supabase.rpc("gift_market_listed_count"),
-      supabase.from("gift_collection_overview").select("*").order("volume_24h", { ascending: false }).limit(120),
-      watchlistPromise,
-      cartPromise,
+      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").order("volume_24h", { ascending: false }).limit(80),
+      supabase.from("user_watchlist").select("kind,coin_id,gift_collection").eq("profile_id", profile.id),
+      supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       supabase.rpc("gift_genesis_public_state"),
     ]);
-
     const firstError = giftsResult.error || countResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error;
     if (firstError) throw firstError;
 
     const rawGifts = (giftsResult.data || []) as Array<Record<string, unknown>>;
     const totalGifts = Number(countResult.data || 0);
-    const nextOffset = offset + rawGifts.length < totalGifts ? offset + rawGifts.length : null;
+    const nextOffset = rawGifts.length < totalGifts ? rawGifts.length : null;
     return NextResponse.json({
       scope,
       coins: [],
@@ -102,14 +115,14 @@ export async function GET(request: NextRequest) {
       totalGifts,
       nextOffset,
       marketSeed,
-      bootstrapRecommended: offset === 0 && totalGifts === 0,
+      bootstrapRecommended: totalGifts === 0,
       genesis: genesisResult.data || null,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
         giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
       },
       cartIds: (cartResult.data || []).map((row) => String(row.virtual_gift_id)),
-    }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
+    }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market;dur=${Date.now() - startedAt}` } });
   } catch (error) {
     console.error("market", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить рынок" }, { status: 500 });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
+import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 import { enforceRateLimit } from "@/lib/security";
@@ -11,9 +11,9 @@ function cleanTerm(value: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await enforceRateLimit(request, "market-search", String(profile.id), 60, 60))) return NextResponse.json({ error: "Слишком много поисковых запросов" }, { status: 429 });
+  const session = await readSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await enforceRateLimit(request, "market-search", String(session.telegramId), 60, 60))) return NextResponse.json({ error: "Слишком много поисковых запросов" }, { status: 429 });
 
   const q = cleanTerm(request.nextUrl.searchParams.get("q") || "");
   if (q.length < 2) return NextResponse.json({ gifts: [] });

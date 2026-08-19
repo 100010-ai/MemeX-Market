@@ -19,7 +19,7 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
-  const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/orders")); }, []);
+  const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/orders", { cacheMs: 2_000 })); }, []);
   useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить ордера")); }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
@@ -36,9 +36,9 @@ export default function OrdersPage() {
       <RealtimeRefresh channelName="mxm-orders" tables={realtimeTables} onChange={realtimeReload} />
 
       <div className="mxm-hscroll mb-3 flex flex-nowrap gap-4 border-b border-[var(--border-soft)]">
-        <Tab label="Входящие офферы" count={data.incoming.length} active={tab === "incoming"} onClick={() => setTab("incoming")} />
-        <Tab label="Мои офферы" count={data.outgoing.length} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
-        <Tab label="Мои лоты" count={data.listings.length} active={tab === "listings"} onClick={() => setTab("listings")} />
+        <Tab label="Входящие" count={data.incoming.length} active={tab === "incoming"} onClick={() => setTab("incoming")} />
+        <Tab label="Офферы" count={data.outgoing.length} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
+        <Tab label="Лоты" count={data.listings.length} active={tab === "listings"} onClick={() => setTab("listings")} />
       </div>
 
       {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}

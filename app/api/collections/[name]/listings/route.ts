@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
+import { readSession } from "@/lib/session";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
@@ -9,31 +9,31 @@ function intParam(value: string | null, fallback: number, min: number, max: numb
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
-  const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await readSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { name } = await params;
   const baseName = decodeURIComponent(name).trim();
   if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
 
   const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
-  const limit = intParam(request.nextUrl.searchParams.get("limit"), 48, 12, 72);
+  const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 60);
   const supabase = getSupabaseAdmin();
   const result = await supabase
     .from("gift_market_overview")
-    .select(giftMarketSelect, { count: "exact" })
+    .select(giftMarketSelect)
     .eq("base_name", baseName)
     .eq("is_burned", false)
     .eq("status", "listed")
     .not("telegram_name", "is", null)
     .order("listing_price", { ascending: true })
-    .range(offset, offset + limit - 1);
+    .range(offset, offset + limit);
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   const rows = result.data || [];
-  const total = result.count || 0;
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
   return NextResponse.json({
-    gifts: rows.map(mapGift),
-    total,
-    nextOffset: offset + rows.length < total ? offset + rows.length : null,
+    gifts: pageRows.map(mapGift),
+    nextOffset: hasMore ? offset + pageRows.length : null,
   }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
 }

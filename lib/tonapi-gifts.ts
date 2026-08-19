@@ -565,12 +565,20 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
 
 async function recalculateCollectionRarity(collectionAddress: string) {
   const supabase = getSupabaseAdmin();
+  const fast = await supabase.rpc("recalculate_tonapi_collection_rarity_v040", { p_collection_address: collectionAddress });
+  if (!fast.error) return;
+
+  const missingRpc = fast.error.code === "42883" || /recalculate_tonapi_collection_rarity_v040|schema cache|could not find the function/i.test(fast.error.message || "");
+  if (!missingRpc) throw fast.error;
+
+  // Rolling-deploy fallback for databases that have not applied migration 018
+  // yet. Bounded on purpose; v0.40 migration moves the full aggregation into SQL.
   const result = await supabase
     .from("gift_assets")
     .select("id,model_name,symbol_name,backdrop_name")
     .eq("chain_collection_address", collectionAddress)
     .eq("catalog_source", "tonapi")
-    .limit(5000);
+    .limit(1000);
   if (result.error) throw result.error;
   const rows = (result.data || []) as Array<{ id: string; model_name: string | null; symbol_name: string | null; backdrop_name: string | null }>;
   if (!rows.length) return;

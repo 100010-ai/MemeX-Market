@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GiftAsset, GiftMediaKind } from "@/lib/types";
+import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 
 type LottieAnimation = {
   destroy: () => void;
@@ -283,7 +284,7 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
   );
 }
 
-function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
+function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: boolean; priority: boolean }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const lottieRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<LottieAnimation | null>(null);
@@ -296,16 +297,23 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
   const animationReady = animationReadyKey === gift.id;
   const previewFailed = previewFailedKey === gift.id;
   const permitted = useAnimationPermit(active && wantsAnimation && !animationFailed, `tonapi:${gift.id}`, compact);
-  const previewSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview`;
+  const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
+  const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
+  const previewSource = compact
+    ? (fragmentMedia?.medium || fragmentMedia?.small || `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=medium`)
+    : (fragmentMedia?.large || fragmentMedia?.medium || `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=large`);
 
   useEffect(() => {
     if (!near || !wantsAnimation || animationFailed || !permitted || !lottieRef.current) return;
     let destroyed = false;
     let animation: LottieAnimation | null = null;
     let unsubscribeMotion: (() => void) | null = null;
-    const animationSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=animation`;
-
-    Promise.all([loadLottieModule(), loadLottieJson(animationSource)]).then(([module, animationData]) => {
+    const slug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
+    const slugQuery = slug ? `&slug=${encodeURIComponent(slug)}` : "";
+    const animationSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=animation${slugQuery}`;
+    const settleDelay = compact ? 180 : 0;
+    const timer = window.setTimeout(() => {
+      Promise.all([loadLottieModule(), loadLottieJson(animationSource)]).then(([module, animationData]) => {
       if (destroyed || !lottieRef.current) return;
       animation = module.default.loadAnimation({
         container: lottieRef.current,
@@ -326,17 +334,19 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
         if (paused) animation.pause();
         else animation.play();
       });
-    }).catch(() => {
-      if (!destroyed) setAnimationFailedKey(gift.id);
-    });
+      }).catch(() => {
+        if (!destroyed) setAnimationFailedKey(gift.id);
+      });
+    }, settleDelay);
 
     return () => {
       destroyed = true;
+      window.clearTimeout(timer);
       unsubscribeMotion?.();
       if (animationRef.current === animation) animationRef.current = null;
       animation?.destroy();
     };
-  }, [animationFailed, compact, gift.id, near, permitted, wantsAnimation]);
+  }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
   const storedPreview = gift.modelPreviewUrl || (gift.mediaKind === "static" ? gift.modelMediaUrl : null);
   const showAnimation = wantsAnimation && permitted && !animationFailed;
@@ -347,9 +357,9 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
         <img
           src={previewSource}
           alt={`${gift.baseName} #${gift.number}`}
-          loading={compact ? "lazy" : "eager"}
+          loading={priority ? "eager" : compact ? "lazy" : "eager"}
           decoding="async"
-          fetchPriority={compact ? "low" : "high"}
+          fetchPriority={priority || !compact ? "high" : "low"}
           onError={() => setPreviewFailedKey(gift.id)}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
         />
@@ -357,9 +367,9 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
         <img
           src={storedPreview}
           alt={`${gift.baseName} #${gift.number}`}
-          loading={compact ? "lazy" : "eager"}
+          loading={priority ? "eager" : compact ? "lazy" : "eager"}
           decoding="async"
-          fetchPriority={compact ? "low" : "high"}
+          fetchPriority={priority || !compact ? "high" : "low"}
           referrerPolicy="no-referrer"
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
         />
@@ -380,14 +390,14 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
   );
 }
 
-export function GiftMedia({ gift, className = "", compact = false }: { gift: GiftAsset; className?: string; compact?: boolean }) {
+export function GiftMedia({ gift, className = "", compact = false, priority = false }: { gift: GiftAsset; className?: string; compact?: boolean; priority?: boolean }) {
   const [modelError, setModelError] = useState<string | null>(null);
   const pattern = useMemo(() => Array.from({ length: compact ? 6 : 10 }, (_, i) => i), [compact]);
 
   if (gift.catalogSource === "tonapi") {
     return (
       <div className={`mxm-gift-media relative isolate overflow-hidden bg-[#0b0d0f] ${className}`}>
-        <TonApiMedia gift={gift} compact={compact} />
+        <TonApiMedia gift={gift} compact={compact} priority={priority} />
       </div>
     );
   }
@@ -403,7 +413,7 @@ export function GiftMedia({ gift, className = "", compact = false }: { gift: Gif
     <div className={`mxm-gift-media relative isolate overflow-hidden ${className}`} style={{ background: `radial-gradient(circle at 48% 38%, ${gift.backdropCenter} 0%, ${gift.backdropEdge} 100%)` }}>
       {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={gift.symbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
       <div className={`relative z-10 grid h-full w-full place-items-center ${compact ? "p-[14%]" : "p-[13%]"}`}>
-        {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={setModelError} lazy={compact} />}
+        {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={setModelError} lazy={compact && !priority} />}
       </div>
     </div>
   );

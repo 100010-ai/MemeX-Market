@@ -6,7 +6,7 @@ import type { GiftAsset } from "@/lib/types";
 import { money } from "@/lib/format";
 import { GiftMedia } from "@/components/gifts/gift-media";
 
-export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = false, onCart }: { gift: GiftAsset; showOwner?: boolean; inCart?: boolean; cartBusy?: boolean; onCart?: (gift: GiftAsset, enabled: boolean) => void }) {
+export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = false, priority = false, onCart }: { gift: GiftAsset; showOwner?: boolean; inCart?: boolean; cartBusy?: boolean; priority?: boolean; onCart?: (gift: GiftAsset, enabled: boolean) => void }) {
   const isListed = gift.status === "listed";
   const displayValue = isListed ? gift.listingPrice : (gift.externalListingPrice ?? gift.lastSalePrice ?? gift.referencePrice);
   const valueLabel = isListed ? "" : gift.externalListingPrice != null ? "ext " : gift.lastSalePrice != null ? "last " : "ref ";
@@ -19,7 +19,7 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
   return (
     <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[17px] border border-[var(--border)] bg-[var(--panel)] shadow-[inset_0_1px_0_rgba(255,255,255,.02)] transition-transform duration-150 ease-out active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block">
-        <GiftMedia gift={gift} compact className="aspect-square w-full" />
+        <GiftMedia gift={gift} compact priority={priority} className="aspect-square w-full" />
         <div className="px-2.5 pt-2.5">
           <div className="truncate text-xs font-medium text-white">{gift.baseName}</div>
           <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-[var(--muted)]">

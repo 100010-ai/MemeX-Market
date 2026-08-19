@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -19,7 +20,6 @@ import {
   X,
 } from "lucide-react";
 import { GiftMedia } from "@/components/gifts/gift-media";
-import { CoinChart } from "@/components/coin-chart";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { PrimaryButton, SecondaryButton } from "@/components/ui";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -28,6 +28,10 @@ import { ago, money, percent } from "@/lib/format";
 import type { Candle, GiftActivity, GiftAsset, GiftCollection, GiftOffer, GiftTraitStats } from "@/lib/types";
 
 const realtimeTables = ["virtual_gifts", "gift_trades", "gift_offers", "gift_listing_events", "market_events"];
+const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
+  ssr: false,
+  loading: () => <div className="mxm-skeleton h-[260px] rounded-[14px]" />,
+});
 type DetailOffer = Pick<GiftOffer, "id" | "amount" | "status" | "createdAt" | "buyerId" | "buyerName"> & { isMine: boolean; expiresAt: string | null };
 type Payload = {
   gift: GiftAsset;
@@ -68,11 +72,11 @@ function timeUntil(value: string | null) {
 
 function priceBasisLabel(gift: GiftAsset) {
   switch (gift.priceBasis) {
-    case "mxm_listing": return "Листинг MXM";
-    case "tonapi_listing": return "Внешний TON-листинг";
-    case "item_last_sale": return "Последняя продажа предмета";
-    case "collection_last_sale": return "Последняя продажа коллекции";
-    default: return "Нет проверенного ориентира";
+    case "mxm_listing": return "MXM-листинг";
+    case "tonapi_listing": return "TON-листинг";
+    case "item_last_sale": return "Последняя продажа";
+    case "collection_last_sale": return "Продажа коллекции";
+    default: return "Нет цены";
   }
 }
 
@@ -86,6 +90,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
   const loadSequence = useRef(0);
   const buyRequestKey = useRef<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
@@ -109,12 +114,27 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   useEffect(() => {
     setData(null);
     setError(null);
+    setChartLoading(false);
     buyRequestKey.current = null;
     void load();
     return () => { loadSequence.current += 1; };
   }, [load]);
 
   const realtimeReload = useCallback(() => { void load(); }, [load]);
+
+  async function openTab(nextTab: DetailTab) {
+    setTab(nextTab);
+    if (nextTab !== "chart" || !data || data.candles.length || chartLoading) return;
+    setChartLoading(true);
+    try {
+      const chart = await apiFetch<{ candles: Candle[] }>(`/api/gifts/${encodeURIComponent(data.resolvedVirtualGiftId || id)}/candles`, { cacheMs: 10_000 });
+      setData((current) => current ? { ...current, candles: chart.candles } : current);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "График недоступен");
+    } finally {
+      setChartLoading(false);
+    }
+  }
 
   async function run(key: string, task: () => Promise<unknown>) {
     if (busy) return;
@@ -149,7 +169,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     </div>
   );
 
-  if (!data) return <div className="mxm-skeleton h-[min(72dvh,560px)] rounded-[18px]" />;
+  if (!data) return <div className="mxm-skeleton h-[min(62dvh,460px)] rounded-[16px]" />;
 
   const { gift } = data;
   const canonicalGiftId = data.resolvedVirtualGiftId || gift.virtualGiftId;
@@ -169,7 +189,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
         ) : (
           <Link href="/market" className="grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><ArrowLeft size={17} /></Link>
         )}
-        <a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "Открыть в TON" : "Открыть в Telegram"} <ExternalLink size={12} /></a>
+        <a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "TON" : "Telegram"} <ExternalLink size={12} /></a>
       </div>
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
@@ -186,7 +206,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 {gift.isFromBlockchain ? <span className="rounded-[18px] bg-[var(--panel-2)] px-2 py-1 text-[9px] text-[var(--muted)]">TON</span> : null}
               </div>
             </div>
-            <Link href={`/u/${gift.ownerId}`} className="mt-3 flex items-center gap-2 rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5"><UserRound size={14} className="text-[var(--muted)]" /><div className="min-w-0 flex-1"><p className="text-[10px] text-[var(--muted)]">Текущий владелец в MXM</p><p className="truncate text-xs font-medium">{gift.ownerName}</p></div></Link>
+            <Link href={`/u/${gift.ownerId}`} className="mt-3 flex items-center gap-2 rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5"><UserRound size={14} className="text-[var(--muted)]" /><div className="min-w-0 flex-1"><p className="text-[10px] text-[var(--muted)]">Владелец</p><p className="truncate text-xs font-medium">{gift.ownerName}</p></div></Link>
           </div>
         </section>
 
@@ -195,8 +215,8 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               <Metric label="Листинг" value={gift.listingPrice == null ? "—" : money(gift.listingPrice)} />
               <Metric label="Флор" value={data.traitStats.collectionFloor == null ? "—" : money(data.traitStats.collectionFloor)} />
-              <Metric label="Рыночный ориентир" value={gift.referencePrice == null ? "—" : money(gift.referencePrice)} />
-              <Metric label="Лучший оффер" value={gift.bestOffer == null ? "—" : money(gift.bestOffer)} />
+              <Metric label="Ориентир" value={gift.referencePrice == null ? "—" : money(gift.referencePrice)} />
+              <Metric label="Оффер" value={gift.bestOffer == null ? "—" : money(gift.bestOffer)} />
               <Metric label="24h" value={percent(data.collection.change24h)} tone={data.collection.change24h} />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -272,19 +292,19 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined}
               />
             )}
-            <p className="mt-2 text-[10px] text-[var(--muted-2)]">MXM-транзакция меняет виртуальное владение внутри игры; настоящий Telegram Gift этим действием не переводится.</p>
+            <p className="mt-2 text-[10px] text-[var(--muted-2)]">Только MXM: Telegram Gift не переводится.</p>
           </div>
 
           <div className="mxm-hscroll gap-1 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-1">
-            <TabButton active={tab === "activity"} onClick={() => setTab("activity")} icon={<History size={12} />} label="Активность" />
-            <TabButton active={tab === "offers"} onClick={() => setTab("offers")} icon={<MessageSquareMore size={12} />} label={`Офферы ${data.offers.length}`} />
-            <TabButton active={tab === "chart"} onClick={() => setTab("chart")} icon={<TrendingUp size={12} />} label="Цена" />
+            <TabButton active={tab === "activity"} onClick={() => void openTab("activity")} icon={<History size={12} />} label="История" />
+            <TabButton active={tab === "offers"} onClick={() => void openTab("offers")} icon={<MessageSquareMore size={12} />} label={`Офферы · ${data.offers.length}`} />
+            <TabButton active={tab === "chart"} onClick={() => void openTab("chart")} icon={<TrendingUp size={12} />} label="Цена" />
           </div>
 
           <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
             {tab === "activity" ? <Activity activity={data.activity} /> : null}
             {tab === "offers" ? <Offers offers={data.offers} isOwner={data.isOwner} busy={busy} onAction={(offerId, action) => run(`${action}-${offerId}`, () => apiFetch(`/api/gifts/offers/${offerId}`, { method: "POST", body: JSON.stringify({ action }) }))} /> : null}
-            {tab === "chart" ? <div className="p-3"><CoinChart candles={data.candles} height={300} baseFrame="1h" /></div> : null}
+            {tab === "chart" ? <div className="p-3">{chartLoading && !data.candles.length ? <div className="mxm-skeleton h-[260px] rounded-[14px]" /> : <CoinChart candles={data.candles} height={280} baseFrame="1h" />}</div> : null}
           </div>
         </section>
       </div>

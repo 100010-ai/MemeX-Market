@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
+import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { tonApiHealth } from "@/lib/providers/tonapi-client";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await readSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const settings = await supabase.from("market_settings").select("external_quote_hours").eq("singleton", true).maybeSingle();
   const quoteHours = Math.max(1, Math.min(168, Number(settings.data?.external_quote_hours || 12)));

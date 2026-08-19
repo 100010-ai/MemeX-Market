@@ -56,7 +56,18 @@ function secretLeaks() {
 
 console.log("MXM release gate\n");
 const migration = read("supabase/migrations/017_v030_market_foundation.sql");
+const migration040 = read("supabase/migrations/018_v040_games_speed_compact.sql");
+const gameStage = read("components/games/game-stage.tsx");
+const gamesPage = read("app/games/page.tsx");
+const marketRoute = read("app/api/market/route.ts");
+const mediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
+const auth = read("lib/auth.ts");
+const giftDetail = read("components/gifts/gift-detail.tsx");
+const giftCandles = read("app/api/gifts/[id]/candles/route.ts");
+const clientApi = read("lib/api.ts");
 check("Migration 017 present", Boolean(migration));
+check("Migration 018 present", Boolean(migration040));
+check("v0.40 package version", read("package.json").includes('"version": "0.40.0"'));
 check("Environment template present", exists(".env.example"));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
@@ -67,6 +78,18 @@ check("Atomic single-Gift purchase RPC present", migration.includes("buy_virtual
 check("Atomic cart purchase RPC present", migration.includes("buy_virtual_gift_cart_v2"));
 check("Fresh external quote guard present", migration.includes("external_quote_hours") && migration.includes("resale_seen_at"));
 check("Finite Genesis RPC present", migration.includes("initialize_gift_genesis_pool") && migration.includes("genesis_market_candidates"));
+check("Seven-game DB constraint", ["coinflip","dice","wheel","slots","hilo","roulette","plinko"].every((game) => migration040.includes(`'${game}'`)));
+check("Game idempotency storage", migration040.includes("request_key") && migration040.includes("game_rounds_profile_request_uidx"));
+check("Game idempotency mismatch guard", migration040.includes("Idempotency key was reused with different game parameters"));
+check("Fast session snapshot RPC", migration040.includes("session_profile_snapshot_v040") && auth.includes("getSessionProfileSnapshot"));
+check("DB-side TonAPI rarity aggregation", migration040.includes("recalculate_tonapi_collection_rarity_v040"));
+check("Animated game stage", gameStage.includes("WheelStage") && gameStage.includes("DiceStage") && gameStage.includes("RouletteStage") && gameStage.includes("PlinkoStage"));
+check("Game cards UI", gamesPage.includes("mxm-game-card") && !gamesPage.includes('role="tab"'));
+check("Lean Gift pagination", marketRoute.includes("lean") && marketRoute.includes("gift_market_random_page"));
+check("Gift media slug fast-path", mediaRoute.includes('searchParams.get("slug")'));
+check("Lazy NFT chart endpoint", giftCandles.includes("gift_collection_candles") && giftDetail.includes("/candles"));
+check("Lazy NFT chart bundle", giftDetail.includes('dynamic(() => import("@/components/coin-chart")'));
+check("Current launch-fee copy", clientApi.includes("250 виртуальных TON") && !clientApi.includes("нужно 50 виртуальных TON"));
 
 const envTemplate = read(".env.example");
 check("Public env does not expose service role", !/NEXT_PUBLIC_(?:SUPABASE_)?(?:SECRET|SERVICE_ROLE)/i.test(envTemplate));

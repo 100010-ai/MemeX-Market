@@ -11,8 +11,8 @@ type Board = "overall" | "pnl" | "giftPnl" | "coinPnl" | "gifts" | "coins";
 const tabs: { key: Board; label: string; icon: typeof Trophy }[] = [
   { key: "overall", label: "Общий", icon: Crown },
   { key: "pnl", label: "PnL", icon: TrendingUp },
-  { key: "giftPnl", label: "PnL подарков", icon: Gift },
-  { key: "coinPnl", label: "PnL коинов", icon: Coins },
+  { key: "giftPnl", label: "Gifts PnL", icon: Gift },
+  { key: "coinPnl", label: "Coins PnL", icon: Coins },
   { key: "gifts", label: "Коллекция", icon: Trophy },
   { key: "coins", label: "Создатели", icon: LineChart },
 ];
@@ -54,7 +54,7 @@ export default function LeaderboardPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div><h1 className="text-base font-semibold">Рейтинг</h1><p className="mt-0.5 text-[11px] text-[var(--muted)]">Глобальный рейтинг рынка MXM</p></div>
+        <h1 className="text-sm font-semibold">Рейтинг</h1>
         {meRank ? <div className="border-l border-[var(--border-soft)] pl-3 text-right"><p className="text-[9px] uppercase tracking-wide text-[var(--muted)]">Вы</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></div> : null}
       </div>
 
@@ -83,7 +83,7 @@ export default function LeaderboardPage() {
               </Link>;
             })}
           </div>
-        ) : <div className="p-8 text-center text-xs text-[var(--muted)]">В рейтинге пока никого нет.</div>}
+        ) : <div className="p-8 text-center text-xs text-[var(--muted)]">Пока пусто.</div>}
       </div>
     </div>
   );

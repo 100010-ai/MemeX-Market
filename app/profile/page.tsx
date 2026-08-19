@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, LockKeyhole, Sparkles, Trophy, UserRound } from "lucide-react";
+import { LockKeyhole, Sparkles, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 
@@ -11,7 +11,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <section className="rounded-[22px] border border-[var(--border)] bg-[var(--panel)] p-3.5">
+      <section className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3.5">
         <div className="flex items-center gap-3">
           {profile.photoUrl ? <img src={profile.photoUrl} alt="Профиль Telegram" className="h-13 w-13 rounded-[20px] object-cover" /> : <span className="grid h-13 w-13 place-items-center rounded-[20px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><UserRound size={21} /></span>}
           <div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold">{profile.firstName} {profile.lastName || ""}</h1><p className="mt-0.5 text-[11px] text-[var(--muted)]">{profile.username ? `@${profile.username}` : `Telegram ${profile.telegramId}`}</p><span className="mt-1.5 inline-flex rounded-[12px] bg-[var(--panel-2)] px-2 py-1 text-[9px] text-[var(--accent)]">{profile.tier}</span></div>
@@ -23,22 +23,13 @@ export default function ProfilePage() {
 
         {profile.reservedBalance > 0 ? <div className="mt-2 flex items-center justify-between rounded-[18px] bg-[var(--surface)] px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />Открытые офферы</span><span>{money(profile.reservedBalance)} в резерве</span></div> : null}
 
-        <Link href={`/u/${profile.id}`} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--panel-2)] py-2.5 text-xs hover:bg-[var(--panel-3)]"><UserRound size={14} />Публичный профиль</Link>
+        <Link href={`/u/${profile.id}`} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--panel-2)] py-2.5 text-xs hover:bg-[var(--panel-3)]"><UserRound size={14} />Профиль</Link>
       </section>
 
-      <section className="mt-3 rounded-[22px] border border-[var(--border)] bg-[var(--panel)] p-3 text-xs">
-        <Row icon={<Trophy size={14} />} label="Статус" value={profile.tier} />
-        <Row icon={<Sparkles size={14} />} label="Уровень" value={`${profile.level} · ${profile.xp} XP`} />
-        <Row icon={<CalendarDays size={14} />} label="Регистрация" value={new Date(profile.joinedAt).toLocaleDateString("ru-RU")} />
-      </section>
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="min-w-0 rounded-[17px] bg-[var(--panel-2)] p-2.5"><p className="text-[9px] text-[var(--muted)]">{label}</p><p className="mt-1 truncate text-xs font-semibold">{value}</p></div>;
-}
-
-function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3 border-b border-[var(--border-soft)] py-2.5 last:border-b-0"><span className="flex items-center gap-2 text-[var(--muted)]">{icon}{label}</span><span className="text-right">{value}</span></div>;
 }

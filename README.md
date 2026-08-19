@@ -1,4 +1,18 @@
-# MXM Market v0.30.0
+# MXM Market v0.40.0
+
+
+## v0.40 — Audit, Games 2.0, Speed
+
+- Games hub redesigned around compact game cards instead of game tabs.
+- Real animated wheel and CSS 3D dice, plus Slots, HiLo, Roulette and 8-row Plinko.
+- Game RPC now supports request idempotency and rejects reused keys with changed parameters.
+- Hot reads were reduced: one-round-trip `/api/me`, lean market pagination, smaller NFT/coin chart payloads, bounded leaderboard payloads, explicit DB selects and server timing headers.
+- Telegram Gift rarity recalculation moved to one set-based PostgreSQL update instead of downloading/updating thousands of rows in JavaScript.
+- Gift media keeps viewport/motion budgets, direct Fragment previews and lazy Lottie.
+- Global density pass shortened labels/copy and tightened navigation, profile, vault, tasks, hub, market, collections and game controls.
+- Release audit checks migrations 017 + 018, game engine, fast snapshot, market pagination, media path and secrets.
+
+**Required DB migration after v0.30:** `supabase/migrations/018_v040_games_speed_compact.sql`.
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 

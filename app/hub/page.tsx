@@ -26,8 +26,8 @@ export default function HubPage() {
     setError(null);
     try {
       const [feed, leaderboard] = await Promise.all([
-        apiFetch<FeedPayload>("/api/feed?limit=30"),
-        apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall"),
+        apiFetch<FeedPayload>("/api/feed?limit=20", { cacheMs: 6_000 }),
+        apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall&limit=8", { cacheMs: 8_000 }),
       ]);
       setActivity(feed.activity);
       setLeaders(leaderboard.players.slice(0, 8));
@@ -47,23 +47,20 @@ export default function HubPage() {
       <RealtimeRefresh channelName="mxm-hub" tables={realtimeTables} onChange={realtimeReload} />
 
       <div className="mb-3 flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-base font-semibold">Хаб рынка</h1>
-          <p className="mt-0.5 text-[11px] text-[var(--muted)]">Живая активность MXM и глобальный рейтинг.</p>
-        </div>
+        <h1 className="text-sm font-semibold">Хаб</h1>
         {meRank !== null ? <Link href="/leaderboard" className="border-l border-[var(--border-soft)] pl-3 text-right"><p className="text-[10px] text-[var(--muted)]">Ваше место</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
       </div>
 
       <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
-        <QuickLink href="/market" icon={<LineChart size={15} />} label="Торговать" detail="Мемкоины и подарки" />
-        <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" detail="Получать награды" />
-        <QuickLink href="/vault" icon={<Gift size={15} />} label="Хранилище" detail="Ваши активы" />
-        <QuickLink href="/games" icon={<Dices size={15} />} label="Игры" detail="Только виртуальный TON" />
+        <QuickLink href="/market" icon={<LineChart size={14} />} label="Маркет" />
+        <QuickLink href="/tasks" icon={<ListChecks size={14} />} label="Задания" />
+        <QuickLink href="/vault" icon={<Gift size={14} />} label="Портфель" />
+        <QuickLink href="/games" icon={<Dices size={14} />} label="Игры" />
       </div>
 
       <div className="mxm-hscroll mb-3 gap-4 border-b border-[var(--border-soft)] lg:hidden">
-        <button onClick={() => setSection("feed")} className={`shrink-0 border-b px-1 py-2 text-[10px] ${section === "feed" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>Лента рынка</button>
-        <button onClick={() => setSection("leaders")} className={`shrink-0 border-b px-1 py-2 text-[10px] ${section === "leaders" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>Топ трейдеров</button>
+        <button onClick={() => setSection("feed")} className={`shrink-0 border-b px-1 py-2 text-[10px] ${section === "feed" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>Лента</button>
+        <button onClick={() => setSection("leaders")} className={`shrink-0 border-b px-1 py-2 text-[10px] ${section === "leaders" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>Топ</button>
       </div>
 
       {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
@@ -72,7 +69,7 @@ export default function HubPage() {
         <section className={`${section === "feed" ? "block" : "hidden"} lg:block`}>
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
             <div className="flex items-center gap-2 text-sm font-medium"><Activity size={15} className="text-[var(--accent)]" />Рынок онлайн</div>
-            <span className="text-[10px] text-[var(--muted)]">В реальном времени</span>
+            
           </div>
           {loading ? <RowsSkeleton count={8} /> : activity.length ? (
             <div className="divide-y divide-[var(--border-soft)]">
@@ -89,13 +86,13 @@ export default function HubPage() {
                 </Link>
               ))}
             </div>
-          ) : <Empty text="Активности на рынке пока нет." />}
+          ) : <Empty text="Пока пусто." />}
         </section>
 
         <section className={`${section === "leaders" ? "block" : "hidden"} lg:block`}>
           <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Топ трейдеров</div>
-            <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">Смотреть все</Link>
+            <div className="flex items-center gap-2 text-sm font-medium"><Trophy size={15} className="text-[var(--accent)]" />Топ</div>
+            <Link href="/leaderboard" className="text-[10px] text-[var(--muted)] hover:text-white">Все</Link>
           </div>
           {loading ? <RowsSkeleton count={6} /> : leaders.length ? (
             <div className="divide-y divide-[var(--border-soft)]">
@@ -107,15 +104,15 @@ export default function HubPage() {
                 </Link>
               ))}
             </div>
-          ) : <Empty text="В рейтинге пока никого нет." />}
+          ) : <Empty text="Пока пусто." />}
         </section>
       </div>
     </div>
   );
 }
 
-function QuickLink({ href, icon, label, detail }: { href: string; icon: React.ReactNode; label: string; detail: string }) {
-  return <Link href={href} className="w-[148px] shrink-0 border-b border-[var(--border-soft)] py-2.5 hover:border-[#444b52]"><div className="flex items-center gap-1.5 text-xs font-medium">{icon}{label}</div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></Link>;
+function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  return <Link href={href} className="flex h-9 min-w-[98px] shrink-0 items-center gap-1.5 rounded-[13px] border border-[var(--border-soft)] bg-[var(--panel)] px-2.5 text-[10px] font-medium">{icon}{label}</Link>;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-40 place-items-center px-4 text-center text-xs text-[var(--muted)]">{text}</div>; }
 function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-2xl" />)}</div>; }

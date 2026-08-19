@@ -8,7 +8,7 @@ npm run release:check
 
 ## Database
 
-- Apply every migration through `017_v030_market_foundation.sql` in order.
+- Apply every migration through `018_v040_games_speed_compact.sql` in order.
 - Confirm `gift_market_overview`, `gift_collection_overview`, `gift_market_random_page`, `buy_virtual_gift_v2`, `list_virtual_gift_v2`, `create_gift_offer_v2`, and `resolve_gift_offer_v2` exist.
 - Confirm service-role-only execution on trading RPCs.
 - Check `/api/system/market-health` from an authenticated MXM session: database errors must be empty.
@@ -30,6 +30,13 @@ npm run release:check
 - Try two buyers against the same listing; row locks must allow one winner only.
 - Confirm expired user listings/offers are removed by market maintenance. Genesis/NPC inventory must stay listed while its external TON quote is fresh and disappear when that quote becomes stale.
 - Confirm fee and seller-net values match `market_settings.gift_fee_bps`.
+
+## Games
+
+- Open all seven game cards: Coin, Dice, Wheel, Slots, HiLo, Roulette and Plinko.
+- Verify the wheel lands on the server-selected sector, the die ends on the returned face, and result/balance/history stay hidden until the reveal animation finishes.
+- Double-submit the same `requestKey`; balance must change once. Reuse that key with different parameters; the RPC must reject it.
+- Confirm bets outside 0.1–100 virtual TON are rejected and reserved Gift-offer balance cannot be spent.
 
 ## Memecoins
 

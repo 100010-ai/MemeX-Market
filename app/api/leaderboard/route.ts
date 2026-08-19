@@ -25,13 +25,15 @@ export async function GET(request: NextRequest) {
 
   const raw = request.nextUrl.searchParams.get("board") || "overall";
   const board: BoardKey = raw in columns ? raw as BoardKey : "overall";
+  const requestedLimit = Number(request.nextUrl.searchParams.get("limit") || 100);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(5, Math.min(100, Math.floor(requestedLimit))) : 100;
   const column = columns[board];
   const supabase = getSupabaseAdmin();
 
   try {
     const [{ data, error }, { data: me, error: meError }] = await Promise.all([
-      supabase.from("leaderboard").select("*").order(column, { ascending: false }).order("id", { ascending: true }).limit(100),
-      supabase.from("leaderboard").select("*").eq("id", profile.id).maybeSingle(),
+      supabase.from("leaderboard").select("id,username,first_name,photo_url,balance,coin_value,gift_value,net_worth,realized_pnl,coin_realized_pnl,gift_realized_pnl,coin_trade_count,gift_trade_count,gift_count,created_coin_market_cap").order(column, { ascending: false }).order("id", { ascending: true }).limit(limit),
+      supabase.from("leaderboard").select("id,net_worth,realized_pnl,gift_realized_pnl,coin_realized_pnl,gift_value,created_coin_market_cap").eq("id", profile.id).maybeSingle(),
     ]);
     if (error || meError) throw error || meError;
 

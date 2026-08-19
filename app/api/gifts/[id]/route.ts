@@ -15,6 +15,7 @@ function numberOrNull(value: unknown) {
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
@@ -28,13 +29,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const baseName = String(giftRow.base_name);
     const nowIso = new Date().toISOString();
 
-    const [tradesResult, candlesResult, offersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, snapshot] = await Promise.all([
-      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(80),
-      supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(1200),
-      supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(60),
-      supabase.from("gift_collection_overview").select("*").eq("base_name", baseName).maybeSingle(),
+    const [tradesResult, offersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, snapshot] = await Promise.all([
+      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(40),
+      supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(30),
+      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_item_market_stats", { p_virtual_gift_id: virtualGiftId }).single(),
-      supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(100),
+      supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(60),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).eq("virtual_gift_id", virtualGiftId).maybeSingle(),
       getProfileSnapshot(profile),
     ]);
@@ -42,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // Analytics/history are secondary. The core resolved Gift stays usable when
     // an optional v0.30 table is not migrated during a rolling deployment.
     for (const [label, result] of [
-      ["trades", tradesResult], ["candles", candlesResult], ["offers", offersResult],
+      ["trades", tradesResult], ["offers", offersResult],
       ["collection", collectionResult], ["item stats", itemStatsResult], ["listing events", listingEventsResult], ["cart", cartResult],
     ] as const) {
       if (result.error) console.warn(`gift detail ${label}`, result.error);
@@ -51,7 +51,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const trades = tradesResult.error ? [] : tradesResult.data || [];
     const offers = offersResult.error ? [] : (offersResult.data || []).filter((offer) => !offer.expires_at || String(offer.expires_at) > nowIso);
     const listingEvents = listingEventsResult.error ? [] : listingEventsResult.data || [];
-    const candles = candlesResult.error ? [] : candlesResult.data || [];
 
     const profileIds = new Set<string>();
     for (const trade of trades) {
@@ -98,7 +97,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       }));
     const activity = [...saleActivity, ...listingActivity]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 100);
+      .slice(0, 60);
 
     return NextResponse.json({
       gift,
@@ -115,10 +114,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         sellerName: trade.seller_profile_id ? personName(names, String(trade.seller_profile_id)) : null,
       })),
       activity,
-      candles: [...candles].reverse().map((candle) => ({
-        time: Math.floor(new Date(candle.bucket_start).getTime() / 1000),
-        open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
-      })),
+      candles: [],
       itemStats: {
         tradeCount: Number(itemStats?.trade_count || 0),
         volume: Number(itemStats?.volume || 0),
@@ -146,7 +142,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         id: String(offer.id), amount: Number(offer.amount), status: offer.status, createdAt: String(offer.created_at), expiresAt: offer.expires_at ? String(offer.expires_at) : null,
         buyerId: String(offer.buyer_profile_id), buyerName: personName(names, String(offer.buyer_profile_id)), isMine: String(offer.buyer_profile_id) === String(profile.id),
       })),
-    }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
+    }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `gift-detail;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     console.error("gift detail", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load Gift" }, { status: 500 });

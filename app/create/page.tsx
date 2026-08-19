@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Rocket, ShieldCheck, Sparkles, Upload, WalletCards, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { money } from "@/lib/format";
-import { CoinAvatar, PrimaryButton } from "@/components/ui";
+import { PrimaryButton } from "@/components/ui";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { prepareCoinImage } from "@/lib/client-image";
 import { COIN_LAUNCH_FEE_TON } from "@/lib/economy";
@@ -74,8 +74,8 @@ export default function CreatePage() {
 
   return (
     <div className="mx-auto max-w-xl mxm-page-enter">
-      <div className="mb-4 flex items-start justify-between gap-3 border-b border-[var(--border-soft)] pb-3">
-        <div><h1 className="text-[17px] font-semibold tracking-[-.02em]">Создать мемкоин</h1><p className="mt-1 text-[11px] text-[var(--muted)]">Стоимость запуска списывается из виртуального TON.</p></div>
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-2.5">
+        <h1 className="text-sm font-semibold tracking-[-.02em]">Новый мемкоин</h1>
         <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Запуск</p><p className="mt-1 text-xs font-semibold">{money(rules.launchFee)}</p></div>
       </div>
 
@@ -86,8 +86,8 @@ export default function CreatePage() {
           </button>
           <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} className="hidden" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">Изображение монеты</p>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--muted)]">PNG, JPG или WebP · до 2 МБ. Изображение оптимизируется до 512 px и проверяется сервером.</p>
+            <p className="text-[11px] font-medium">Логотип</p>
+            <p className="mt-1 text-[9px] text-[var(--muted)]">PNG/JPG/WebP · до 2 МБ</p>
             <div className="mt-2 flex gap-3"><button type="button" onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 text-[10px] text-[#cdd1d6]"><Upload size={11} />{imageBusy ? "Обрабатываем…" : "Выбрать"}</button>{image ? <button type="button" onClick={() => { setImage(null); if (inputRef.current) inputRef.current.value = ""; }} className="inline-flex items-center gap-1 text-[10px] text-[var(--muted)]"><X size={11} />Убрать</button> : null}</div>
           </div>
         </div>
@@ -95,17 +95,17 @@ export default function CreatePage() {
         <div className="mt-4 grid gap-3">
           <Field label="Название" hint={`${name.length}/32`}><input value={name} onChange={(e) => setName(e.target.value)} maxLength={32} placeholder="Например, Sad Cat" className="mxm-input" /></Field>
           <Field label="Тикер" hint={`${symbol.length}/8`}><div className="mxm-input flex items-center"><span className="text-[var(--muted)]">$</span><input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0,8))} placeholder="CAT" className="min-w-0 flex-1 bg-transparent px-1 outline-none" /></div></Field>
-          <Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={180} rows={3} placeholder="Коротко опиши идею мемкоина" className="mxm-input min-h-[84px] resize-none" /></Field>
+          <Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={180} rows={3} placeholder="Идея мемкоина" className="mxm-input min-h-[84px] resize-none" /></Field>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-y border-[var(--border-soft)] py-3">
-          <Info icon={<Sparkles size={12} />} label="Стартовая капитализация" value="100 TON" />
+          <Info icon={<Sparkles size={12} />} label="Старт" value="100 TON" />
           <Info icon={<ShieldCheck size={12} />} label="Торговля" value="AMM · 0.5%" />
-          <Info icon={<Rocket size={12} />} label="Лимит создателя" value={`${rules.activeCoins}/${rules.maxActiveCoins} активных`} />
+          <Info icon={<Rocket size={12} />} label="Лимит" value={`${rules.activeCoins}/${rules.maxActiveCoins} активных`} />
           <Info icon={<WalletCards size={12} />} label="Доступно" value={profile ? money(profile.availableBalance) : "—"} />
         </div>
 
-        <p className="mt-3 text-[10px] leading-4 text-[var(--muted)]">Можно держать до {rules.maxActiveCoins} активных мемкоинов и запускать новый не чаще одного раза в {rules.cooldownHours} часов.</p>
+
         {blocker ? <p className="mt-3 border-l-2 border-[var(--accent)] px-2 text-[10px] text-[#d4c596]">{blocker}</p> : null}
         {error ? <p className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1 text-[11px] text-[#ff9aa4]">{error}</p> : null}
         <PrimaryButton onClick={create} disabled={!canLaunch} className="mt-4 flex w-full items-center justify-center gap-2 py-3 text-xs"><Rocket size={16} />{busy ? "Создаём…" : blocker || "Запустить мемкоин"}</PrimaryButton>

@@ -53,7 +53,7 @@ export default function GiftCollectionPage() {
     if (!data || data.nextOffset == null || loadingMore) return;
     setLoadingMore(true);
     try {
-      const payload = await apiFetch<{ gifts: GiftAsset[]; nextOffset: number | null }>(`/api/collections/${encodeURIComponent(decodedName)}/listings?offset=${data.nextOffset}&limit=48`);
+      const payload = await apiFetch<{ gifts: GiftAsset[]; nextOffset: number | null }>(`/api/collections/${encodeURIComponent(decodedName)}/listings?offset=${data.nextOffset}&limit=36`, { cacheMs: 0 });
       setData((current) => {
         if (!current) return current;
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
@@ -110,7 +110,7 @@ export default function GiftCollectionPage() {
   }
 
   if (!data) {
-    return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[520px] rounded-2xl" />{error ? <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-[#5a3035] bg-[#181012] px-3 py-2.5 text-xs text-[#ff9aa4]"><span>{error}</span><button onClick={() => void load()} className="inline-flex shrink-0 items-center gap-1 text-white"><RefreshCw size={12} />Повторить</button></div> : null}</div>;
+    return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[420px] rounded-2xl" />{error ? <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-[#5a3035] bg-[#181012] px-3 py-2.5 text-xs text-[#ff9aa4]"><span>{error}</span><button onClick={() => void load()} className="inline-flex shrink-0 items-center gap-1 text-white"><RefreshCw size={12} />Повторить</button></div> : null}</div>;
   }
 
   const traits = traitTab === "models" ? data.models : traitTab === "backdrops" ? data.backdrops : data.symbols;
@@ -128,9 +128,8 @@ export default function GiftCollectionPage() {
         <div className="px-3 py-4 md:px-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted)]">Telegram Gifts · MXM secondary market</p>
-              <h1 className="mt-1 truncate text-base font-semibold tracking-tight md:text-lg">{c.baseName}</h1>
-              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} предметов · {c.holderCount} владельцев · {c.listedPct.toFixed(1)}% выставлено</p>
+              <h1 className="truncate text-base font-semibold tracking-tight md:text-lg">{c.baseName}</h1>
+              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} NFT · {c.holderCount} владельцев · {c.listedPct.toFixed(1)}% в продаже</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-[var(--muted)]">MXM floor</p>
@@ -179,15 +178,15 @@ export default function GiftCollectionPage() {
                 <select value={sort} onChange={(event) => setSort(event.target.value as GiftSort)} className="h-8 shrink-0 rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-2 text-[10px] outline-none"><option value="price-asc">Цена ↑</option><option value="price-desc">Цена ↓</option><option value="rarity">Редкость</option><option value="offers">Офферы</option><option value="number">Номер</option><option value="newest">Новые лоты</option></select>
               </div>
             </div>
-            {visibleGifts.length ? <div className="market-grid grid gap-2.5">{visibleGifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-xs text-[var(--muted)]">По этим фильтрам активных лотов нет.</div>}
-            <div ref={loadMoreRef} className="mt-3 h-8 text-center text-[10px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё лоты…" : data.nextOffset != null ? "Прокрути ниже — подгрузим дальше" : data.gifts.length ? "Все активные лоты загружены" : ""}</div>
+            {visibleGifts.length ? <div className="market-grid grid gap-2.5">{visibleGifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} />)}</div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-xs text-[var(--muted)]">По этим фильтрам активных лотов нет.</div>}
+            <div ref={loadMoreRef} className="mt-3 h-8 text-center text-[10px] text-[var(--muted)]">{loadingMore ? "Загрузка…" : data.nextOffset != null ? "Ещё ниже" : data.gifts.length ? "Все лоты" : ""}</div>
           </section>
         </div>
 
         <aside className="space-y-3">
           <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:sticky lg:top-[72px]">
             <div className="border-b border-[var(--border-soft)] px-3 py-3 text-xs font-medium">Последние продажи</div>
-            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 18).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price)}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Завершённых продаж пока нет.</div>}
+            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 18).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price)}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Продаж пока нет.</div>}
           </section>
         </aside>
       </div>
@@ -208,6 +207,6 @@ function TraitTabButton({ active, onClick, children }: { active: boolean; onClic
 }
 
 function TraitTable({ rows }: { rows: GiftTraitGroup[] }) {
-  if (!rows.length) return <div className="p-6 text-center text-xs text-[var(--muted)]">Характеристики не найдены.</div>;
+  if (!rows.length) return <div className="p-6 text-center text-xs text-[var(--muted)]">Нет данных.</div>;
   return <div className="divide-y divide-[var(--border-soft)]">{rows.slice(0, 40).map((row) => <div key={row.name} className="grid grid-cols-[minmax(0,1fr)_56px_74px] items-center gap-2 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-xs">{row.name}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{row.count} шт. · {row.listedCount} в продаже{row.rarityPerMille == null ? "" : ` · ${(row.rarityPerMille / 10).toFixed(row.rarityPerMille % 10 ? 1 : 0)}%`}</p></div><span className="text-right text-[10px] text-[var(--muted)]">флор</span><span className="truncate text-right text-xs font-medium">{row.floorPrice == null ? "—" : money(row.floorPrice)}</span></div>)}</div>;
 }

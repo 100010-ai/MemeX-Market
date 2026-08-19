@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireProfile, getProfileSnapshot } from "@/lib/auth";
+import { getSessionProfileSnapshot } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const profile = await requireProfile();
+    const profile = await getSessionProfileSnapshot();
     if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    return NextResponse.json({ profile: await getProfileSnapshot(profile) });
+    return NextResponse.json({ profile }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("me", error);
     return NextResponse.json({ error: "Could not load profile" }, { status: 500 });

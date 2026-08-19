@@ -10,9 +10,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const supabase = getSupabaseAdmin();
   try {
     const [leaderResult, profileResult, coinsResult, giftsResult] = await Promise.all([
-      supabase.from("profile_financial_overview").select("*").eq("id", id).maybeSingle(),
+      supabase.from("profile_financial_overview").select("id,net_worth,realized_pnl,coin_value,gift_value,coin_trade_count,gift_trade_count,gift_count").eq("id", id).maybeSingle(),
       supabase.from("profiles").select("id,username,first_name,photo_url,created_at,xp").eq("id", id).maybeSingle(),
-      supabase.from("market_overview").select("*").eq("creator_profile_id", id).order("market_cap", { ascending: false }).limit(12),
+      supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").eq("creator_profile_id", id).order("market_cap", { ascending: false }).limit(12),
       supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("estimated_value", { ascending: false, nullsFirst: false }).limit(8),
     ]);
     const error = leaderResult.error || profileResult.error || coinsResult.error || giftsResult.error;

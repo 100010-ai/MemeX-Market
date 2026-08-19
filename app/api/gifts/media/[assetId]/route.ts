@@ -1,8 +1,8 @@
 import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { readSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -112,12 +112,41 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
-  const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const session = await readSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { assetId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(assetId)) {
     return NextResponse.json({ error: "Invalid Gift asset" }, { status: 400 });
+  }
+
+  const requestUrl = new URL(request.url);
+  const suppliedSlug = requestUrl.searchParams.get("slug")?.trim() || "";
+  const suppliedFragment = suppliedSlug ? fragmentGiftMedia(suppliedSlug) : null;
+  const variant = requestUrl.searchParams.get("variant") === "preview" ? "preview" : "animation";
+  const size = requestUrl.searchParams.get("size") === "medium" ? "medium" : "large";
+
+  // Current clients already know the normalized Telegram collectible slug.
+  // Using it avoids two server round-trips (profile + asset lookup) for every
+  // visible animated card while still restricting the proxy to Fragment URLs.
+  if (suppliedFragment) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    try {
+      if (variant === "preview") {
+        const candidates = size === "medium"
+          ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
+          : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
+        const response = await previewResponse(candidates, controller.signal);
+        return response || NextResponse.json({ error: "Gift preview not found" }, { status: 404 });
+      }
+      const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
+      return response || NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
+    } catch (error) {
+      const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
+      return NextResponse.json({ error: message }, { status: 502 });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   const supabase = getSupabaseAdmin();
@@ -152,7 +181,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
 
   const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
   const fragment = slug ? fragmentGiftMedia(slug) : null;
-  const variant = new URL(request.url).searchParams.get("variant") === "preview" ? "preview" : "animation";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
@@ -161,7 +189,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
       // Fragment's JPG is the complete collectible render, including the exact
       // Telegram backdrop and symbol pattern. TonAPI's preview can be only the
       // transparent model, which is what caused the black cards in v0.14.
-      const response = await previewResponse([
+      const response = await previewResponse(size === "medium" ? [
+        trustedUrl(fragment?.medium),
+        trustedUrl(fragment?.small),
+        trustedUrl(fragment?.large),
+        trustedUrl(row.model_preview_url),
+      ] : [
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
         trustedUrl(row.model_preview_url),

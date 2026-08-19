@@ -68,7 +68,7 @@ export default function CartPage() {
   return <div className="mx-auto max-w-2xl">
     <div className="mb-3 flex items-center gap-2">
       <Link href="/market" className="grid h-9 w-9 place-items-center rounded-[16px] border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"><ArrowLeft size={16} /></Link>
-      <div className="min-w-0 flex-1"><h1 className="text-sm font-semibold">Корзина</h1><p className="text-[10px] text-[var(--muted)]">Покупка лотов одним атомарным действием</p></div>
+      <div className="min-w-0 flex-1"><h1 className="text-sm font-semibold">Корзина</h1></div>
       {data.count ? <button disabled={Boolean(busy)} onClick={clear} className="flex h-9 items-center gap-1.5 rounded-[16px] bg-[var(--panel)] px-3 text-[10px] text-[var(--muted)]"><Trash2 size={12} />Очистить</button> : null}
     </div>
 
