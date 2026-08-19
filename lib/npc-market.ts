@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 type Candidate = {
@@ -11,6 +10,7 @@ type Candidate = {
   last_seen_at: string;
   rarity_tier?: string;
   release_key?: string;
+  observed_price_ton?: number;
 };
 
 type GenesisState = {
@@ -32,11 +32,6 @@ export type NpcLiquidityResult = {
   completed: boolean;
 };
 
-function unit(seed: string, lane = 0) {
-  const digest = crypto.createHash("sha256").update(`${seed}:${lane}`).digest();
-  return digest.readUInt32BE((lane % 7) * 4) / 0xffffffff;
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -48,45 +43,14 @@ function rarityScore(candidate: Candidate) {
   return clamp(scores.reduce((sum, value) => sum + value, 0) / scores.length, 0, 1);
 }
 
-function numberPremium(number: number) {
-  if (number <= 10) return 12;
-  if (number <= 100) return 6;
-  if (number <= 1000) return 2.5;
-  const text = String(number);
-  if (/^(\d)\1+$/.test(text)) return 4;
-  if (text === text.split("").reverse().join("")) return 2;
-  if (number % 1000 === 0) return 1.5;
-  return 0;
-}
-
-function priceCandidate(candidate: Candidate, collectionAnchor: number | null, genesisSeed: string) {
-  const score = rarityScore(candidate);
-  const intrinsic = 2.2 + 42 * Math.pow(score, 1.72) + numberPremium(Number(candidate.gift_number));
-  const fair = collectionAnchor && collectionAnchor > 0 ? intrinsic * 0.42 + collectionAnchor * 0.58 : intrinsic;
-  const seed = `${genesisSeed}:${candidate.asset_id}`;
-  const mood = 0.9 + unit(seed, 1) * 0.22;
-  const dealRoll = unit(seed, 2);
-  const discountRoll = unit(seed, 3);
-
-  let mode: "normal" | "discount" | "rare_deal" = "normal";
-  let multiplier = mood;
-  if (score >= 0.5 && dealRoll < 0.035) {
-    mode = "rare_deal";
-    multiplier = 0.42 + unit(seed, 4) * 0.28;
-  } else if (discountRoll < 0.18) {
-    mode = "discount";
-    multiplier = 0.78 + unit(seed, 5) * 0.14;
+function observedPrice(candidate: Candidate) {
+  const value = Number(candidate.observed_price_ton);
+  if (!Number.isFinite(value) || value <= 0 || value > 1_000_000) {
+    throw new Error(`Gift ${candidate.asset_id} has no valid observed TON listing price`);
   }
-
-  const fairPrice = clamp(fair, 0.5, 140);
-  const listingPrice = clamp(fairPrice * multiplier, 0.35, 95);
-  return {
-    rarityScore: score,
-    fairPrice: Math.round(fairPrice * 100) / 100,
-    listingPrice: Math.round(listingPrice * 100) / 100,
-    mode,
-    desk: Math.floor(unit(seed, 6) * 3) % 3,
-  };
+  // Preserve real marketplace precision instead of manufacturing a rounded
+  // pseudo-price. PostgreSQL stores up to 9 fractional TON digits here.
+  return Math.round(value * 1_000_000_000) / 1_000_000_000;
 }
 
 function parseGenesisState(value: unknown): GenesisState {
@@ -102,6 +66,16 @@ function parseGenesisState(value: unknown): GenesisState {
 
 export async function ensureGenesisGiftMarket(options: { batchSize?: number; force?: boolean } = {}): Promise<NpcLiquidityResult> {
   const supabase = getSupabaseAdmin();
+
+  // Reconcile old v0.13 synthetic NPC prices before publishing anything. This
+  // RPC is provided by migration 015 and is intentionally tolerant on older
+  // databases so deploys can still surface the migration hint instead of dying
+  // before initialize_gift_genesis_pool() is called.
+  const reconcile = await supabase.rpc("reconcile_npc_external_prices");
+  if (reconcile.error && !/Could not find the function|schema cache|reconcile_npc_external_prices/i.test(String(reconcile.error.message || ""))) {
+    throw reconcile.error;
+  }
+
   const initialized = await supabase.rpc("initialize_gift_genesis_pool");
   if (initialized.error) throw initialized.error;
   let state = parseGenesisState(initialized.data);
@@ -125,6 +99,15 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
     const candidateResult = await supabase.rpc("genesis_market_candidates", { p_limit: batchSize });
     if (candidateResult.error) throw candidateResult.error;
     const candidates = (candidateResult.data || []) as Candidate[];
+    if (candidates.length) {
+      const priceResult = await supabase
+        .from("gift_assets")
+        .select("id,telegram_resale_price_ton")
+        .in("id", candidates.map((candidate) => candidate.asset_id));
+      if (priceResult.error) throw priceResult.error;
+      const prices = new Map((priceResult.data || []).map((row) => [String(row.id), Number(row.telegram_resale_price_ton)]));
+      for (const candidate of candidates) candidate.observed_price_ton = prices.get(candidate.asset_id);
+    }
     if (!candidates.length) {
       const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
       if (refreshed.error) throw refreshed.error;
@@ -133,55 +116,45 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
       return { skipped: false, currentListings, created: 0, rareDeals: 0, ...state };
     }
 
-    const baseNames = [...new Set(candidates.map((candidate) => String(candidate.base_name)))];
-    const collections = await supabase.from("gift_collection_overview").select("base_name,floor_price,last_sale_price").in("base_name", baseNames);
-    if (collections.error) throw collections.error;
-    const anchors = new Map<string, number>();
-    for (const row of collections.data || []) {
-      const values = [row.floor_price, row.last_sale_price].map(Number).filter((value) => Number.isFinite(value) && value > 0);
-      if (values.length) anchors.set(String(row.base_name), values.reduce((sum, value) => sum + value, 0) / values.length);
-    }
-
     let created = 0;
-    let rareDeals = 0;
     for (let start = 0; start < candidates.length; start += 12) {
       const chunk = candidates.slice(start, start + 12);
       const results = await Promise.all(chunk.map(async (candidate) => {
-        const pricing = priceCandidate(candidate, anchors.get(candidate.base_name) ?? null, state.seed);
+        const price = observedPrice(candidate);
         const seeded = await supabase.rpc("npc_seed_virtual_gift", {
           p_asset_id: candidate.asset_id,
-          p_price: pricing.listingPrice,
-          p_fair_price: pricing.fairPrice,
-          p_rarity_score: pricing.rarityScore,
-          p_pricing_mode: pricing.mode,
-          p_desk: pricing.desk,
+          // The DB function also re-reads the observed asset price and ignores
+          // synthetic client/server guesses. Passing it here keeps compatibility
+          // with the existing RPC signature.
+          p_price: price,
+          p_fair_price: price,
+          p_rarity_score: rarityScore(candidate),
+          p_pricing_mode: "normal",
+          p_desk: Math.abs(Number(candidate.gift_number) || 0) % 3,
         });
         if (seeded.error) {
-          if (/already|unique|duplicate/i.test(String(seeded.error.message || ""))) return null;
+          if (/already|unique|duplicate/i.test(String(seeded.error.message || ""))) return false;
           throw seeded.error;
         }
-        return pricing.mode;
+        return true;
       }));
-      for (const mode of results) {
-        if (!mode) continue;
-        created += 1;
-        if (mode === "rare_deal") rareDeals += 1;
-      }
+      created += results.filter(Boolean).length;
     }
 
     const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
     if (refreshed.error) throw refreshed.error;
     state = parseGenesisState(refreshed.data);
     await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
-    return { skipped: false, currentListings: currentListings + created, created, rareDeals, ...state };
+    return { skipped: false, currentListings: currentListings + created, created, rareDeals: 0, ...state };
   } catch (error) {
     await supabase.rpc("release_npc_market_lock", { p_success: false, p_error: error instanceof Error ? error.message : "Genesis market failure" });
     throw error;
   }
 }
 
-// Compatibility for existing control actions. v0.11 no longer maintains a
-// target number of NPC listings: it releases a finite Genesis batch only once.
+// Compatibility for existing control actions. The market never invents a TON
+// price: system listings are created only when TonAPI exposes a live native-TON
+// sale price for that exact NFT.
 export async function ensureNpcMarketLiquidity(options: { targetListings?: number; force?: boolean } = {}) {
   return ensureGenesisGiftMarket({ batchSize: options.targetListings ?? 24, force: options.force });
 }

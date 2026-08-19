@@ -3,6 +3,18 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 type JsonRecord = Record<string, unknown>;
 
 type TonPreview = { resolution?: string; url?: string };
+type TonPrice = {
+  currency_type?: "native" | "extra_currency" | "jetton" | "fiat" | string;
+  value?: string;
+  decimals?: number;
+  token_name?: string;
+};
+type TonSale = {
+  address?: string;
+  market?: { address?: string; name?: string };
+  owner?: { address?: string; name?: string };
+  price?: TonPrice;
+};
 type TonCollection = {
   address: string;
   next_item_index?: number;
@@ -19,7 +31,10 @@ type TonItem = {
   trust?: "whitelist" | "graylist" | "blacklist" | "none" | string;
   owner?: { address?: string; is_scam?: boolean };
   collection?: { address?: string; name?: string; description?: string };
+  sale?: TonSale;
 };
+
+type MediaKind = "static" | "animated" | "video";
 
 type ParsedItem = {
   address: string;
@@ -29,7 +44,10 @@ type ParsedItem = {
   baseName: string;
   number: number;
   telegramSlug: string | null;
-  imageUrl: string;
+  mediaUrl: string;
+  previewUrl: string;
+  mediaKind: MediaKind;
+  resalePriceTon: number | null;
   model: string;
   symbol: string;
   backdrop: string;
@@ -99,21 +117,54 @@ function highestPreview(previews: TonPreview[] | undefined) {
   return [...items].sort((a, b) => score(b.resolution) - score(a.resolution))[0]?.url || null;
 }
 
-function metadataImage(metadata: JsonRecord, previews?: TonPreview[]) {
-  // Prefer a still image/TONAPI preview for cards. animation_url can point to
-  // non-image content and previously caused perfectly valid gifts to render as
-  // permanently broken <img> elements in Telegram WebView.
-  for (const key of ["image", "image_url", "preview"]) {
-    const value = str(metadata[key]);
-    if (/^https:\/\//i.test(value)) return value;
-  }
-  const preview = highestPreview(previews);
-  if (preview) return preview;
-  for (const key of ["content_url", "animation_url"]) {
-    const value = str(metadata[key]);
-    if (/^https:\/\//i.test(value)) return value;
-  }
+function normalizeMediaUrl(value: unknown) {
+  const raw = str(value);
+  if (/^https:\/\//i.test(raw)) return raw;
+  if (/^ipfs:\/\//i.test(raw)) return `https://ipfs.io/ipfs/${raw.replace(/^ipfs:\/\//i, "").replace(/^ipfs\//i, "")}`;
   return null;
+}
+
+function metadataPreview(metadata: JsonRecord, previews?: TonPreview[]) {
+  for (const key of ["image", "image_url", "preview", "thumbnail", "thumbnail_url"]) {
+    const value = normalizeMediaUrl(metadata[key]);
+    if (value) return value;
+  }
+  return highestPreview(previews);
+}
+
+function mediaKindFrom(metadata: JsonRecord, url: string): MediaKind {
+  const hint = [metadata.animation_type, metadata.content_type, metadata.mime_type, metadata.mime, metadata.type]
+    .map((value) => str(value).toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+  const clean = url.split("?")[0].toLowerCase();
+  if (/video\/(mp4|webm|quicktime|ogg)/.test(hint) || /\.(mp4|webm|mov|m4v|ogv)$/.test(clean)) return "video";
+  if (/lottie|tgsticker|application\/json/.test(hint) || /\.(json|tgs)$/.test(clean)) return "animated";
+  // GIF/APNG/animated WebP animate natively in <img>, so they intentionally
+  // stay in the static renderer instead of being parsed as Lottie.
+  return "static";
+}
+
+function metadataMedia(metadata: JsonRecord, previews?: TonPreview[]) {
+  const previewUrl = metadataPreview(metadata, previews);
+  for (const key of ["animation_url", "animation", "video_url", "video", "content_url"]) {
+    const value = normalizeMediaUrl(metadata[key]);
+    if (!value) continue;
+    return { mediaUrl: value, previewUrl: previewUrl || value, mediaKind: mediaKindFrom(metadata, value) };
+  }
+  if (!previewUrl) return null;
+  return { mediaUrl: previewUrl, previewUrl, mediaKind: "static" as const };
+}
+
+function nativeTonSalePrice(sale: TonSale | undefined) {
+  const price = sale?.price;
+  if (!price || price.currency_type !== "native") return null;
+  const raw = str(price.value);
+  const decimals = Number(price.decimals);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(decimals) || decimals < 0 || decimals > 18) return null;
+  const value = Number(raw) / (10 ** decimals);
+  if (!Number.isFinite(value) || value <= 0 || value > 1_000_000) return null;
+  return Math.round(value * 1_000_000_000) / 1_000_000_000;
 }
 
 function traitRows(metadata: JsonRecord) {
@@ -212,8 +263,8 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
   const collectionName = str(collectionMetadata.name || item.collection?.name);
   const itemName = str(metadata.name);
   const identity = parseGiftIdentity(itemName, collectionName, item.index);
-  const imageUrl = metadataImage(metadata, item.previews);
-  if (!identity || !imageUrl) return null;
+  const media = metadataMedia(metadata, item.previews);
+  if (!identity || !media) return null;
 
   const rows = traitRows(metadata);
   const descriptionTraits = traitsFromDescription(metadata);
@@ -236,7 +287,10 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
     baseName: identity.baseName,
     number: identity.number,
     telegramSlug: findTelegramSlug(metadata),
-    imageUrl,
+    mediaUrl: media.mediaUrl,
+    previewUrl: media.previewUrl,
+    mediaKind: media.mediaKind,
+    resalePriceTon: nativeTonSalePrice(item.sale),
     model,
     symbol,
     backdrop,
@@ -276,7 +330,7 @@ function retryDelay(attempt: number, retryAfter: string | null) {
 }
 
 async function tonapi<T>(path: string): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.13" };
+  const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.14" };
   const key = process.env.TONAPI_KEY?.trim();
   if (key) headers.authorization = `Bearer ${key}`;
 
@@ -395,8 +449,8 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     model_rarity: null,
     model_file_id: `tonapi:${item.address}:model`,
     model_thumb_file_id: null,
-    model_is_animated: false,
-    model_is_video: false,
+    model_is_animated: item.mediaKind === "animated",
+    model_is_video: item.mediaKind === "video",
     symbol_name: item.symbol,
     symbol_rarity_per_mille: perMille(parsed, "symbol", item.symbol),
     symbol_file_id: `tonapi:${item.address}:symbol`,
@@ -420,7 +474,10 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     updated_at: now,
     catalog_source: "tonapi",
     source_reference: `tonapi:${item.collectionAddress}`,
-    model_media_url: item.imageUrl,
+    telegram_resale_price_ton: item.resalePriceTon,
+    resale_seen_at: item.resalePriceTon == null ? null : now,
+    model_media_url: item.mediaUrl,
+    model_preview_url: item.previewUrl,
     symbol_media_url: null,
     chain_nft_address: item.address,
     chain_collection_address: item.collectionAddress,
@@ -436,11 +493,22 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     const { error } = await supabase.from("gift_assets").upsert(rows, { onConflict: "telegram_name" });
     if (error) {
       for (const row of rows) {
-        const existing = await supabase.from("gift_assets").select("id").eq("base_name", row.base_name).eq("gift_number", row.gift_number).maybeSingle();
+        const existing = await supabase.from("gift_assets").select("id,catalog_source").eq("base_name", row.base_name).eq("gift_number", row.gift_number).maybeSingle();
         if (existing.error) throw existing.error;
         if (existing.data) {
+          // If Bot API already knows this exact collectible, keep its official
+          // Telegram sticker file/media fields. Replacing an animated TGS with
+          // TonAPI's rendered PNG preview would silently kill the animation.
+          const preserveTelegramMedia = existing.data.catalog_source !== "tonapi";
           const update = await supabase.from("gift_assets").update({
-            model_media_url: row.model_media_url,
+            ...(!preserveTelegramMedia ? {
+              model_is_animated: row.model_is_animated,
+              model_is_video: row.model_is_video,
+              model_media_url: row.model_media_url,
+            } : {}),
+            model_preview_url: row.model_preview_url,
+            telegram_resale_price_ton: row.telegram_resale_price_ton,
+            resale_seen_at: row.resale_seen_at,
             chain_nft_address: row.chain_nft_address,
             chain_collection_address: row.chain_collection_address,
             chain_verified: true,
@@ -579,7 +647,7 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
 
 export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
   const supabase = getSupabaseAdmin();
-  const countResult = await supabase.from("gift_assets").select("id", { head: true, count: "exact" }).in("catalog_source", ["bot_catalog", "tonapi"]).eq("is_burned", false);
+  const countResult = await supabase.from("gift_assets").select("id", { head: true, count: "exact" }).in("catalog_source", ["bot_catalog", "tonapi"]).eq("is_burned", false).not("telegram_resale_price_ton", "is", null);
   if (countResult.error) throw countResult.error;
   if ((countResult.count || 0) >= targetAssets) return { skipped: true, assets: countResult.count || 0 };
 
@@ -592,7 +660,7 @@ export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
   }
 
   const result = await syncTonApiGiftCatalog({ bootstrapOnly: true, maxCollections: 3, itemsPerCollection: Math.max(160, Math.ceil(targetAssets / 2)) });
-  const refreshed = await supabase.from("gift_assets").select("id", { head: true, count: "exact" }).in("catalog_source", ["bot_catalog", "tonapi"]).eq("is_burned", false);
+  const refreshed = await supabase.from("gift_assets").select("id", { head: true, count: "exact" }).in("catalog_source", ["bot_catalog", "tonapi"]).eq("is_burned", false).not("telegram_resale_price_ton", "is", null);
   if (refreshed.error) throw refreshed.error;
   return { skipped: false, assets: refreshed.count || 0, result };
 }

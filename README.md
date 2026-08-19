@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.13.0
+# MemeX Market (MXM) v0.14.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -144,4 +144,25 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 - Late pagination/bootstrap responses are ignored after switching Market tabs, so an in-flight Gift request cannot overwrite the Coins view.
 - Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
 
-No new database migration is required beyond `014_v012_tonapi_polish.sql`.
+## v0.14 — Real TON Listings + Animated Gift Media
+
+- Removed synthetic Genesis pricing. System Gift listings are now created only when TonAPI exposes a live sale price for that exact NFT in native TON.
+- Non-TON sale currencies are never relabeled as TON. If an exact NFT has no current native-TON sale price, MXM does not invent one and does not keep it as a system listing.
+- Existing v0.13 system inventory is reconciled during migration: stale generated prices are replaced with the current observed TonAPI native-TON price, while unpriced system listings are hidden from Market.
+- Added ongoing NPC price reconciliation so system-owned external-market inventory follows observed native-TON listings instead of drifting from source data.
+- TonAPI imports now preserve separate static preview and animated/video media URLs.
+- TonAPI Gift cards lazily resolve the official TGS for the exact numbered collectible from its public `t.me/nft/...` page, so a static on-chain preview no longer forces a static card.
+- Gift cards also support animated WebP/GIF/APNG, MP4/WebM video and direct Lottie/TGS content, with viewport-based lazy playback to avoid loading every animation at once.
+- Lottie/TGS media uses an authenticated same-origin proxy for trusted Telegram/TonAPI/IPFS hosts, avoiding WebView CORS failures while retaining the real static preview as fallback.
+- The Market overview exposes `model_preview_url`, allowing animated cards to fail gracefully without replacing real artwork with placeholders.
+
+### Database upgrade from v0.13
+
+Run after `014_v012_tonapi_polish.sql`:
+
+```text
+supabase/migrations/015_v014_real_prices_animations.sql
+```
+
+Apply `015` before deploying v0.14 application code because the importer and Market view now use `model_preview_url` and the real-price reconciliation RPC.
+

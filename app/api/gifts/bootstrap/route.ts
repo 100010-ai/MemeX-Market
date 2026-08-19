@@ -10,8 +10,8 @@ export const maxDuration = 60;
 
 function friendlyBootstrapError(error: unknown) {
   const message = error instanceof Error ? error.message : "Не удалось загрузить Telegram Gifts";
-  if (/tonapi_catalog_state|tonapi_gift_collections|acquire_tonapi_catalog_lock|chain_nft_address|chain_verified/i.test(message)) {
-    return "База данных не обновлена до схемы каталога Gifts. Примените миграцию 014_v012_tonapi_polish.sql.";
+  if (/tonapi_catalog_state|tonapi_gift_collections|acquire_tonapi_catalog_lock|chain_nft_address|chain_verified|model_preview_url|reconcile_npc_external_prices/i.test(message)) {
+    return "База данных не обновлена до актуальной схемы Gifts. Примените миграции 014_v012_tonapi_polish.sql и 015_v014_real_prices_animations.sql.";
   }
   if (/fetch|network|timeout|abort|TonAPI 429|TonAPI 5\d\d/i.test(message)) {
     return "TonAPI временно недоступен или ограничил запросы. Повторите загрузку через несколько секунд.";
