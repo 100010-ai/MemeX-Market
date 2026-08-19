@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -10,12 +11,16 @@ export async function POST(request: NextRequest) {
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "cart-checkout", String(profile.id), 12, 60))) return NextResponse.json({ error: "Слишком много попыток покупки" }, { status: 429 });
+  const requestKey = request.headers.get("x-idempotency-key")?.trim() || `srv-cart-${crypto.randomUUID()}`;
+  if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
+
   const supabase = getSupabaseAdmin();
   const cart = await supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).order("added_at", { ascending: true }).limit(20);
   if (cart.error) return NextResponse.json({ error: cart.error.message }, { status: 500 });
   const ids = (cart.data || []).map((row) => String(row.virtual_gift_id));
   if (!ids.length) return NextResponse.json({ error: "Корзина пуста" }, { status: 409 });
-  const result = await supabase.rpc("buy_virtual_gift_cart", { p_buyer_id: profile.id, p_virtual_gift_ids: ids });
+
+  const result = await supabase.rpc("buy_virtual_gift_cart_v2", { p_buyer_id: profile.id, p_virtual_gift_ids: ids, p_request_key: requestKey });
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 409 });
-  return NextResponse.json(result.data);
+  return NextResponse.json(result.data, { headers: { "cache-control": "no-store" } });
 }

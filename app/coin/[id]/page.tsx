@@ -21,6 +21,17 @@ function amountText(value: number) {
   return value.toFixed(8).replace(/\.?0+$/, "");
 }
 
+function makeTradeRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export default function CoinPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<Payload | null>(null);
@@ -124,7 +135,7 @@ export default function CoinPage() {
 
     try {
       const minOutput = Math.max(0, quote.outputAmount * (1 - slippage / 100));
-      const requestId = tradeRequestId.current || crypto.randomUUID();
+      const requestId = tradeRequestId.current || makeTradeRequestId();
       tradeRequestId.current = requestId;
       await apiFetch("/api/trade", {
         method: "POST",

@@ -37,7 +37,7 @@ function mediaKind(animated: unknown, video: unknown, label: string): GiftMediaK
 // Keep this as a string literal, not Array.join(). Supabase's type-level SelectQueryError
 // parser can only infer selected columns from a literal. A widened `string` makes query
 // rows become GenericStringError during `next build` type checking.
-export const giftMarketSelect = "asset_id,virtual_gift_id,telegram_name,gift_id,base_name,gift_number,model_name,model_rarity_per_mille,model_rarity,model_file_id,model_thumb_file_id,model_is_animated,model_is_video,symbol_name,symbol_rarity_per_mille,symbol_file_id,symbol_thumb_file_id,symbol_is_animated,symbol_is_video,backdrop_name,backdrop_rarity_per_mille,backdrop_center_color,backdrop_edge_color,backdrop_symbol_color,backdrop_text_color,is_premium,is_from_blockchain,is_burned,last_seen_at,owner_profile_id,owner_name,acquired_price,listing_price,last_sale_price,status,created_at,estimated_value,best_offer,offer_count,catalog_source,model_media_url,symbol_media_url,model_preview_url" as const;
+export const giftMarketSelect = "asset_id,virtual_gift_id,telegram_name,gift_id,base_name,gift_number,model_name,model_rarity_per_mille,model_rarity,model_file_id,model_thumb_file_id,model_is_animated,model_is_video,symbol_name,symbol_rarity_per_mille,symbol_file_id,symbol_thumb_file_id,symbol_is_animated,symbol_is_video,backdrop_name,backdrop_rarity_per_mille,backdrop_center_color,backdrop_edge_color,backdrop_symbol_color,backdrop_text_color,is_premium,is_from_blockchain,is_burned,last_seen_at,owner_profile_id,owner_name,acquired_price,listing_price,last_sale_price,status,created_at,estimated_value,best_offer,offer_count,catalog_source,model_media_url,symbol_media_url,model_preview_url,chain_nft_address,chain_collection_address,chain_verified,listed_at,listing_updated_at,listing_expires_at,external_listing_price_ton,external_price_source,external_price_seen_at,reference_price_ton,price_basis,collection_floor,model_floor,backdrop_floor,symbol_floor" as const;
 
 export function mapCoin(row: Record<string, unknown>): Coin {
   return {
@@ -110,6 +110,21 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     listingPrice: nullableNumber(row.listing_price, "gift listing price"),
     lastSalePrice: nullableNumber(row.last_sale_price, "gift last sale price"),
     estimatedValue: nullableNumber(row.estimated_value, "gift estimated value"),
+    externalListingPrice: nullableNumber(row.external_listing_price_ton, "external listing price"),
+    externalPriceSource: nullableString(row.external_price_source),
+    externalPriceSeenAt: nullableString(row.external_price_seen_at),
+    referencePrice: nullableNumber(row.reference_price_ton, "gift reference price"),
+    priceBasis: row.price_basis === "mxm_listing" || row.price_basis === "tonapi_listing" || row.price_basis === "item_last_sale" || row.price_basis === "collection_last_sale" ? row.price_basis : null,
+    collectionFloor: nullableNumber(row.collection_floor, "collection floor"),
+    modelFloor: nullableNumber(row.model_floor, "model floor"),
+    backdropFloor: nullableNumber(row.backdrop_floor, "backdrop floor"),
+    symbolFloor: nullableNumber(row.symbol_floor, "symbol floor"),
+    chainNftAddress: nullableString(row.chain_nft_address),
+    chainCollectionAddress: nullableString(row.chain_collection_address),
+    chainVerified: Boolean(row.chain_verified),
+    listedAt: nullableString(row.listed_at),
+    listingUpdatedAt: nullableString(row.listing_updated_at),
+    listingExpiresAt: nullableString(row.listing_expires_at),
     status,
     createdAt: requiredString(row.created_at, "gift created_at"),
   };

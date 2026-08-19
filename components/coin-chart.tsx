@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CandlestickSeries, ColorType, HistogramSeries, createChart, type IChartApi, type UTCTimestamp } from "lightweight-charts";
-import { Maximize2 } from "lucide-react";
+import {
+  CandlestickSeries,
+  ColorType,
+  HistogramSeries,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type MouseEventParams,
+  type Time,
+  type UTCTimestamp,
+} from "lightweight-charts";
+import { Maximize2, RotateCcw, X } from "lucide-react";
 import type { Candle } from "@/lib/types";
 
 const timeframes = [
@@ -54,26 +64,64 @@ function displayPrice(value: number, precision: number) {
   return value.toLocaleString("ru-RU", { maximumFractionDigits: precision, minimumFractionDigits: Math.min(2, precision) });
 }
 
+function eventTimestamp(time: Time | undefined) {
+  if (typeof time === "number") return time;
+  if (!time) return null;
+  if (typeof time === "string") {
+    const parsed = Date.parse(`${time}T00:00:00Z`);
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+  }
+  return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000);
+}
+
 export function CoinChart({ candles, height = 330, showTimeframes = true, baseFrame = "15m" }: { candles: Candle[]; height?: number; showTimeframes?: boolean; baseFrame?: Frame["key"] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const priceSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const byTimeRef = useRef<Map<number, Candle>>(new Map());
   const [frame, setFrame] = useState<Frame>(() => timeframes.find((item) => item.key === baseFrame) ?? timeframes[2]);
   const [inspect, setInspect] = useState<InspectCandle>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(() => typeof window === "undefined" ? 800 : window.innerHeight);
   const display = useMemo(() => aggregate(candles, frame.seconds), [candles, frame.seconds]);
   const format = useMemo(() => precisionFor(display), [display]);
   const current = inspect || display.at(-1) || null;
   const delta = current && current.open > 0 ? ((current.close / current.open) - 1) * 100 : 0;
+  const chartHeight = fullscreen ? Math.max(320, viewportHeight - (showTimeframes ? 148 : 112)) : height;
+  const hasData = display.length > 0;
+
+  useEffect(() => {
+    byTimeRef.current = new Map(display.map((candle) => [Number(candle.time), candle]));
+  }, [display]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onResize = () => setViewportHeight(window.innerHeight);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFullscreen(false); };
+    window.addEventListener("resize", onResize, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fullscreen]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !display.length) {
+    if (!container || !hasData) {
       chartRef.current = null;
+      priceSeriesRef.current = null;
+      volumeSeriesRef.current = null;
       return;
     }
 
     const chart = createChart(container, {
       width: container.clientWidth,
-      height,
+      height: chartHeight,
       layout: {
         background: { type: ColorType.Solid, color: "#06080a" },
         textColor: "#747b85",
@@ -116,8 +164,9 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
       priceLineColor: "rgba(198,170,88,.7)",
       priceLineWidth: 1,
       lastValueVisible: true,
-      priceFormat: { type: "price", precision: format.precision, minMove: format.minMove },
+      priceFormat: { type: "price", precision: 8, minMove: 0.00000001 },
     });
+    priceSeriesRef.current = priceSeries;
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
@@ -125,11 +174,53 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
       lastValueVisible: false,
       priceLineVisible: false,
     });
+    volumeSeriesRef.current = volumeSeries;
     chart.priceScale("volume").applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
       visible: false,
     });
 
+    let crosshairRaf = 0;
+    let pendingTimestamp: number | null = null;
+    const crosshairHandler = (param: MouseEventParams<Time>) => {
+      pendingTimestamp = eventTimestamp(param.time);
+      if (crosshairRaf) return;
+      crosshairRaf = window.requestAnimationFrame(() => {
+        crosshairRaf = 0;
+        const timestamp = pendingTimestamp;
+        setInspect(timestamp != null && Number.isFinite(timestamp) ? byTimeRef.current.get(timestamp) || null : null);
+      });
+    };
+    chart.subscribeCrosshairMove(crosshairHandler);
+
+    let resizeRaf = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.max(1, Math.floor(entry.contentRect.width));
+      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
+      resizeRaf = window.requestAnimationFrame(() => {
+        resizeRaf = 0;
+        chart.resize(width, chartHeight);
+      });
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
+      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
+      chart.unsubscribeCrosshairMove(crosshairHandler);
+      priceSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      chartRef.current = null;
+      chart.remove();
+    };
+  }, [chartHeight, hasData]);
+
+  useEffect(() => {
+    const priceSeries = priceSeriesRef.current;
+    const volumeSeries = volumeSeriesRef.current;
+    if (!priceSeries || !volumeSeries || !display.length) return;
+    priceSeries.applyOptions({ priceFormat: { type: "price", precision: format.precision, minMove: format.minMove } });
     priceSeries.setData(display.map((candle) => ({
       time: candle.time as UTCTimestamp,
       open: candle.open,
@@ -142,49 +233,15 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
       value: candle.volume,
       color: candle.close >= candle.open ? "rgba(40,201,137,.26)" : "rgba(242,95,109,.25)",
     })));
-
-    const byTime = new Map(display.map((candle) => [Number(candle.time), candle]));
-    let crosshairRaf = 0;
-    let pendingTimestamp: number | null = null;
-    const crosshairHandler = (param: any) => {
-      pendingTimestamp = param.time == null ? null : (typeof param.time === "number" ? param.time : Number(param.time));
-      if (crosshairRaf) return;
-      crosshairRaf = window.requestAnimationFrame(() => {
-        crosshairRaf = 0;
-        const timestamp = pendingTimestamp;
-        setInspect(timestamp != null && Number.isFinite(timestamp) ? byTime.get(timestamp) || null : null);
-      });
-    };
-    chart.subscribeCrosshairMove(crosshairHandler);
-    chart.timeScale().fitContent();
-
-    let resizeRaf = 0;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = Math.max(1, Math.floor(entry.contentRect.width));
-      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
-      resizeRaf = window.requestAnimationFrame(() => {
-        resizeRaf = 0;
-        chart.resize(width, height);
-      });
-    });
-    observer.observe(container);
-
-    return () => {
-      observer.disconnect();
-      if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
-      if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
-      chart.unsubscribeCrosshairMove(crosshairHandler);
-      chartRef.current = null;
-      chart.remove();
-    };
-  }, [display, format.minMove, format.precision, height]);
+    if (chartRef.current && display.length <= 2) chartRef.current.timeScale().fitContent();
+  }, [display, format.minMove, format.precision]);
 
   function fit() {
     chartRef.current?.timeScale().fitContent();
   }
 
-  return (
-    <div className="min-w-0">
+  const body = (
+    <div className={fullscreen ? "flex h-full min-h-0 flex-col" : "min-w-0"}>
       <div className="mb-2 flex min-w-0 items-end justify-between gap-3">
         <div className="min-w-0">
           {current ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px]">
@@ -196,14 +253,22 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
             <span className="text-[var(--muted)]">V {compactNumber(current.volume)} TON</span>
           </div> : <p className="text-[10px] text-[var(--muted)]">История цены</p>}
         </div>
-        {display.length ? <button type="button" onClick={fit} className="inline-flex shrink-0 items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title="Показать весь график"><Maximize2 size={12} />Весь график</button> : null}
+        <div className="flex shrink-0 items-center gap-3">
+          {display.length ? <button type="button" onClick={fit} className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title="Вместить данные"><RotateCcw size={12} />Сброс</button> : null}
+          <button type="button" onClick={() => setFullscreen((value) => !value)} className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title={fullscreen ? "Закрыть полный экран" : "Открыть на весь экран"}>{fullscreen ? <X size={13} /> : <Maximize2 size={12} />}{fullscreen ? "Закрыть" : "На весь экран"}</button>
+        </div>
       </div>
 
       {showTimeframes ? <div className="mxm-hscroll mb-2 gap-4 border-b border-[var(--border-soft)] pb-1">
         {timeframes.map((item) => <button key={item.key} type="button" onClick={() => { setFrame(item); setInspect(null); }} className={`relative shrink-0 py-1.5 text-[10px] transition ${frame.key === item.key ? "text-white" : "text-[var(--muted)] hover:text-white"}`}>{item.key}{frame.key === item.key ? <span className="absolute inset-x-0 -bottom-[5px] h-px bg-[var(--accent)]" /> : null}</button>)}
       </div> : null}
 
-      {display.length ? <div ref={containerRef} className="w-full overflow-hidden" style={{ minHeight: height }} /> : <div style={{ height }} className="grid place-items-center border-y border-[var(--border-soft)] text-xs text-[var(--muted)]">Недостаточно сделок для свечного графика.</div>}
+      {display.length ? <div ref={containerRef} className="w-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: chartHeight }} /> : <div style={{ height: chartHeight }} className="grid place-items-center border-y border-[var(--border-soft)] text-xs text-[var(--muted)]">Недостаточно сделок для свечного графика.</div>}
     </div>
   );
+
+  if (fullscreen) {
+    return <div className="fixed inset-0 z-[120] bg-[#06080a] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-[max(10px,env(safe-area-inset-top))] md:px-5">{body}</div>;
+  }
+  return body;
 }

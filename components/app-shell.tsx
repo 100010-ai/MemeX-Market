@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Activity, Boxes, Dices, Gem, ListChecks, ReceiptText, Store, Trophy, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
+import { PerfOverlay } from "@/components/dev/perf-overlay";
 
 const nav = [
   { href: "/market", label: "Маркет", icon: Store },
@@ -74,6 +75,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         })}
       </nav>
 
+      <PerfOverlay />
       {modal}
     </div>
   );

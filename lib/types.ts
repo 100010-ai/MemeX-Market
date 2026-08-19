@@ -121,6 +121,21 @@ export type GiftAsset = {
   listingPrice: number | null;
   lastSalePrice: number | null;
   estimatedValue: number | null;
+  externalListingPrice: number | null;
+  externalPriceSource: string | null;
+  externalPriceSeenAt: string | null;
+  referencePrice: number | null;
+  priceBasis: "mxm_listing" | "tonapi_listing" | "item_last_sale" | "collection_last_sale" | null;
+  collectionFloor: number | null;
+  modelFloor: number | null;
+  backdropFloor: number | null;
+  symbolFloor: number | null;
+  chainNftAddress: string | null;
+  chainCollectionAddress: string | null;
+  chainVerified: boolean;
+  listedAt: string | null;
+  listingUpdatedAt: string | null;
+  listingExpiresAt: string | null;
   status: "owned" | "listed";
   createdAt: string;
 };
@@ -135,6 +150,13 @@ export type GiftCollection = {
   volume24h: number;
   change24h: number;
   tradeCount24h: number;
+  volume7d: number;
+  tradeCount7d: number;
+  listedPct: number;
+  allTimeVolume: number;
+  totalSales: number;
+  highSale: number | null;
+  externalFloor: number | null;
 };
 
 export type GiftTrade = {
@@ -145,6 +167,16 @@ export type GiftTrade = {
   buyerName: string;
   sellerId: string | null;
   sellerName: string | null;
+};
+
+export type GiftActivity = {
+  id: string;
+  kind: "listed" | "repriced" | "unlisted" | "expired" | "sold" | "offer_accepted" | "sale" | "offer";
+  price: number | null;
+  previousPrice: number | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
 };
 
 export type GiftOffer = {
@@ -168,7 +200,9 @@ export type GiftTraitStats = {
   backdropFloor: number | null;
   symbolFloor: number | null;
   collectionLastSale: number | null;
-  estimatedValue: number | null;
+  externalListingPrice: number | null;
+  referencePrice: number | null;
+  priceBasis: GiftAsset["priceBasis"];
 };
 
 export type MissionPeriod = "onboarding" | "daily" | "weekly";
@@ -265,6 +299,7 @@ export type GiftTraitGroup = {
 export type GiftCollectionDetail = {
   collection: GiftCollection;
   gifts: GiftAsset[];
+  nextOffset: number | null;
   candles: Candle[];
   models: GiftTraitGroup[];
   backdrops: GiftTraitGroup[];

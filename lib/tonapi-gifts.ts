@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
+import { tonApiGet } from "@/lib/providers/tonapi-client";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -85,8 +86,6 @@ const BOOTSTRAP_COLLECTIONS = [
 ] as const;
 const BOOTSTRAP_COLLECTION_SET = new Set<string>(BOOTSTRAP_COLLECTIONS.map((item) => item.address));
 const BOOTSTRAP_COLLECTION_NAME = new Map<string, string>(BOOTSTRAP_COLLECTIONS.map((item) => [item.address, item.name]));
-const TONAPI_BASE = "https://tonapi.io";
-const REQUEST_TIMEOUT_MS = 8_000;
 
 function str(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -317,69 +316,8 @@ function sourceIdentity(item: ParsedItem) {
   return item.telegramSlug || `ton:${item.address}`;
 }
 
-let unauthenticatedNextRequestAt = 0;
-let unauthenticatedQueue = Promise.resolve();
-
-async function respectTonApiLimit(authenticated: boolean) {
-  if (authenticated) return;
-  const previous = unauthenticatedQueue;
-  let release!: () => void;
-  unauthenticatedQueue = new Promise<void>((resolve) => { release = resolve; });
-  await previous;
-  const wait = Math.max(0, unauthenticatedNextRequestAt - Date.now());
-  if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-  unauthenticatedNextRequestAt = Date.now() + 4_150;
-  release();
-}
-
-function retryDelay(attempt: number, retryAfter: string | null) {
-  const seconds = Number(retryAfter);
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(1_500, Math.max(150, seconds * 1000));
-  return 220 * (attempt + 1);
-}
-
 async function tonapi<T>(path: string): Promise<T> {
-  const key = process.env.TONAPI_KEY?.trim();
-  let authenticated = Boolean(key);
-  let authFallbackUsed = false;
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      await respectTonApiLimit(authenticated);
-      const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.17" };
-      if (authenticated && key) headers.authorization = `Bearer ${key}`;
-
-      const response = await fetch(`${TONAPI_BASE}${path}`, { headers, signal: controller.signal, cache: "no-store" });
-      if (response.ok) return await response.json() as T;
-
-      // TonAPI's public REST methods are available without authentication at a
-      // lower rate limit. An expired/mistyped TONAPI_KEY must therefore not
-      // brick the whole Gift catalog with 401/403: retry once anonymously and
-      // let the unauthenticated 1-request-per-4s limiter take over.
-      if ((response.status === 401 || response.status === 403) && authenticated && !authFallbackUsed) {
-        authenticated = false;
-        authFallbackUsed = true;
-        lastError = new Error(`TonAPI ${response.status}: configured TONAPI_KEY was rejected; retrying without it`);
-        continue;
-      }
-
-      const transient = response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504;
-      lastError = new Error(`TonAPI ${response.status} for ${path}`);
-      if (!transient || attempt === 3) throw lastError;
-      await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, response.headers.get("retry-after"))));
-    } catch (cause) {
-      lastError = cause instanceof Error ? cause : new Error("TonAPI request failed");
-      const transient = lastError.name === "AbortError" || /fetch|network|timeout|TonAPI (429|502|503|504)/i.test(lastError.message);
-      if (!transient || attempt === 3) throw lastError;
-      await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, null)));
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  throw lastError || new Error("TonAPI request failed");
+  return tonApiGet<T>(path, { cacheTtlMs: path.includes("/items?") ? 12_000 : 60_000, allowStaleOnFailure: true });
 }
 
 async function upsertCollection(collection: TonCollection) {
@@ -550,6 +488,66 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
       }
     } else {
       upserted = rows.length;
+    }
+  }
+
+  const priced = parsed.filter((item) => item.resalePriceTon != null && item.resalePriceTon > 0);
+  if (priced.length) {
+    const assetLookup = await supabase
+      .from("gift_assets")
+      .select("id,chain_nft_address,base_name")
+      .in("chain_nft_address", priced.map((item) => item.address));
+    if (!assetLookup.error) {
+      const byAddress = new Map((assetLookup.data || []).map((row) => [String(row.chain_nft_address), row]));
+      const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+      const assetIds = [...byAddress.values()].map((asset) => String(asset.id));
+      const recentResult = assetIds.length
+        ? await supabase
+          .from("gift_price_observations")
+          .select("asset_id,price_ton,observed_at")
+          .in("asset_id", assetIds)
+          .eq("source", "tonapi")
+          .eq("kind", "listing")
+          .gte("observed_at", recentCutoff)
+          .order("observed_at", { ascending: false })
+        : { data: [], error: null };
+      const recentPrice = new Map<string, number>();
+      if (!recentResult.error) {
+        for (const row of recentResult.data || []) {
+          const assetId = String(row.asset_id || "");
+          if (!assetId || recentPrice.has(assetId)) continue;
+          const value = Number(row.price_ton);
+          if (Number.isFinite(value) && value > 0) recentPrice.set(assetId, value);
+        }
+      } else if (recentResult.error.code !== "42P01") {
+        console.warn("TonAPI price observation lookup", recentResult.error);
+      }
+
+      const observations = priced.flatMap((item) => {
+        const asset = byAddress.get(item.address);
+        if (!asset || item.resalePriceTon == null) return [];
+        const assetId = String(asset.id);
+        const previous = recentPrice.get(assetId);
+        // Keep enough history for charts/audit without inserting an identical
+        // row on every bounded catalogue refresh.
+        if (previous != null && Math.abs(previous - item.resalePriceTon) < 1e-9) return [];
+        return [{
+          asset_id: asset.id,
+          base_name: String(asset.base_name || item.baseName),
+          source: "tonapi",
+          kind: "listing",
+          currency: "TON",
+          price_ton: item.resalePriceTon,
+          source_ref: item.address,
+          observed_at: now,
+        }];
+      });
+      if (observations.length) {
+        const observationResult = await supabase.from("gift_price_observations").insert(observations);
+        // v0.30 migration may not be deployed yet during a rolling deploy;
+        // price history is auxiliary and must not break the catalog sync.
+        if (observationResult.error && observationResult.error.code !== "42P01") console.warn("TonAPI price observations", observationResult.error);
+      }
     }
   }
 

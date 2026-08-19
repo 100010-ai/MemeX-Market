@@ -4,6 +4,8 @@ const exactErrors: Record<string, string> = {
   "Insufficient available balance for this offer": "Недостаточно доступного баланса для этого оффера.",
   "Invalid offer amount": "Некорректная сумма оффера.",
   "Gift is not listed": "Подарок уже снят с продажи.",
+  "Gift listing expired": "Срок этого листинга истёк.",
+  "Offer expired": "Срок оффера истёк.",
   "You already own this Gift": "Этот подарок уже принадлежит вам.",
   "Gift not found": "Подарок не найден.",
   "Coin not found": "Коин не найден.",
@@ -32,6 +34,40 @@ function localizeApiError(message: string): string {
 
 type ApiRequestInit = RequestInit & { timeoutMs?: number };
 
+type ApiPerfState = {
+  total: number;
+  failures: number;
+  inFlight: number;
+  lastLatencyMs: number;
+  avgLatencyMs: number;
+  slowestLatencyMs: number;
+};
+
+const apiPerf: ApiPerfState = {
+  total: 0,
+  failures: 0,
+  inFlight: 0,
+  lastLatencyMs: 0,
+  avgLatencyMs: 0,
+  slowestLatencyMs: 0,
+};
+
+function markCompleted(startedAt: number, failed: boolean) {
+  const latency = Math.max(0, Date.now() - startedAt);
+  apiPerf.inFlight = Math.max(0, apiPerf.inFlight - 1);
+  apiPerf.total += 1;
+  if (failed) apiPerf.failures += 1;
+  apiPerf.lastLatencyMs = latency;
+  apiPerf.slowestLatencyMs = Math.max(apiPerf.slowestLatencyMs, latency);
+  apiPerf.avgLatencyMs = apiPerf.total === 1
+    ? latency
+    : Math.round((apiPerf.avgLatencyMs * 0.82) + (latency * 0.18));
+}
+
+export function getApiPerfSnapshot() {
+  return { ...apiPerf };
+}
+
 export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise<T> {
   const { timeoutMs = 55_000, signal: callerSignal, ...requestInit } = init || {};
   const headers = new Headers(requestInit.headers);
@@ -44,6 +80,10 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
   if (callerSignal?.aborted) controller.abort();
   else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
 
+  const startedAt = Date.now();
+  apiPerf.inFlight += 1;
+  let failed = false;
+
   try {
     const response = await fetch(input, { ...requestInit, headers, signal: controller.signal, cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
@@ -53,9 +93,11 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
     }
     return payload as T;
   } catch (error) {
+    failed = true;
     if (controller.signal.aborted && !callerSignal?.aborted) throw new Error("Сервер отвечает слишком долго. Повторите запрос.");
     throw error;
   } finally {
+    markCompleted(startedAt, failed);
     clearTimeout(timeout);
     callerSignal?.removeEventListener("abort", abortFromCaller);
   }

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
+import { maybeMaintainGiftMarket } from "@/lib/market/maintenance";
+import type { GiftCollection } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +14,7 @@ function intParam(value: string | null, fallback: number, min: number, max: numb
   return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
-function mapCollection(row: any) {
+function mapCollection(row: Record<string, unknown>): GiftCollection {
   return {
     baseName: String(row.base_name),
     itemCount: Number(row.item_count),
@@ -23,6 +25,13 @@ function mapCollection(row: any) {
     volume24h: Number(row.volume_24h),
     change24h: Number(row.change_24h),
     tradeCount24h: Number(row.trade_count_24h),
+    volume7d: Number(row.volume_7d || 0),
+    tradeCount7d: Number(row.trade_count_7d || 0),
+    listedPct: Number(row.listed_pct || 0),
+    allTimeVolume: Number(row.all_time_volume || 0),
+    totalSales: Number(row.total_sales || 0),
+    highSale: row.high_sale == null ? null : Number(row.high_sale),
+    externalFloor: row.external_floor == null ? null : Number(row.external_floor),
   };
 }
 
@@ -31,6 +40,7 @@ export async function GET(request: NextRequest) {
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const scope = request.nextUrl.searchParams.get("scope") === "coins" ? "coins" : "gifts";
+  if (scope === "gifts") await maybeMaintainGiftMarket();
 
   try {
     const watchlistPromise = supabase.from("user_watchlist").select("kind,coin_id,gift_collection").eq("profile_id", profile.id);
@@ -81,16 +91,14 @@ export async function GET(request: NextRequest) {
     const firstError = giftsResult.error || countResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error;
     if (firstError) throw firstError;
 
-    const rawGifts = (giftsResult.data || []) as any[];
+    const rawGifts = (giftsResult.data || []) as Array<Record<string, unknown>>;
     const totalGifts = Number(countResult.data || 0);
     const nextOffset = offset + rawGifts.length < totalGifts ? offset + rawGifts.length : null;
-    const visibleCollections = new Set(rawGifts.map((row) => String(row.base_name)));
-
     return NextResponse.json({
       scope,
       coins: [],
       gifts: rawGifts.map(mapGift),
-      collections: (collectionsResult.data || []).filter((row: any) => visibleCollections.has(String(row.base_name))).map(mapCollection),
+      collections: (collectionsResult.data || []).map((row) => mapCollection(row as Record<string, unknown>)),
       totalGifts,
       nextOffset,
       marketSeed,

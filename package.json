@@ -1,15 +1,16 @@
 {
   "name": "mxm-telegram-miniapp",
-  "version": "0.18.0",
+  "version": "0.30.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "node node_modules/eslint/bin/eslint.js .",
     "typecheck": "tsc --noEmit",
     "admin": "next dev -H 127.0.0.1 -p 3000",
-    "env:check": "node scripts/check-env.mjs"
+    "env:check": "node scripts/check-env.mjs",
+    "release:check": "node scripts/release-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

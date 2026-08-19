@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ status: "cancelled" });
   }
   if (action === "accept" || action === "reject") {
-    const { data, error } = await supabase.rpc("resolve_gift_offer", { p_owner_id: profile.id, p_offer_id: id, p_action: action });
+    const { data, error } = await supabase.rpc("resolve_gift_offer_v2", { p_owner_id: profile.id, p_offer_id: id, p_action: action });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json(data);
   }

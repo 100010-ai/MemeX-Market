@@ -1,20 +1,34 @@
-# MemeX Market (MXM) v0.18.0
+# MXM Market v0.30.0
 
-Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
+Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
-## v0.18 — Mobile FPS + smooth motion
+> MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
-- Compact Telegram/TON Gift animations now use a strict mobile animation budget: only the visible row is animated on touch devices.
-- Off-screen Lottie/video media is paused or destroyed; all active media pauses while the user scrolls and resumes shortly after scrolling stops.
-- Market-card Lottie uses the Canvas renderer and medium curve quality, while the NFT detail keeps the higher-fidelity SVG renderer.
-- Added shared viewport observers and a small parsed-Lottie LRU cache to avoid dozens of independent observers, repeated JSON parsing and runaway animation loops.
-- Gift cards use CSS containment/content-visibility so off-screen cards are skipped by layout/paint where supported.
-- Mobile backdrop blur was removed from sticky bars/sheets; desktop keeps the glass effect.
-- Skeleton shimmer was moved from background-position repainting to compositor transforms.
-- Gift pagination is 36 per page instead of 72, with a smaller prefetch window, reducing DOM/memory pressure without removing infinite scrolling.
-- Market filtering uses `useDeferredValue`, realtime refresh is less aggressive and idle-scheduled, and chart pointer/resize updates are animation-frame throttled.
-- Page/sheet/card transitions were retuned to short transform/opacity animations for smoother interaction.
-- No database migration is required when upgrading from v0.17.
+## v0.30 — Market Foundation
+
+This release consolidates the v0.14–v0.18 fixes into a stricter market architecture instead of adding more one-off fallbacks.
+
+- **Gift resolver:** one canonical resolver accepts the MXM virtual Gift UUID, asset UUID, Telegram collectible slug, `t.me/nft/...` URL and TON NFT address. Detail pages and mutations stay attached to the canonical virtual Gift ID.
+- **TonAPI reliability:** timeout, bounded retries/backoff, public 4.15s pacing, invalid-token 401/403 fallback, memory cache, stale-on-failure reads and a circuit breaker. Provider health is exposed to the authenticated diagnostics endpoint without exposing secrets.
+- **Real price provenance:** no synthetic NFT valuation. MXM separates its own listing, external native-TON listing, item last sale and collection last sale. External quotes expire from the live-reference view after the configured freshness window.
+- **Market data:** collection/MXM floors, model/backdrop/symbol floors, best offer, 24h/7d volume and sales, listed percentage, all-time volume, high sale and external floor.
+- **NFT detail 2.0:** price source/timestamp, floor premium, trait floors, offers, activity timeline, listing/offer expiries and price chart.
+- **Trading hardening:** listing/repricing/unlisting history, offer expiry, atomic row-locked purchase/offer acceptance, atomic multi-item cart checkout, server-side balance validation, marketplace fee support and idempotent purchase request keys.
+- **Finite Genesis:** system Gifts remain a one-time release pool; once bought by players they are not recreated by NPC liquidity. Genesis accepts only fresh native-TON quotes, keeps system inventory listed without a user TTL, and hides it when the external quote becomes stale.
+- **Collections 2.0:** filters by model/backdrop/symbol, search, rarity/price/offers/newest sorting, exact database-side trait aggregation, paginated active listings, expanded market metrics, trait floors, recent sales and fullscreen price chart.
+- **Memecoin chart:** chart data no longer rebuilds the chart object for every data update; timeframes, crosshair, volume, pinch zoom and fullscreen mode are retained.
+- **Performance diagnostics:** `?perf=1` enables FPS, DOM, media budget, Lottie cache, API latency/errors, realtime state and JS heap counters. `?perf=0` disables it.
+- **Release gate:** `npm run release:check` checks critical files, secret hygiene, TypeScript and ESLint before deployment. See `docs/RELEASE_CHECKLIST.md`.
+
+### Database upgrade
+
+After migrations through v0.16 are present, apply:
+
+```text
+supabase/migrations/017_v030_market_foundation.sql
+```
+
+The migration creates/updates the market settings, price-observation and listing-history infrastructure plus the v2 Gift trading RPCs/views. Apply it before deploying the v0.30 application code.
 
 ## v0.17 — Build fix + TonAPI auth fallback
 
@@ -185,13 +199,3 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 - Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
 
 No new database migration is required beyond `014_v012_tonapi_polish.sql`.
-
-
-## v0.18 Performance
-
-- Gift animations are viewport-aware and pause while scrolling or when the app is hidden.
-- Compact Lottie cards use Canvas and a device-aware concurrent animation budget.
-- Parsed Lottie payloads use a small LRU cache; off-screen animations are destroyed.
-- Market pagination is reduced to 36 items per page to keep the mobile DOM small.
-- Mobile glass blur is disabled, skeletons use compositor transforms, and gift cards use CSS containment/content-visibility.
-- Search filtering is deferred and chart pointer/resize updates are animation-frame throttled.

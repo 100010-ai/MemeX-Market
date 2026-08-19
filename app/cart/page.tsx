@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Gem, ShoppingCart, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { GiftAsset } from "@/lib/types";
@@ -11,12 +11,19 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 
 type CartPayload = { items: GiftAsset[]; total: number; count: number };
 
+function makeCheckoutRequestKey() {
+  const randomUuid = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUuid) return `cart:${randomUuid()}`;
+  return `cart:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 14)}`;
+}
+
 export default function CartPage() {
   const [data, setData] = useState<CartPayload>({ items: [], total: 0, count: 0 });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { profile, refreshProfile, haptic } = useTelegramProfile();
+  const checkoutRequestKey = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await apiFetch<CartPayload>("/api/cart")); setError(null); }
@@ -27,6 +34,7 @@ export default function CartPage() {
 
   async function remove(id: string) {
     if (busy) return;
+    checkoutRequestKey.current = null;
     setBusy(id); haptic("light");
     try {
       await apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: "remove", virtualGiftId: id }) });
@@ -37,6 +45,7 @@ export default function CartPage() {
 
   async function clear() {
     if (busy) return;
+    checkoutRequestKey.current = null;
     setBusy("clear");
     try { await apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: "clear" }) }); await load(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось очистить корзину"); }
@@ -47,7 +56,9 @@ export default function CartPage() {
     if (busy || !data.items.length) return;
     setBusy("checkout"); setError(null); haptic("medium");
     try {
-      await apiFetch("/api/cart/checkout", { method: "POST", body: "{}" });
+      checkoutRequestKey.current ||= makeCheckoutRequestKey();
+      await apiFetch("/api/cart/checkout", { method: "POST", body: "{}", headers: { "x-idempotency-key": checkoutRequestKey.current } });
+      checkoutRequestKey.current = null;
       await Promise.all([load(), refreshProfile()]);
       haptic("heavy");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось купить корзину"); }
@@ -71,7 +82,7 @@ export default function CartPage() {
       </div>)}
     </div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] px-4 py-10 text-center"><div className="mx-auto grid h-11 w-11 place-items-center rounded-[18px] bg-[var(--panel-2)] text-[var(--muted)]"><ShoppingCart size={18} /></div><p className="mt-3 text-xs font-medium">Корзина пуста</p><p className="mt-1 text-[11px] text-[var(--muted)]">Добавляй активные лоты прямо из каталога.</p><Link href="/market" className="mt-4 inline-flex rounded-[16px] bg-[var(--panel-3)] px-4 py-2.5 text-xs font-medium">Открыть маркет</Link></div>}
 
-    {data.items.length ? <div className="sticky bottom-[calc(66px+env(safe-area-inset-bottom))] mt-3 rounded-[20px] border border-[var(--border)] bg-[rgba(14,15,17,.96)] p-3 shadow-[0_-12px_30px_rgba(0,0,0,.32)] backdrop-blur-xl lg:bottom-3">
+    {data.items.length ? <div className="sticky bottom-[calc(66px+env(safe-area-inset-bottom))] mt-3 rounded-[20px] border border-[var(--border)] bg-[rgba(14,15,17,.96)] p-3 shadow-[0_-12px_30px_rgba(0,0,0,.32)] mxm-floating-glass lg:bottom-3">
       <div className="mb-2.5 flex items-center justify-between"><div><p className="text-[10px] text-[var(--muted)]">{data.count} подарков</p><p className="mt-0.5 flex items-center gap-1 text-sm font-semibold"><Gem size={13} fill="currentColor" />{money(data.total)}</p></div><p className="text-right text-[10px] text-[var(--muted)]">Доступно<br/><span className="text-white">{profile ? money(profile.availableBalance) : "—"}</span></p></div>
       <button disabled={Boolean(busy) || !profile || profile.availableBalance < data.total} onClick={checkout} className="h-11 w-full rounded-[17px] bg-[var(--accent)] text-xs font-bold text-[#111] disabled:opacity-40">{busy === "checkout" ? "Покупаем…" : profile && profile.availableBalance < data.total ? "Недостаточно TON" : `Купить всё · ${money(data.total)}`}</button>
     </div> : null}

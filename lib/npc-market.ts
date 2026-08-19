@@ -45,9 +45,7 @@ function rarityScore(candidate: Candidate) {
 
 function observedPrice(candidate: Candidate) {
   const value = Number(candidate.observed_price_ton);
-  if (!Number.isFinite(value) || value <= 0 || value > 1_000_000) {
-    throw new Error(`Gift ${candidate.asset_id} has no valid observed TON listing price`);
-  }
+  if (!Number.isFinite(value) || value <= 0 || value > 1_000_000) return null;
   // Preserve real marketplace precision instead of manufacturing a rounded
   // pseudo-price. PostgreSQL stores up to 9 fractional TON digits here.
   return Math.round(value * 1_000_000_000) / 1_000_000_000;
@@ -121,6 +119,7 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
       const chunk = candidates.slice(start, start + 12);
       const results = await Promise.all(chunk.map(async (candidate) => {
         const price = observedPrice(candidate);
+        if (price == null) return false;
         const seeded = await supabase.rpc("npc_seed_virtual_gift", {
           p_asset_id: candidate.asset_id,
           // The DB function also re-reads the observed asset price and ignores
@@ -133,7 +132,7 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
           p_desk: Math.abs(Number(candidate.gift_number) || 0) % 3,
         });
         if (seeded.error) {
-          if (/already|unique|duplicate/i.test(String(seeded.error.message || ""))) return false;
+          if (/already|unique|duplicate|fresh observed native TON listing price|observed native TON listing price is required/i.test(String(seeded.error.message || ""))) return false;
           throw seeded.error;
         }
         return true;

@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, Gem, Layers3, Star, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, BarChart3, Gem, Layers3, RefreshCw, Search, Star, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ago, money, percent } from "@/lib/format";
-import type { GiftCollectionDetail, GiftTraitGroup } from "@/lib/types";
+import type { GiftAsset, GiftCollectionDetail, GiftTraitGroup } from "@/lib/types";
 import { CoinChart } from "@/components/coin-chart";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 
-const realtimeTables = ["virtual_gifts", "gift_trades", "market_events"];
+const realtimeTables = ["virtual_gifts", "gift_trades", "gift_offers", "gift_listing_events", "market_events"];
 
 type TraitTab = "models" | "backdrops" | "symbols";
+type GiftSort = "price-asc" | "price-desc" | "rarity" | "number" | "newest" | "offers";
+
+function rarest(gift: GiftAsset) {
+  return Math.min(gift.modelRarityPerMille, gift.backdropRarityPerMille, gift.symbolRarityPerMille);
+}
 
 export default function GiftCollectionPage() {
   const { name } = useParams<{ name: string }>();
@@ -22,6 +27,13 @@ export default function GiftCollectionPage() {
   const [traitTab, setTraitTab] = useState<TraitTab>("models");
   const [busyWatch, setBusyWatch] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [model, setModel] = useState("all");
+  const [backdrop, setBackdrop] = useState("all");
+  const [symbol, setSymbol] = useState("all");
+  const [sort, setSort] = useState<GiftSort>("price-asc");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setData(null);
@@ -36,6 +48,51 @@ export default function GiftCollectionPage() {
 
   useEffect(() => { void load(); }, [load]);
   const reload = useCallback(() => { void load(true); }, [load]);
+
+  const loadMore = useCallback(async () => {
+    if (!data || data.nextOffset == null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const payload = await apiFetch<{ gifts: GiftAsset[]; nextOffset: number | null }>(`/api/collections/${encodeURIComponent(decodedName)}/listings?offset=${data.nextOffset}&limit=48`);
+      setData((current) => {
+        if (!current) return current;
+        const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
+        return { ...current, gifts: [...current.gifts, ...payload.gifts.filter((gift) => !seen.has(gift.virtualGiftId))], nextOffset: payload.nextOffset };
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось загрузить следующие лоты");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [data, decodedName, loadingMore]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node || !data || data.nextOffset == null) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "320px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [data, loadMore]);
+
+  const visibleGifts = useMemo(() => {
+    if (!data) return [];
+    const needle = query.trim().toLowerCase();
+    return data.gifts
+      .filter((gift) => !needle || `${gift.baseName} ${gift.number} ${gift.modelName} ${gift.backdropName} ${gift.symbolName}`.toLowerCase().includes(needle))
+      .filter((gift) => model === "all" || gift.modelName === model)
+      .filter((gift) => backdrop === "all" || gift.backdropName === backdrop)
+      .filter((gift) => symbol === "all" || gift.symbolName === symbol)
+      .sort((a, b) => {
+        if (sort === "price-desc") return (b.listingPrice ?? 0) - (a.listingPrice ?? 0);
+        if (sort === "rarity") return rarest(a) - rarest(b) || a.number - b.number;
+        if (sort === "number") return a.number - b.number;
+        if (sort === "newest") return new Date(b.listedAt || b.createdAt).getTime() - new Date(a.listedAt || a.createdAt).getTime();
+        if (sort === "offers") return b.offerCount - a.offerCount || (b.bestOffer ?? 0) - (a.bestOffer ?? 0);
+        return (a.listingPrice ?? Number.MAX_SAFE_INTEGER) - (b.listingPrice ?? Number.MAX_SAFE_INTEGER);
+      });
+  }, [data, query, model, backdrop, symbol, sort]);
 
   async function toggleWatch() {
     if (!data || busyWatch) return;
@@ -53,7 +110,7 @@ export default function GiftCollectionPage() {
   }
 
   if (!data) {
-    return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[520px] rounded-2xl" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
+    return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[520px] rounded-2xl" />{error ? <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-[#5a3035] bg-[#181012] px-3 py-2.5 text-xs text-[#ff9aa4]"><span>{error}</span><button onClick={() => void load()} className="inline-flex shrink-0 items-center gap-1 text-white"><RefreshCw size={12} />Повторить</button></div> : null}</div>;
   }
 
   const traits = traitTab === "models" ? data.models : traitTab === "backdrops" ? data.backdrops : data.symbols;
@@ -71,12 +128,12 @@ export default function GiftCollectionPage() {
         <div className="px-3 py-4 md:px-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted)]">Коллекция подарков Telegram</p>
+              <p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted)]">Telegram Gifts · MXM secondary market</p>
               <h1 className="mt-1 truncate text-base font-semibold tracking-tight md:text-lg">{c.baseName}</h1>
-              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} предметов · {c.listedCount} в продаже</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} предметов · {c.holderCount} владельцев · {c.listedPct.toFixed(1)}% выставлено</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-[var(--muted)]">Флор</p>
+              <p className="text-[10px] text-[var(--muted)]">MXM floor</p>
               <p className="mt-1 flex items-center justify-end gap-1 text-base font-semibold"><Gem size={14} fill="currentColor" />{c.floorPrice == null ? "—" : money(c.floorPrice)}</p>
               <p className={`mt-1 text-[11px] ${c.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(c.change24h)} 24h</p>
             </div>
@@ -87,6 +144,12 @@ export default function GiftCollectionPage() {
           <Metric icon={<Users size={12} />} label="Владельцы" value={String(c.holderCount)} />
           <Metric icon={<Layers3 size={12} />} label="Лоты" value={String(c.listedCount)} />
           <Metric icon={<Gem size={12} />} label="Последняя продажа" value={c.lastSalePrice == null ? "—" : money(c.lastSalePrice)} />
+        </div>
+        <div className="grid grid-cols-4 border-t border-[var(--border-soft)]">
+          <Metric icon={<BarChart3 size={12} />} label="Объём 7д" value={money(c.volume7d)} />
+          <Metric icon={<Gem size={12} />} label="Продажи 7д" value={String(c.tradeCount7d)} />
+          <Metric icon={<Gem size={12} />} label="High sale" value={c.highSale == null ? "—" : money(c.highSale)} />
+          <Metric icon={<Gem size={12} />} label="Внешний floor" value={c.externalFloor == null ? "—" : money(c.externalFloor)} />
         </div>
       </section>
 
@@ -106,8 +169,18 @@ export default function GiftCollectionPage() {
           </section>
 
           <section>
-            <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-medium">Подарки в продаже</h2><span className="text-[10px] text-[var(--muted)]">{data.gifts.length} показано</span></div>
-            {data.gifts.length ? <div className="market-grid grid gap-2.5">{data.gifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-xs text-[var(--muted)]">В этой коллекции нет активных лотов.</div>}
+            <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-medium">Подарки в продаже</h2><span className="text-[10px] text-[var(--muted)]">{visibleGifts.length} / {data.gifts.length}</span></div>
+            <div className="mb-2 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-2">
+              <label className="flex h-9 items-center gap-2 border-b border-[var(--border-soft)] px-1"><Search size={14} className="text-[var(--muted)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Номер, модель, фон, символ" className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>
+              <div className="mxm-hscroll mt-2 gap-2">
+                <FilterSelect value={model} onChange={setModel} label="Все модели" values={data.models.map((item) => item.name)} />
+                <FilterSelect value={backdrop} onChange={setBackdrop} label="Все фоны" values={data.backdrops.map((item) => item.name)} />
+                <FilterSelect value={symbol} onChange={setSymbol} label="Все символы" values={data.symbols.map((item) => item.name)} />
+                <select value={sort} onChange={(event) => setSort(event.target.value as GiftSort)} className="h-8 shrink-0 rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-2 text-[10px] outline-none"><option value="price-asc">Цена ↑</option><option value="price-desc">Цена ↓</option><option value="rarity">Редкость</option><option value="offers">Офферы</option><option value="number">Номер</option><option value="newest">Новые лоты</option></select>
+              </div>
+            </div>
+            {visibleGifts.length ? <div className="market-grid grid gap-2.5">{visibleGifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} />)}</div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-xs text-[var(--muted)]">По этим фильтрам активных лотов нет.</div>}
+            <div ref={loadMoreRef} className="mt-3 h-8 text-center text-[10px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё лоты…" : data.nextOffset != null ? "Прокрути ниже — подгрузим дальше" : data.gifts.length ? "Все активные лоты загружены" : ""}</div>
           </section>
         </div>
 
@@ -120,6 +193,10 @@ export default function GiftCollectionPage() {
       </div>
     </div>
   );
+}
+
+function FilterSelect({ value, onChange, label, values }: { value: string; onChange: (value: string) => void; label: string; values: string[] }) {
+  return <select value={value} onChange={(event) => onChange(event.target.value)} className="h-8 max-w-[160px] shrink-0 rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-2 text-[10px] outline-none"><option value="all">{label}</option>{values.map((item) => <option key={item} value={item}>{item}</option>)}</select>;
 }
 
 function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

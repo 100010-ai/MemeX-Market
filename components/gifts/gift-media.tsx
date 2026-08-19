@@ -186,6 +186,17 @@ function refreshPermits() {
   for (const [key, listener] of permitListeners) listener(allowed.has(key));
 }
 
+export function getGiftMediaPerfSnapshot() {
+  const allowed = Math.min(permitListeners.size, animationLimit());
+  return {
+    animationCandidates: permitListeners.size,
+    animationPermits: allowed,
+    animationLimit: animationLimit(),
+    lottieCacheEntries: lottieJsonCache.size,
+    motionPaused,
+  };
+}
+
 function useAnimationPermit(enabled: boolean, key: string, limited: boolean) {
   const [granted, setGranted] = useState(false);
   useEffect(() => {

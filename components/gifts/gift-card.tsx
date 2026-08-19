@@ -8,8 +8,11 @@ import { GiftMedia } from "@/components/gifts/gift-media";
 
 export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = false, onCart }: { gift: GiftAsset; showOwner?: boolean; inCart?: boolean; cartBusy?: boolean; onCart?: (gift: GiftAsset, enabled: boolean) => void }) {
   const isListed = gift.status === "listed";
-  const displayValue = isListed ? gift.listingPrice : gift.estimatedValue;
-  const valueLabel = isListed ? "" : "≈ ";
+  const displayValue = isListed ? gift.listingPrice : (gift.externalListingPrice ?? gift.lastSalePrice ?? gift.referencePrice);
+  const valueLabel = isListed ? "" : gift.externalListingPrice != null ? "ext " : gift.lastSalePrice != null ? "last " : "ref ";
+  const floorDelta = isListed && gift.listingPrice != null && gift.collectionFloor != null && gift.collectionFloor > 0
+    ? ((gift.listingPrice / gift.collectionFloor) - 1) * 100
+    : null;
   const rarestPermille = Math.min(gift.modelRarityPerMille, gift.symbolRarityPerMille, gift.backdropRarityPerMille);
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
@@ -21,7 +24,7 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
           <div className="truncate text-xs font-medium text-white">{gift.baseName}</div>
           <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-[var(--muted)]">
             <span>#{gift.number}</span>
-            {showOwner ? <span className="truncate">{gift.ownerName}</span> : gift.offerCount > 0 ? <span className="flex items-center gap-1"><MessageSquareMore size={10} />{gift.offerCount}</span> : <span title="Самый редкий trait">редк. {rarityLabel}</span>}
+            {showOwner ? <span className="truncate">{gift.ownerName}</span> : gift.offerCount > 0 ? <span className="flex items-center gap-1"><MessageSquareMore size={10} />{gift.offerCount}</span> : floorDelta != null ? <span className={floorDelta <= 0 ? "text-[var(--positive)]" : ""}>{floorDelta >= 0 ? "+" : ""}{floorDelta.toFixed(0)}% floor</span> : <span title="Самый редкий trait">редк. {rarityLabel}</span>}
           </div>
         </div>
       </Link>
