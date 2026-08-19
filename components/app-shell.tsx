@@ -36,9 +36,9 @@ function currentTitle(pathname: string) {
 }
 
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
-  const cls = size === "md" ? "h-10 w-10 rounded-[16px]" : "h-8 w-8 rounded-[13px]";
-  if (photoUrl) return <img src={photoUrl} alt="Профиль Telegram" className={`${cls} object-cover ring-1 ring-white/[.08]`} />;
-  return <span className={`grid ${cls} place-items-center bg-[var(--panel-2)] text-[var(--muted)] ring-1 ring-white/[.06]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
+  const cls = size === "md" ? "h-10 w-10 rounded-full" : "h-8 w-8 rounded-full";
+  if (photoUrl) return <img src={photoUrl} alt="Профиль Telegram" className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
+  return <span className={`grid ${cls} place-items-center bg-white/[.045] text-[var(--muted)] ring-1 ring-white/[.06]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
@@ -53,15 +53,15 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   if (!profile) {
-    return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-4"><div className="mxm-card w-full p-5"><div className="mxm-brand-mark mb-4">MX</div><h1 className="text-base font-semibold">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p><button type="button" onClick={retryAuth} className="mt-4 rounded-[14px] bg-[var(--panel-2)] px-4 py-2.5 text-xs font-medium text-white">Повторить вход</button></div></main>;
+    return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-5"><div className="w-full border-t border-white/[.14] py-6"><div className="mb-5 text-[13px] font-black tracking-[-.08em]">MXM</div><h1 className="text-lg font-semibold tracking-[-.025em]">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p><button type="button" onClick={retryAuth} className="mt-5 border-b border-white pb-1 text-xs font-semibold text-white">Повторить вход</button></div></main>;
   }
 
   return (
     <div className="mx-auto min-h-[100dvh] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
-      <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] bg-[rgba(7,9,12,.985)] p-3 lg:flex lg:flex-col">
-        <Link href="/market" className="flex items-center gap-2.5 px-1.5 py-2">
-          <span className="mxm-brand-mark">MX</span>
-          <div><p className="text-[12px] font-semibold tracking-[-.02em]">MX Market</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">Telegram market</p></div>
+      <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
+        <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
+          <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
+          <span className="text-[9px] text-[var(--muted)]">market</span>
         </Link>
         <nav className="mt-4 space-y-1">
           {nav.map((item) => {
@@ -72,25 +72,25 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           <Link href="/leaderboard" className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
         </nav>
 
-        <Link href="/profile" className="mt-auto rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-2.5 transition hover:border-[#343d47] hover:bg-[var(--panel-2)]">
-          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">Ур. {profile.level} · {profile.tier}</p></div></div>
-          <div className="mt-3 border-t border-[var(--border-soft)] pt-2.5"><div className="flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Капитал</p><p className="mt-0.5 text-sm font-semibold">{money(profile.netWorth)}</p></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} XP</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div></div>
+        <Link href="/profile" className="mt-auto border-t border-[var(--border-soft)] px-1 pt-4">
+          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} XP</span></div>
+          <div className="mt-3 h-px overflow-hidden bg-white/[.05]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div>
         </Link>
       </aside>
 
       <div className="min-w-0 pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-0">
-        <header className="mxm-topbar sticky top-0 z-40 border-b border-[var(--border-soft)]">
-          <div className="flex h-[52px] items-center gap-2.5 px-3 md:px-4">
+        <header className="mxm-topbar sticky top-0 z-40">
+          <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-5">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
-            <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-semibold tracking-[-.01em]">MX MARKET</p><p className="truncate text-[9px] text-[var(--muted)]">{title}</p></div>
-            <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold">{title}</p></div>
+            <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
+            <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
             <Link href="/vault" className="mxm-balance-pill ml-auto" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link>
           </div>
         </header>
-        <main key={pathname} className="mxm-page-enter min-h-0 px-2.5 py-3 md:px-4 md:py-4">{children}</main>
+        <main key={pathname} className="mxm-page-enter min-h-0 px-3 py-4 md:px-5 md:py-5">{children}</main>
       </div>
 
-      <nav className="mxm-bottom-nav safe-bottom fixed inset-x-2 bottom-2 z-50 grid grid-cols-5 lg:hidden">
+      <nav className="mxm-bottom-nav safe-bottom fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 lg:hidden">
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;

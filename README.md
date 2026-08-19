@@ -215,6 +215,14 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 No new database migration is required beyond `014_v012_tonapi_polish.sql`.
 
 
+
+## v0.42 — borderless UI + fixed filters
+
+- Rebuilt market filters on a React portal so selectors are not clipped by horizontal scrollers in Telegram WebView.
+- Removed most nested panel/pill styling from the market, shell and shared UI primitives.
+- Borderless NFT cards, flatter navigation, typography-first tabs and full-height selector drawers.
+- No database migration after v0.41.
+
 ## v0.41 — UI cleanup and temporary game removal
 
 - Games are removed from navigation and public API routes for now. Existing historical `game_rounds` data is preserved.

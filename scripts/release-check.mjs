@@ -65,7 +65,7 @@ const giftCandles = read("app/api/gifts/[id]/candles/route.ts");
 const clientApi = read("lib/api.ts");
 check("Migration 017 present", Boolean(migration));
 check("Migration 018 present", Boolean(migration040));
-check("v0.41 package version", read("package.json").includes('"version": "0.41.0"'));
+check("v0.42 package version", read("package.json").includes('"version": "0.42.0"'));
 check("Environment template present", exists(".env.example"));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));

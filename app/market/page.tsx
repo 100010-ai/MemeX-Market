@@ -296,48 +296,48 @@ export default function MarketPage() {
     <div className="mx-auto max-w-6xl">
       <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={1500} />
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mxm-market-head mb-4">
         <div className="mxm-segment min-w-0 flex-1">
-          <button onClick={() => switchTab("gifts")} className={`mxm-segment-button ${tab === "gifts" ? "is-active" : ""}`}><Gift size={14} />Подарки</button>
-          <button onClick={() => switchTab("coins")} className={`mxm-segment-button ${tab === "coins" ? "is-active" : ""}`}><BarChart3 size={14} />Мемкоины</button>
+          <button onClick={() => switchTab("gifts")} className={`mxm-segment-button ${tab === "gifts" ? "is-active" : ""}`}><Gift size={15} />Подарки</button>
+          <button onClick={() => switchTab("coins")} className={`mxm-segment-button ${tab === "coins" ? "is-active" : ""}`}><BarChart3 size={15} />Мемкоины</button>
         </div>
-        <button onClick={() => setWatchOnly((value) => !value)} aria-label="Показать только избранное" className={`header-action ${watchOnly ? "border-[rgba(139,164,255,.26)] bg-[rgba(139,164,255,.10)] text-[var(--accent)]" : ""}`}><Star size={15} fill={watchOnly ? "currentColor" : "none"} /></button>
-        <Link href="/cart" aria-label="Корзина" className="header-action relative"><ShoppingCart size={15} />{data.cartIds.length ? <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--accent)] px-1 text-[7px] font-bold text-[#0b0d10]">{data.cartIds.length}</span> : null}</Link>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => setWatchOnly((value) => !value)} aria-label="Показать только избранное" className={`header-action ${watchOnly ? "is-active" : ""}`}><Star size={16} fill={watchOnly ? "currentColor" : "none"} /></button>
+          <Link href="/cart" aria-label="Корзина" className="header-action relative"><ShoppingCart size={16} />{data.cartIds.length ? <span className="mxm-action-badge">{data.cartIds.length}</span> : null}</Link>
+        </div>
       </div>
 
-      <div className="mb-3 flex gap-2">
-        <label className="mxm-search min-w-0 flex-1">
-          <Search size={15} className="shrink-0 text-[var(--muted)]" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "gifts" ? "Подарок / номер" : "Коин / тикер"} className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--muted-2)]" />
-          {query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} className="text-[var(--muted)]"><X size={14} /></button> : null}
-        </label>
-        <Link href="/hub" aria-label="Лента" className="header-action shrink-0"><Sparkles size={14} /></Link>
+      <div className="mxm-market-searchbar mb-4">
+        <Search size={16} className="shrink-0 text-[var(--muted)]" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "gifts" ? "Найти подарок или номер" : "Найти коин или тикер"} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
+        {query ? <button type="button" aria-label="Очистить поиск" onClick={() => setQuery("")} className="mxm-clear-search"><X size={14} /></button> : null}
+        <Link href="/hub" aria-label="Лента" className="mxm-feed-link"><Sparkles size={14} /><span className="hidden sm:inline">Лента</span></Link>
       </div>
 
       {tab === "gifts" ? (
         <>
           {!loading && data.collections.length ? <CollectionRail collections={data.collections} watched={watchedCollections} busy={watchBusy} onWatch={(name, enabled) => toggleWatch("gift_collection", name, enabled)} /> : null}
-          <div className="mxm-hscroll mb-2 gap-1.5 pb-1">
+          <div className="mxm-view-tabs mxm-hscroll mb-3 gap-5">
             {([
               ["all","Все"],["deals","Выгодно"],["rare","Редкие"],["new","Новые"],["offers","С офферами"]
             ] as [GiftView,string][]).map(([value,label]) => <button key={value} onClick={() => setGiftView(value)} className={`mxm-tab-chip ${giftView === value ? "is-active" : ""}`}>{label}</button>)}
           </div>
-          <div className="mxm-hscroll mb-2 gap-1.5 pb-1">
+          <div className="mxm-filter-row mxm-hscroll mb-2 gap-4">
             <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
             <FilterSelect value={model} onChange={setModel} label="Модель" options={models} />
             <FilterSelect value={backdrop} onChange={setBackdrop} label="Фон" options={backdrops} />
             <FilterSelect value={symbol} onChange={setSymbol} label="Символ" options={symbols} />
             <SelectSheet label="Цена" value={priceBand} onChange={(value) => setPriceBand(value as PriceBand)} options={[{ value: "all", label: "Любая цена" }, { value: "under50", label: "До 50 TON" }, { value: "50to250", label: "50–250 TON" }, { value: "250to1000", label: "250–1K TON" }, { value: "over1000", label: "1K+ TON" }]} />
-            <SelectSheet label="Сортировка" value={giftSort} onChange={(value) => setGiftSort(value as GiftSort)} icon={<ListFilter size={12} />} options={[{ value: "random", label: "Случайно" }, { value: "price", label: "Цена" }, { value: "newest", label: "Сначала новые" }, { value: "offers", label: "Больше офферов" }, { value: "number", label: "По номеру" }, { value: "rarity", label: "По редкости" }]} />
+            <SelectSheet label="Сортировка" value={giftSort} onChange={(value) => setGiftSort(value as GiftSort)} icon={<ListFilter size={13} />} options={[{ value: "random", label: "Случайно" }, { value: "price", label: "Цена" }, { value: "newest", label: "Сначала новые" }, { value: "offers", label: "Больше офферов" }, { value: "number", label: "По номеру" }, { value: "rarity", label: "По редкости" }]} />
           </div>
-          <div className="mb-3 flex min-h-8 items-center justify-between gap-3 rounded-[13px] bg-[var(--surface)] px-2.5 text-[9px] text-[var(--muted)] ring-1 ring-white/[.025]">
-            <span>{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация Gifts…" : searchLoading ? "Поиск…" : `${gifts.length} показано · ${data.totalGifts} активных${watchOnly ? " · избранное" : ""}`}</span>
-            {hasGiftFilters ? <button onClick={resetGiftFilters} className="flex shrink-0 items-center gap-1 text-[#cbd1d8]"><SlidersHorizontal size={11} />Сбросить</button> : null}
+          <div className="mxm-market-meta mb-4">
+            <span>{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация Gifts…" : searchLoading ? "Поиск…" : `${gifts.length} из ${data.totalGifts}${watchOnly ? " · избранное" : ""}`}</span>
+            {hasGiftFilters ? <button onClick={resetGiftFilters} className="mxm-reset-filters"><SlidersHorizontal size={12} />Сбросить</button> : null}
           </div>
           {!loading && data.genesis && data.genesis.total > 0 ? <div className="mb-2 text-[8px] text-[var(--muted-2)]">Genesis {data.genesis.released}/{data.genesis.total}{data.genesis.completed ? " · завершён" : ""}</div> : null}
         </>
       ) : (
-        <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
+        <div className="mxm-view-tabs mxm-hscroll mb-4 gap-5">
           {(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`mxm-tab-chip capitalize ${coinSort === value ? "is-active" : ""}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
           <Link href="/create" className="mxm-filter-chip is-active"><Plus size={14} />Создать</Link>
         </div>
@@ -347,7 +347,7 @@ export default function MarketPage() {
 
       {tab === "gifts" ? (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-2.5 md:gap-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
+          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
           <MarketSide activity={sideActivity} collections={data.collections} />
         </div>
       ) : (
@@ -370,7 +370,7 @@ function FilterSelect({ value, onChange, label, options }: { value: string; onCh
 }
 
 function CollectionRail({ collections, watched, busy, onWatch }: { collections: GiftCollection[]; watched: Set<string>; busy: string | null; onWatch: (name: string, enabled: boolean) => void }) {
-  return <div className="mxm-hscroll mb-3 hidden gap-2 pb-1 lg:flex">{collections.slice(0, 12).map((item) => { const active = watched.has(item.baseName); return <div key={item.baseName} className="w-[176px] shrink-0 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-2.5"><div className="flex items-start justify-between gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-0"><p className="truncate text-xs font-medium">{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.listedCount} лотов · {item.holderCount} владельцев</p></Link><button disabled={Boolean(busy)} onClick={() => onWatch(item.baseName, !active)} aria-label={active ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-7 w-7 shrink-0 place-items-center rounded-2xl ${active ? "bg-[rgba(198,170,88,.09)] text-[var(--accent)]" : "bg-[var(--panel-2)] text-[var(--muted)]"}`}><Star size={12} fill={active ? "currentColor" : "none"} /></button></div><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="mt-2 flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Флор</p><p className="mt-0.5 text-xs font-semibold">{item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></Link></div>; })}</div>;
+  return <div className="mxm-hscroll mb-5 hidden gap-6 border-b border-[var(--border-soft)] pb-3 lg:flex">{collections.slice(0, 12).map((item) => { const active = watched.has(item.baseName); return <div key={item.baseName} className="w-[168px] shrink-0"><div className="flex items-start justify-between gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-0"><p className="truncate text-[11px] font-semibold">{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.listedCount} лотов · {item.holderCount} владельцев</p></Link><button disabled={Boolean(busy)} onClick={() => onWatch(item.baseName, !active)} aria-label={active ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-7 w-7 shrink-0 place-items-center text-[var(--muted)] transition ${active ? "text-[var(--accent)]" : "hover:text-white"}`}><Star size={13} fill={active ? "currentColor" : "none"} /></button></div><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="mt-2 flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Флор</p><p className="mt-0.5 text-[12px] font-semibold">{item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></Link></div>; })}</div>;
 }
 
 function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (enabled: boolean) => void }) {
@@ -386,11 +386,11 @@ function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: n
 }
 
 function MarketSide({ activity, collections }: { activity: ActivityItem[]; collections: GiftCollection[] }) {
-  return <aside className="hidden space-y-3 lg:block"><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Коллекции</div><div className="divide-y divide-[var(--border-soft)]">{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[10px] text-[var(--muted)]">Флор {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} в продаже</p></Link>)}</div></section><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Лента рынка</div><div className="divide-y divide-[var(--border-soft)]">{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><p className="truncate text-[11px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[10px] text-[var(--muted)]"><span>{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
+  return <aside className="hidden space-y-7 border-l border-[var(--border-soft)] pl-5 lg:block"><section><div className="mb-3 flex items-center justify-between text-[11px] font-semibold"><span>Коллекции</span><span className="text-[9px] font-normal text-[var(--muted)]">рынок</span></div><div>{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block border-b border-[var(--border-soft)] py-2.5 last:border-b-0"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px]">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[9px] text-[var(--muted)]">Флор {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} в продаже</p></Link>)}</div></section><section><div className="mb-3 text-[11px] font-semibold">Лента рынка</div><div>{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block border-b border-[var(--border-soft)] py-2.5 last:border-b-0"><p className="truncate text-[10px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[9px] text-[var(--muted)]"><span>{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
 }
 
 function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-7 text-center"><div className="mx-auto grid h-8 w-8 place-items-center text-[var(--muted)]">{icon}</div><p className="mt-3 text-xs font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
-function GridSkeleton() { return <div className="market-grid grid gap-2.5 md:gap-3">{Array.from({ length: 8 }, (_, index) => <div key={index} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="mxm-skeleton aspect-square" /><div className="p-2"><div className="mxm-skeleton h-4 rounded" /><div className="mxm-skeleton mt-2 h-8 rounded" /></div></div>)}</div>; }
+function GridSkeleton() { return <div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{Array.from({ length: 8 }, (_, index) => <div key={index}><div className="mxm-skeleton aspect-square rounded-[18px]" /><div className="mt-2.5 px-0.5"><div className="mxm-skeleton h-3.5 w-2/3 rounded" /><div className="mxm-skeleton mt-2 h-3 w-1/2 rounded" /></div></div>)}</div>; }
 function RowsSkeleton() { return <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div>; }
 
 function activityKind(kind: ActivityItem["kind"]) {
