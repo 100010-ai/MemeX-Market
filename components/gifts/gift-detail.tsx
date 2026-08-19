@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, ExternalLink, Gem, History, MessageSquareMore, ShoppingCart, Tag, TrendingUp, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, ExternalLink, Gem, History, MessageSquareMore, RefreshCw, ShoppingCart, Tag, TrendingUp, UserRound, X } from "lucide-react";
 import { GiftMedia } from "@/components/gifts/gift-media";
 import { CoinChart } from "@/components/coin-chart";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -14,7 +14,7 @@ import type { Candle, GiftAsset, GiftCollection, GiftOffer, GiftTrade, GiftTrait
 
 const realtimeTables = ["virtual_gifts", "gift_trades", "market_events"];
 type DetailOffer = Pick<GiftOffer, "id" | "amount" | "status" | "createdAt" | "buyerId" | "buyerName"> & { isMine: boolean };
-type Payload = { gift: GiftAsset; isOwner: boolean; inCart: boolean; itemStats: { tradeCount: number; volume: number; highSale: number | null; lowSale: number | null }; balance: number; availableBalance: number; reservedBalance: number; trades: GiftTrade[]; candles: Candle[]; collection: GiftCollection; traitStats: GiftTraitStats; offers: DetailOffer[] };
+type Payload = { gift: GiftAsset; resolvedVirtualGiftId?: string; isOwner: boolean; inCart: boolean; itemStats: { tradeCount: number; volume: number; highSale: number | null; lowSale: number | null }; balance: number; availableBalance: number; reservedBalance: number; trades: GiftTrade[]; candles: Candle[]; collection: GiftCollection; traitStats: GiftTraitStats; offers: DetailOffer[] };
 
 type DetailTab = "activity" | "offers" | "chart";
 
@@ -29,15 +29,33 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   const [listingPrice, setListingPrice] = useState("");
   const [offerAmount, setOfferAmount] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
   const { refreshProfile, haptic } = useTelegramProfile();
 
   const load = useCallback(async () => {
-    try { setData(await apiFetch<Payload>(`/api/gifts/${id}`)); setError(null); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось загрузить подарок"); }
+    const sequence = ++loadSequence.current;
+    setLoading(true);
+    try {
+      const payload = await apiFetch<Payload>(`/api/gifts/${encodeURIComponent(id)}`);
+      if (sequence !== loadSequence.current) return;
+      setData(payload);
+      setError(null);
+    } catch (cause) {
+      if (sequence !== loadSequence.current) return;
+      setError(cause instanceof Error ? cause.message : "Не удалось загрузить подарок");
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false);
+    }
   }, [id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    void load();
+    return () => { loadSequence.current += 1; };
+  }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
   async function run(key: string, task: () => Promise<unknown>) {
@@ -47,13 +65,30 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     finally { setBusy(null); }
   }
 
-  if (!data) return <div><div className="mxm-skeleton h-[560px] rounded-[18px]" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
+  if (!data && error) return (
+    <div>
+      <div className="mb-3 flex items-center">
+        {onClose ? (
+          <button onClick={onClose} aria-label="Закрыть" className="grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><X size={17} /></button>
+        ) : (
+          <Link href="/market" className="grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><ArrowLeft size={17} /></Link>
+        )}
+      </div>
+      <div className="rounded-[18px] border border-[#5a3035] bg-[#181012] px-4 py-5">
+        <p className="text-sm font-medium text-white">Не удалось открыть NFT</p>
+        <p className="mt-1.5 text-xs leading-5 text-[#ff9aa4]">{error}</p>
+        <button type="button" disabled={loading} onClick={() => void load()} className="mt-4 inline-flex h-9 items-center gap-2 rounded-[17px] bg-[var(--panel-3)] px-3 text-xs font-medium text-white disabled:opacity-50"><RefreshCw size={13} className={loading ? "animate-spin" : ""} />Повторить</button>
+      </div>
+    </div>
+  );
+  if (!data) return <div className="mxm-skeleton h-[min(72dvh,560px)] rounded-[18px]" />;
   const { gift } = data;
+  const canonicalGiftId = data.resolvedVirtualGiftId || gift.virtualGiftId;
   const myOffer = data.offers.find((offer) => offer.isMine);
 
   return (
     <div>
-      <RealtimeRefresh channelName={`mxm-gift-${id}`} tables={realtimeTables} onChange={realtimeReload} />
+      <RealtimeRefresh channelName={`mxm-gift-${canonicalGiftId}`} tables={realtimeTables} onChange={realtimeReload} />
 
       <div className="mb-3 flex items-center justify-between gap-3">
         {onClose ? (
@@ -90,9 +125,9 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
 
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
             {gift.isBurned ? <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-3 text-xs text-[#ff9aa4]">Telegram пометил этот подарок как сожжённый. В MXM для него отключены продажа, офферы и покупки.</div> : data.isOwner ? (
-              <OwnerTradePanel gift={gift} listingPrice={listingPrice} setListingPrice={setListingPrice} busy={busy} onList={(price) => run("list", () => apiFetch(`/api/gifts/${id}/list`, { method: "POST", body: JSON.stringify({ price }) }))} onUnlist={() => run("unlist", () => apiFetch(`/api/gifts/${id}/list`, { method: "POST", body: JSON.stringify({ price: null }) }))} />
+              <OwnerTradePanel gift={gift} listingPrice={listingPrice} setListingPrice={setListingPrice} busy={busy} onList={(price) => run("list", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price }) }))} onUnlist={() => run("unlist", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price: null }) }))} />
             ) : (
-              <BuyerTradePanel gift={gift} inCart={data.inCart} availableBalance={data.availableBalance} reservedBalance={data.reservedBalance} offerAmount={offerAmount} setOfferAmount={setOfferAmount} myOffer={myOffer} busy={busy} onBuy={() => run("buy", () => apiFetch(`/api/gifts/${id}/buy`, { method: "POST" }))} onCart={() => run("cart", () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: gift.virtualGiftId }) }))} onOffer={(amount) => run("offer", () => apiFetch(`/api/gifts/${id}/offer`, { method: "POST", body: JSON.stringify({ amount }) }))} onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined} />
+              <BuyerTradePanel gift={gift} inCart={data.inCart} availableBalance={data.availableBalance} reservedBalance={data.reservedBalance} offerAmount={offerAmount} setOfferAmount={setOfferAmount} myOffer={myOffer} busy={busy} onBuy={() => run("buy", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/buy`, { method: "POST" }))} onCart={() => run("cart", () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: gift.virtualGiftId }) }))} onOffer={(amount) => run("offer", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/offer`, { method: "POST", body: JSON.stringify({ amount }) }))} onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined} />
             )}
             <p className="mt-2 text-[10px] text-[var(--muted-2)]">Сделки в MXM не передают настоящий подарок в Telegram.</p>
           </div>

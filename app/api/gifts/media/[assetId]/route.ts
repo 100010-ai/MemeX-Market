@@ -110,11 +110,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
   }
 
   const supabase = getSupabaseAdmin();
-  const result = await supabase
+  let result = await supabase
     .from("gift_assets")
     .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
     .eq("id", assetId)
     .maybeSingle();
+
+  // Backward-compatible read for deployments that have not applied the v0.14
+  // model_preview_url column yet. Fragment media can be derived from the Gift
+  // slug, so the preview/animation endpoint does not actually need that column.
+  if (result.error && (result.error.code === "42703" || /model_preview_url/i.test(result.error.message || ""))) {
+    const legacy = await supabase
+      .from("gift_assets")
+      .select("model_media_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
+      .eq("id", assetId)
+      .maybeSingle();
+    result = legacy.error
+      ? { data: null, error: legacy.error } as typeof result
+      : { data: legacy.data ? { ...legacy.data, model_preview_url: null } : null, error: null } as typeof result;
+  }
+
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   if (!result.data || result.data.is_burned || result.data.catalog_source !== "tonapi") {
     return NextResponse.json({ error: "Gift media not found" }, { status: 404 });

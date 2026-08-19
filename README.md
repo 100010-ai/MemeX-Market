@@ -1,8 +1,18 @@
-# MemeX Market (MXM) v0.15.0
+# MemeX Market (MXM) v0.16.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts provide real source artwork/metadata, while ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+
+## v0.16 — NFT Detail Route Reliability
+
+- Fixed NFT cards opening into `Gift not found`: the detail API now resolves the canonical `virtual_gift_id` and also accepts the underlying asset UUID or Telegram collectible slug for backward-compatible links.
+- Removed fragile detail-only media filters that could hide a Gift which was already visible in the market.
+- All detail queries now use the resolved canonical virtual Gift ID, so trades, offers, cart state and mutations stay attached to the correct item.
+- Collection/candle/trait analytics degrade gracefully instead of making the entire NFT page fail when an auxiliary stats query is unavailable.
+- Failed detail loads now show a compact retry state with navigation instead of a giant permanent skeleton.
+- Added `016_v016_gift_detail_schema_repair.sql`: it safely re-applies the real-price/media schema for deployments that skipped migration 015.
 
 ## v0.15 — Correct Telegram Gift Backdrops + Full Fragment Animations
 
