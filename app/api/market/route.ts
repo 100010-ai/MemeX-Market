@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
-import { ensureGenesisGiftMarket } from "@/lib/npc-market";
-import { ensureTonApiGiftBootstrap } from "@/lib/tonapi-gifts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -54,6 +52,7 @@ export async function GET(request: NextRequest) {
         totalGifts: 0,
         nextOffset: null,
         marketSeed: null,
+        bootstrapRecommended: false,
         genesis: null,
         watchlist: {
           coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
@@ -69,24 +68,6 @@ export async function GET(request: NextRequest) {
     const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed)
       ? suppliedSeed
       : crypto.randomBytes(18).toString("base64url");
-
-    // Zero-config bootstrap: if the verified catalogue is still empty, import
-    // a small real on-chain Telegram Gift cohort through TonAPI. No sample or
-    // generated Gift is ever inserted. The external call is attempted only
-    // while the catalogue is below the bootstrap threshold and is throttled
-    // after failures in tonapi_catalog_state.
-    if (offset === 0) {
-      try {
-        await ensureTonApiGiftBootstrap(72);
-      } catch (catalogError) {
-        console.error("TonAPI Gift bootstrap", catalogError);
-      }
-      try {
-        await ensureGenesisGiftMarket({ batchSize: 72 });
-      } catch (genesisError) {
-        console.error("Genesis Gift release", genesisError);
-      }
-    }
 
     const [giftsResult, countResult, collectionsResult, watchlistResult, cartResult, genesisResult] = await Promise.all([
       supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: offset, p_limit: limit }),
@@ -113,6 +94,7 @@ export async function GET(request: NextRequest) {
       totalGifts,
       nextOffset,
       marketSeed,
+      bootstrapRecommended: offset === 0 && totalGifts === 0,
       genesis: genesisResult.data || null,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),

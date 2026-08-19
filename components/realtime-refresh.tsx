@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
-export function RealtimeRefresh({ channelName, tables, onChange }: { channelName: string; tables: string[]; onChange: () => void }) {
+export function RealtimeRefresh({ channelName, tables, onChange, debounceMs = 350 }: { channelName: string; tables: string[]; onChange: () => void; debounceMs?: number }) {
   const tableKey = tables.join("|");
   const callbackRef = useRef(onChange);
   callbackRef.current = onChange;
@@ -16,7 +16,7 @@ export function RealtimeRefresh({ channelName, tables, onChange }: { channelName
 
     const scheduleRefresh = () => {
       if (cancelled || document.visibilityState === "hidden") return;
-      const wait = Math.max(0, 350 - (Date.now() - lastRun));
+      const wait = Math.max(0, Math.max(100, debounceMs) - (Date.now() - lastRun));
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
@@ -44,7 +44,7 @@ export function RealtimeRefresh({ channelName, tables, onChange }: { channelName
       if (timer) clearTimeout(timer);
       cleanup?.();
     };
-  }, [channelName, tableKey]);
+  }, [channelName, tableKey, debounceMs]);
 
   return null;
 }

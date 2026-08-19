@@ -13,13 +13,13 @@ import { SelectSheet } from "@/components/select-sheet";
 
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
-type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; genesis: GenesisState | null };
+type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null };
 type GiftSort = "random" | "price" | "newest" | "number" | "rarity" | "offers";
 type CoinSort = "trending" | "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, genesis: null });
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null });
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 20_000;
 
@@ -44,6 +44,11 @@ export default function MarketPage() {
   const [remoteGiftSearch, setRemoteGiftSearch] = useState<GiftAsset[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const bootstrapInFlight = useRef(false);
+  const activeTabRef = useRef(tab);
+  activeTabRef.current = tab;
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const loadSeq = useRef(0);
   const scopeDataRef = useRef<Partial<Record<"gifts" | "coins", MarketPayload>>>({});
@@ -61,7 +66,7 @@ export default function MarketPage() {
     const cacheFresh = cached && Date.now() - cached.at < MARKET_CACHE_MS;
     if (warmPayload && !silent) { setData(warmPayload); setLoading(false); }
     else if (!silent) { setData(emptyMarketPayload()); setLoading(true); }
-    setError(null);
+    if (!silent) setError(null);
     if (cacheFresh && !silent) silent = true;
     try {
       const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&t=${forced ? Date.now() : 0}`);
@@ -69,12 +74,13 @@ export default function MarketPage() {
       marketCache.set(tab, { at: Date.now(), payload });
       scopeDataRef.current[tab] = payload;
       setData(payload);
+      setError(null);
       if (forced) sessionStorage.removeItem("mxm-market-dirty");
     } catch (cause) {
       if (seq !== loadSeq.current) return;
       if (!warmPayload) setError(cause instanceof Error ? cause.message : "Не удалось загрузить рынок");
       else console.error("market revalidate", cause);
-    } finally { if (!silent && seq === loadSeq.current) setLoading(false); }
+    } finally { if (seq === loadSeq.current) setLoading(false); }
   }, [tab]);
 
   useEffect(() => { void load(); }, [load]);
@@ -106,6 +112,7 @@ export default function MarketPage() {
     setLoadingMore(true);
     try {
       const payload = await apiFetch<MarketPayload>(`/api/market?scope=gifts&offset=${data.nextOffset}&limit=72&seed=${encodeURIComponent(data.marketSeed)}`);
+      if (activeTabRef.current !== "gifts") return;
       setData((current) => {
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
         const mergedGifts = [...current.gifts, ...payload.gifts.filter((gift) => !seen.has(gift.virtualGiftId))];
@@ -120,6 +127,7 @@ export default function MarketPage() {
           totalGifts: payload.totalGifts,
           nextOffset: payload.nextOffset,
           marketSeed: current.marketSeed || payload.marketSeed,
+          bootstrapRecommended: false,
           genesis: payload.genesis || current.genesis,
         };
         scopeDataRef.current.gifts = next;
@@ -144,6 +152,31 @@ export default function MarketPage() {
   }, [tab, data.nextOffset, query, loadMoreGifts]);
 
   const realtimeReload = useCallback(() => { void load(true); }, [load]);
+
+  const bootstrapGifts = useCallback(async () => {
+    if (bootstrapInFlight.current || tab !== "gifts") return;
+    bootstrapInFlight.current = true;
+    setBootstrapLoading(true);
+    setBootstrapError(null);
+    try {
+      await apiFetch<{ ok: boolean; listed: number }>("/api/gifts/bootstrap", { method: "POST", timeoutMs: 55_000 });
+      marketCache.delete("gifts");
+      delete scopeDataRef.current.gifts;
+      if (activeTabRef.current === "gifts") await load(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Не удалось загрузить Telegram Gifts";
+      setBootstrapError(message);
+      if (activeTabRef.current === "gifts") setError(message);
+    } finally {
+      bootstrapInFlight.current = false;
+      setBootstrapLoading(false);
+    }
+  }, [load, tab]);
+
+  useEffect(() => {
+    if (tab !== "gifts" || loading || !data.bootstrapRecommended || data.totalGifts > 0 || bootstrapLoading || bootstrapError) return;
+    void bootstrapGifts();
+  }, [tab, loading, data.bootstrapRecommended, data.totalGifts, bootstrapLoading, bootstrapError, bootstrapGifts]);
 
   const models = useMemo(() => [...new Set(data.gifts.map((gift) => gift.modelName))].sort(), [data.gifts]);
   const backdrops = useMemo(() => [...new Set(data.gifts.map((gift) => gift.backdropName))].sort(), [data.gifts]);
@@ -261,7 +294,7 @@ export default function MarketPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} />
+      <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={900} />
 
       <div className="mb-3 flex items-center gap-3 border-b border-[var(--border-soft)]">
         <div className="grid min-w-0 flex-1 grid-cols-2">
@@ -298,7 +331,7 @@ export default function MarketPage() {
             <SelectSheet label="Сортировка" value={giftSort} onChange={(value) => setGiftSort(value as GiftSort)} icon={<ListFilter size={12} />} options={[{ value: "random", label: "Случайно" }, { value: "price", label: "Цена" }, { value: "newest", label: "Сначала новые" }, { value: "offers", label: "Больше офферов" }, { value: "number", label: "По номеру" }, { value: "rarity", label: "По редкости" }]} />
           </div>
           <div className="mb-3 flex h-7 items-center justify-between gap-3 text-[10px] text-[var(--muted)]">
-            <span>{loading ? "Загрузка лотов…" : searchLoading ? "Ищем по всему активному рынку…" : `${gifts.length} показано · ${data.totalGifts} активных · ${data.collections.length} коллекций${watchOnly ? " · избранное" : ""}`}</span>
+            <span>{loading ? "Загрузка лотов…" : bootstrapLoading ? "Подключаем реальные Telegram Gifts…" : searchLoading ? "Ищем по всему активному рынку…" : `${gifts.length} показано · ${data.totalGifts} активных · ${data.collections.length} коллекций${watchOnly ? " · избранное" : ""}`}</span>
             {hasGiftFilters ? <button onClick={resetGiftFilters} className="flex items-center gap-1 text-[#c8cbd0]"><SlidersHorizontal size={11} />Сбросить</button> : null}
           </div>
           {!loading && data.genesis && data.genesis.total > 0 ? <div className="mb-3 text-[9px] text-[var(--muted-2)]">Genesis-пул · {data.genesis.npcAvailable} осталось у системы · {data.genesis.released}/{data.genesis.total} выпущено{data.genesis.completed ? " · выпуск завершён" : ""}</div> : null}
@@ -310,11 +343,11 @@ export default function MarketPage() {
         </div>
       )}
 
-      {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]"><span>{error}</span>{tab === "gifts" && data.totalGifts === 0 ? <button disabled={bootstrapLoading} onClick={() => { setError(null); setBootstrapError(null); void bootstrapGifts(); }} className="shrink-0 rounded-xl border border-[#704149] px-2.5 py-1.5 text-[10px] font-medium text-[#ffc2c8] disabled:opacity-50">Повторить</button> : null}</div> : null}
 
       {tab === "gifts" ? (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-2.5">{gifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавляй коллекции в избранное, чтобы быстро следить за их лотами." : "По текущим фильтрам активных лотов нет."} action={<button onClick={watchOnly ? () => setWatchOnly(false) : resetGiftFilters} className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2.5 text-xs font-medium">{watchOnly ? "Показать всё" : "Сбросить фильтры"}</button>} />}</div>
+          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-2.5">{gifts.map((gift) => <GiftCard key={gift.virtualGiftId} gift={gift} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавляй коллекции в избранное, чтобы быстро следить за их лотами." : "По текущим фильтрам активных лотов нет."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[17px] bg-[var(--panel-3)] px-4 py-2.5 text-xs font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
           <MarketSide activity={sideActivity} collections={data.collections} />
         </div>
       ) : (

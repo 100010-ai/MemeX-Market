@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.12.0
+# MemeX Market (MXM) v0.13.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -129,3 +129,19 @@ supabase/migrations/014_v012_tonapi_polish.sql
 ```
 
 After the migration, opening the Gift market can bootstrap the first real cohort automatically. In local God Mode, **Загрузить реальные Gifts** performs a broader catalogue pass, and **Выпустить Genesis** releases the imported finite inventory.
+
+
+## v0.13 — Gift Market Loading Hotfix
+
+- Gift-market reads are now read-only and fast. TonAPI catalogue import and Genesis release no longer run inside `GET /api/market`; an explicit bounded `POST /api/gifts/bootstrap` performs the first real catalogue bootstrap instead.
+- Fixed a realtime request race that could leave the Gift skeleton visible forever when Genesis inserts arrived while the initial Market request was still running.
+- Market realtime refreshes are coalesced more aggressively, preventing a burst of catalogue/listing writes from causing a request storm in Telegram WebView.
+- Client API calls now have abortable timeouts and preserve caller abort signals, so a stalled request cannot leave the interface permanently waiting.
+- TonAPI sync now reports per-collection failures, records partial errors, and fails the bootstrap if every selected collection fails instead of marking the run as healthy.
+- TonAPI cards prefer static NFT images/previews before animation/content URLs, avoiding broken `<img>` cards when metadata contains a non-image animation URL.
+- Burned/zero-owner on-chain NFTs are ignored during catalogue import.
+- Empty Gift market gets an automatic first bootstrap plus a visible retry action if TonAPI is temporarily unavailable.
+- Late pagination/bootstrap responses are ignored after switching Market tabs, so an in-flight Gift request cannot overwrite the Coins view.
+- Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
+
+No new database migration is required beyond `014_v012_tonapi_polish.sql`.

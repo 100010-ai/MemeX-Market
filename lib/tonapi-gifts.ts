@@ -17,6 +17,7 @@ type TonItem = {
   metadata?: JsonRecord;
   previews?: TonPreview[];
   trust?: "whitelist" | "graylist" | "blacklist" | "none" | string;
+  owner?: { address?: string; is_scam?: boolean };
   collection?: { address?: string; name?: string; description?: string };
 };
 
@@ -39,11 +40,13 @@ export type TonApiGiftSyncResult = {
   scannedCollections: number;
   discoveredCollections: number;
   collectionsProcessed: number;
+  collectionsFailed: number;
   itemsSeen: number;
   assetsUpserted: number;
   skippedInvalid: number;
   source: "tonapi";
   skipped?: boolean;
+  errors?: string[];
 };
 
 // A real exported Telegram Gift collection used only as a bootstrap anchor.
@@ -97,11 +100,20 @@ function highestPreview(previews: TonPreview[] | undefined) {
 }
 
 function metadataImage(metadata: JsonRecord, previews?: TonPreview[]) {
-  for (const key of ["image", "image_url", "animation_url", "content_url", "preview"]) {
+  // Prefer a still image/TONAPI preview for cards. animation_url can point to
+  // non-image content and previously caused perfectly valid gifts to render as
+  // permanently broken <img> elements in Telegram WebView.
+  for (const key of ["image", "image_url", "preview"]) {
     const value = str(metadata[key]);
     if (/^https:\/\//i.test(value)) return value;
   }
-  return highestPreview(previews);
+  const preview = highestPreview(previews);
+  if (preview) return preview;
+  for (const key of ["content_url", "animation_url"]) {
+    const value = str(metadata[key]);
+    if (/^https:\/\//i.test(value)) return value;
+  }
+  return null;
 }
 
 function traitRows(metadata: JsonRecord) {
@@ -127,9 +139,15 @@ function traitValue(rows: Array<{ key: string; value: string }>, names: string[]
 
 function traitsFromDescription(metadata: JsonRecord) {
   const description = str(metadata.description);
-  const match = description.match(/with the appearance\s+(.+?)\s+on an?\s+(.+?)\s+background\s+with\s+(.+?)\s+icons?\b/i);
-  if (!match) return { model: "", backdrop: "", symbol: "" };
-  return { model: match[1].trim(), backdrop: match[2].trim(), symbol: match[3].trim() };
+  const patterns = [
+    /with the appearance\s+(.+?)\s+on an?\s+(.+?)\s+background\s+with\s+(.+?)\s+icons?\b/i,
+    /appearance[:\s]+(.+?)[,;]\s*(?:backdrop|background)[:\s]+(.+?)[,;]\s*(?:symbol|icons?)[:\s]+(.+?)(?:[.;]|$)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = description.match(pattern);
+    if (match) return { model: match[1].trim(), backdrop: match[2].trim(), symbol: match[3].trim() };
+  }
+  return { model: "", backdrop: "", symbol: "" };
 }
 
 function singularCollectionName(value: string) {
@@ -179,8 +197,16 @@ function parseGiftIdentity(itemName: string, collectionName: string, index: numb
   return null;
 }
 
+function isBurnedOwner(address: unknown) {
+  const value = str(address).toLowerCase();
+  if (!value) return false;
+  return value === "0:0000000000000000000000000000000000000000000000000000000000000000"
+    || value === "eqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaam9c"
+    || value === "uqaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaajkz";
+}
+
 function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | null {
-  if (!item?.address || item.trust === "blacklist" || item.verified === false) return null;
+  if (!item?.address || item.trust === "blacklist" || item.verified === false || isBurnedOwner(item.owner?.address)) return null;
   const metadata = asRecord(item.metadata) || {};
   const collectionMetadata = asRecord(collection.metadata) || {};
   const collectionName = str(collectionMetadata.name || item.collection?.name);
@@ -250,7 +276,7 @@ function retryDelay(attempt: number, retryAfter: string | null) {
 }
 
 async function tonapi<T>(path: string): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.12" };
+  const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.13" };
   const key = process.env.TONAPI_KEY?.trim();
   if (key) headers.authorization = `Bearer ${key}`;
 
@@ -352,7 +378,10 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
   const firstCollection = rawItems.find((item) => item.collection?.address)?.collection;
   const collection: TonCollection = {
     address: collectionRow.address,
-    metadata: { name: firstCollection?.name || BOOTSTRAP_COLLECTION_NAME.get(collectionRow.address) || "" },
+    metadata: {
+      name: firstCollection?.name || BOOTSTRAP_COLLECTION_NAME.get(collectionRow.address) || "",
+      description: firstCollection?.description || "",
+    },
   };
   const parsed = rawItems.map((item) => parseTonItem(item, collection)).filter((item): item is ParsedItem => Boolean(item));
   const now = new Date().toISOString();
@@ -485,26 +514,28 @@ async function recalculateCollectionRarity(collectionAddress: string) {
 export async function syncTonApiGiftCatalog(options: { discoverPages?: number; maxCollections?: number; itemsPerCollection?: number; bootstrapOnly?: boolean } = {}): Promise<TonApiGiftSyncResult> {
   const supabase = getSupabaseAdmin();
   const started = new Date().toISOString();
-  const lock = await supabase.rpc("acquire_tonapi_catalog_lock", { p_seconds: options.bootstrapOnly ? 30 : 55 });
+  const lock = await supabase.rpc("acquire_tonapi_catalog_lock", { p_seconds: options.bootstrapOnly ? 60 : 120 });
   if (lock.error) throw lock.error;
-  if (lock.data !== true) return { scannedCollections: 0, discoveredCollections: 0, collectionsProcessed: 0, itemsSeen: 0, assetsUpserted: 0, skippedInvalid: 0, source: "tonapi", skipped: true };
+  if (lock.data !== true) return { scannedCollections: 0, discoveredCollections: 0, collectionsProcessed: 0, collectionsFailed: 0, itemsSeen: 0, assetsUpserted: 0, skippedInvalid: 0, source: "tonapi", skipped: true };
   let scannedCollections = 0;
   let discoveredCollections = 0;
   let collectionsProcessed = 0;
+  let collectionsFailed = 0;
   let itemsSeen = 0;
   let assetsUpserted = 0;
   let skippedInvalid = 0;
+  const errors: string[] = [];
 
   try {
-    discoveredCollections += await ensureBootstrapCollections(options.bootstrapOnly ? 3 : BOOTSTRAP_COLLECTIONS.length);
+    discoveredCollections += await ensureBootstrapCollections(options.bootstrapOnly ? 6 : BOOTSTRAP_COLLECTIONS.length);
     if (!options.bootstrapOnly) {
       const discovery = await discoverTonApiGiftCollections({ pages: options.discoverPages ?? (process.env.TONAPI_KEY?.trim() ? 2 : 1), pageSize: process.env.TONAPI_KEY?.trim() ? 500 : 250 });
       scannedCollections += discovery.scanned;
       discoveredCollections += discovery.discovered;
     }
 
-    const maxCollections = Math.max(1, Math.min(24, Math.floor(options.maxCollections ?? (options.bootstrapOnly ? 1 : (process.env.TONAPI_KEY?.trim() ? 10 : 8)))));
-    const itemsPerCollection = Math.max(8, Math.min(1000, Math.floor(options.itemsPerCollection ?? (options.bootstrapOnly ? 80 : 300))));
+    const maxCollections = Math.max(1, Math.min(24, Math.floor(options.maxCollections ?? (options.bootstrapOnly ? 3 : (process.env.TONAPI_KEY?.trim() ? 10 : 6)))));
+    const itemsPerCollection = Math.max(8, Math.min(1000, Math.floor(options.itemsPerCollection ?? (options.bootstrapOnly ? 160 : 300))));
     const collectionResult = await supabase
       .from("tonapi_gift_collections")
       .select("address,next_offset")
@@ -523,13 +554,21 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
         if (imported.upserted > 0) await recalculateCollectionRarity(String(row.address));
       } catch (error) {
         const message = error instanceof Error ? error.message : "TonAPI collection import failed";
+        collectionsFailed += 1;
+        if (errors.length < 5) errors.push(`${String(row.address).slice(0, 12)}…: ${message}`);
         await supabase.from("tonapi_gift_collections").update({ last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }).eq("address", row.address);
       }
     }
 
-    await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: null, updated_at: new Date().toISOString() }, { onConflict: "singleton" });
+    // Do not report a green global sync when every TonAPI collection failed.
+    // That used to make the market retry the same slow bootstrap on every GET.
+    if (collectionsProcessed === 0 && collectionsFailed > 0) {
+      throw new Error(errors[0] || "TonAPI collection import failed");
+    }
+    const partialError = collectionsFailed > 0 ? `${collectionsFailed} collection(s) failed: ${errors.join(" | ")}`.slice(0, 1000) : null;
+    await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: partialError, updated_at: new Date().toISOString() }, { onConflict: "singleton" });
     await supabase.rpc("release_tonapi_catalog_lock");
-    return { scannedCollections, discoveredCollections, collectionsProcessed, itemsSeen, assetsUpserted, skippedInvalid, source: "tonapi" };
+    return { scannedCollections, discoveredCollections, collectionsProcessed, collectionsFailed, itemsSeen, assetsUpserted, skippedInvalid, source: "tonapi", ...(errors.length ? { errors } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "TonAPI sync failed";
     await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }, { onConflict: "singleton" });
@@ -552,7 +591,7 @@ export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
     return { skipped: true, assets: countResult.count || 0, reason: "recent-tonapi-error" };
   }
 
-  const result = await syncTonApiGiftCatalog({ bootstrapOnly: true, maxCollections: 1, itemsPerCollection: Math.max(120, targetAssets) });
+  const result = await syncTonApiGiftCatalog({ bootstrapOnly: true, maxCollections: 3, itemsPerCollection: Math.max(160, Math.ceil(targetAssets / 2)) });
   const refreshed = await supabase.from("gift_assets").select("id", { head: true, count: "exact" }).in("catalog_source", ["bot_catalog", "tonapi"]).eq("is_burned", false);
   if (refreshed.error) throw refreshed.error;
   return { skipped: false, assets: refreshed.count || 0, result };

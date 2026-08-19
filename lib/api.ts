@@ -30,15 +30,33 @@ function localizeApiError(message: string): string {
   return message;
 }
 
-export async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
-  if (init?.body && !isForm && !headers.has("content-type")) headers.set("content-type", "application/json");
-  const response = await fetch(input, { ...init, headers, cache: "no-store" });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof payload?.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;
-    throw new Error(localizeApiError(message));
+type ApiRequestInit = RequestInit & { timeoutMs?: number };
+
+export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise<T> {
+  const { timeoutMs = 55_000, signal: callerSignal, ...requestInit } = init || {};
+  const headers = new Headers(requestInit.headers);
+  const isForm = typeof FormData !== "undefined" && requestInit.body instanceof FormData;
+  if (requestInit.body && !isForm && !headers.has("content-type")) headers.set("content-type", "application/json");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(1_000, timeoutMs));
+  const abortFromCaller = () => controller.abort();
+  if (callerSignal?.aborted) controller.abort();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+
+  try {
+    const response = await fetch(input, { ...requestInit, headers, signal: controller.signal, cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = typeof payload?.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;
+      throw new Error(localizeApiError(message));
+    }
+    return payload as T;
+  } catch (error) {
+    if (controller.signal.aborted && !callerSignal?.aborted) throw new Error("Сервер отвечает слишком долго. Повторите запрос.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
-  return payload as T;
 }
