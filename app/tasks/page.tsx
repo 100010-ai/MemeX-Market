@@ -2,7 +2,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clock3, Eye, Flame, Gem, Gift, Play, Sparkles, Trophy } from "lucide-react";
+import { Check, Clock3, Eye, Flame, Gem, Gift, Link2, Megaphone, Play, Sparkles, TicketCheck, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -12,6 +12,21 @@ const sectionMeta: Record<MissionPeriod, { title: string; icon: typeof Gift }> =
   onboarding: { title: "Старт", icon: Gift },
   daily: { title: "Сегодня", icon: Flame },
   weekly: { title: "Неделя", icon: Trophy },
+};
+
+type SponsoredTask = {
+  id: string;
+  advertiserName: string;
+  title: string;
+  description: string;
+  instructions: string;
+  verificationType: "telegram_membership" | "link_visit" | "manual";
+  targetUrl: string;
+  buttonLabel: string;
+  reward: number;
+  remainingSlots: number;
+  featured: boolean;
+  claimStatus: "opened" | "pending" | "claimed" | "rejected" | null;
 };
 
 type RewardedAdStatus = {
@@ -39,6 +54,9 @@ declare global {
 
 export default function TasksPage() {
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [sponsored, setSponsored] = useState<SponsoredTask[]>([]);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
   const [adStatus, setAdStatus] = useState<RewardedAdStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [adBusy, setAdBusy] = useState(false);
@@ -50,10 +68,11 @@ export default function TasksPage() {
 
   const load = useCallback(async () => {
     const [missionResult, rewardResult] = await Promise.all([
-      apiFetch<{ missions: Mission[] }>("/api/tasks", { cacheMs: 8_000 }),
+      apiFetch<{ missions: Mission[]; sponsored: SponsoredTask[] }>("/api/tasks", { cacheMs: 8_000 }),
       apiFetch<RewardedAdStatus>("/api/rewards/ads/status", { cacheMs: 0 }).catch(() => null),
     ]);
     setMissions(missionResult.missions);
+    setSponsored(missionResult.sponsored || []);
     if (rewardResult) setAdStatus(rewardResult);
   }, []);
 
@@ -69,6 +88,48 @@ export default function TasksPage() {
     try { await apiFetch("/api/tasks/claim", { method: "POST", body: JSON.stringify({ missionId: id }) }); await Promise.all([load(), refreshProfile()]); haptic("heavy"); }
     catch (e) { setError(e instanceof Error ? e.message : "Не удалось забрать награду"); }
     finally { setBusy(null); }
+  }
+
+  function openSponsoredUrl(url: string) {
+    if (/^https:\/\/t\.me\//i.test(url) && window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function sponsoredAction(task: SponsoredTask) {
+    if (busy || task.claimStatus === "claimed" || task.claimStatus === "pending") return;
+    setBusy(`sponsored:${task.id}`); setError(null); haptic("light");
+    try {
+      if (!task.claimStatus || task.claimStatus === "rejected") {
+        const opened = await apiFetch<{ targetUrl: string }>("/api/sponsored-tasks", { method: "POST", body: JSON.stringify({ campaignId: task.id, action: "open" }) });
+        openSponsoredUrl(opened.targetUrl);
+        setSponsored((items) => items.map((item) => item.id === task.id ? { ...item, claimStatus: "opened" } : item));
+        return;
+      }
+      const result = await apiFetch<{ claimed?: boolean; pending?: boolean; result?: { reward?: number } }>("/api/sponsored-tasks", { method: "POST", body: JSON.stringify({ campaignId: task.id, action: "verify" }) });
+      if (result.pending) setSponsored((items) => items.map((item) => item.id === task.id ? { ...item, claimStatus: "pending" } : item));
+      if (result.claimed) {
+        setSponsored((items) => items.map((item) => item.id === task.id ? { ...item, claimStatus: "claimed" } : item));
+        await refreshProfile();
+        haptic("heavy");
+      }
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось проверить партнёрское задание"); }
+    finally { setBusy(null); }
+  }
+
+  async function redeemPromo() {
+    const code = promoCode.trim().toUpperCase();
+    if (!code || promoBusy) return;
+    setPromoBusy(true); setError(null);
+    try {
+      const result = await apiFetch<{ result?: { reward?: number } }>("/api/promo", { method: "POST", body: JSON.stringify({ code }) });
+      const reward = Number(result.result?.reward || 0);
+      setPromoCode("");
+      setAdNotice(reward > 0 ? `Промокод активирован: +${money(reward)} TON` : "Промокод активирован");
+      await refreshProfile();
+      haptic("heavy");
+    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось активировать промокод"); }
+    finally { setPromoBusy(false); }
   }
 
   async function watchRewardedAd() {
@@ -158,6 +219,31 @@ export default function TasksPage() {
       </section>
       {adNotice ? <div className="mb-4 border-l-2 border-[var(--accent)] pl-3 text-[10px] leading-4 text-[var(--muted)]">{adNotice}</div> : null}
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
+
+      {sponsored.length ? <section className="mb-7">
+        <div className="mb-1 flex items-center justify-between border-b border-[var(--border-soft)] py-2.5">
+          <div className="flex items-center gap-2 text-[12px] font-semibold"><Megaphone size={14} className="text-[var(--accent)]" />Партнёрские задания<span className="text-[9px] font-normal text-[var(--muted-2)]">{sponsored.length}</span></div>
+          <span className="text-[9px] text-[var(--muted-2)]">награда после проверки</span>
+        </div>
+        <div>{sponsored.map((task) => {
+          const actionLabel = task.claimStatus === "claimed" ? "Получено" : task.claimStatus === "pending" ? "На проверке" : task.claimStatus === "opened" ? (task.verificationType === "manual" ? "Отправить" : "Проверить") : task.buttonLabel;
+          return <div key={task.id} className={`mxm-task-row ${task.featured ? "mxm-sponsored-featured" : ""}`}>
+            <div className={`mxm-task-state ${task.claimStatus === "claimed" ? "is-done" : ""}`}>{task.claimStatus === "claimed" ? <Check size={13}/> : <Link2 size={13}/>}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2"><p className="truncate text-[11px] font-medium">{task.title}</p><span className="shrink-0 text-[8px] text-[var(--muted-2)]">{task.advertiserName}</span></div>
+              <p className="mt-1 truncate text-[9px] text-[var(--muted-2)]">{task.description || task.instructions}</p>
+              <p className="mt-1 text-[8px] text-[var(--muted-2)]">осталось мест: {task.remainingSlots}</p>
+            </div>
+            <div className="shrink-0 text-right"><p className="flex items-center justify-end gap-1 text-[10px] font-semibold text-[var(--accent)]"><Gem size={9} fill="currentColor" />{money(task.reward)}</p><button disabled={Boolean(busy) || task.claimStatus === "claimed" || task.claimStatus === "pending"} onClick={() => void sponsoredAction(task)} className="mt-1.5 border-b border-white/50 pb-0.5 text-[9px] font-semibold text-white disabled:opacity-40">{busy === `sponsored:${task.id}` ? "…" : actionLabel}</button></div>
+          </div>;
+        })}</div>
+      </section> : null}
+
+      <section className="mb-7 flex items-center gap-2 border-y border-[var(--border-soft)] py-3">
+        <TicketCheck size={14} className="shrink-0 text-[var(--muted)]"/>
+        <input value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === "Enter") void redeemPromo(); }} placeholder="Промокод" maxLength={32} className="min-w-0 flex-1 bg-transparent text-[11px] uppercase outline-none placeholder:normal-case placeholder:text-[var(--muted-2)]"/>
+        <button disabled={!promoCode.trim() || promoBusy} onClick={() => void redeemPromo()} className="text-[9px] font-semibold text-[var(--accent)] disabled:opacity-40">{promoBusy ? "…" : "Активировать"}</button>
+      </section>
 
       {(["daily", "onboarding", "weekly"] as MissionPeriod[]).map((period) => {
         const items = missions.filter((mission) => mission.period === period);

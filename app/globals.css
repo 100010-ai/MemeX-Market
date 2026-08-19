@@ -1327,3 +1327,29 @@ html { font-size:15.5px; }
   .mxm-page-enter,.mxm-sheet-panel,.mxm-sheet-backdrop,.mxm-filter-overlay,.mxm-filter-drawer { animation:none!important; }
   * { scroll-behavior:auto!important; }
 }
+
+/* v0.47 — partner campaigns / marketing admin */
+.admin-preset-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.admin-preset { display:flex; min-width:0; flex-direction:column; align-items:flex-start; gap:4px; border:1px solid rgba(255,255,255,.065); padding:10px; color:#747d86; text-align:left; transition:border-color .15s ease,background .15s ease,color .15s ease; }
+.admin-preset:hover { background:rgba(255,255,255,.02); color:#cbd1d7; }
+.admin-preset.is-active { border-color:rgba(166,181,255,.34); background:rgba(166,181,255,.055); color:#dfe5ff; }
+.admin-preset b { margin-top:3px; color:inherit; font-size:9.5px; font-weight:650; }
+.admin-preset span { color:#5f6871; font-size:7.5px; line-height:1.35; }
+.admin-mini-field > span { display:block; margin-bottom:5px; color:#66707a; font-size:8px; }
+.admin-budget-preview { display:grid; grid-template-columns:1fr auto; align-items:end; gap:3px 12px; border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.06); padding:10px 0; }
+.admin-budget-preview span { color:#6d7680; font-size:9px; }
+.admin-budget-preview strong { color:#eef1f4; font-size:13px; letter-spacing:-.02em; }
+.admin-budget-preview small { grid-column:1/-1; color:#505861; font-size:7.5px; }
+.admin-campaign-status { width:3px; min-height:42px; flex:none; background:#4b5158; }
+.admin-campaign-status.is-active { background:#69c99b; }
+.admin-campaign-status.is-paused { background:#c4a86b; }
+.admin-campaign-status.is-ended { background:#59616a; }
+.admin-campaign-status.is-draft { background:#7890bd; }
+.mxm-sponsored-featured { position:relative; }
+.mxm-sponsored-featured::before { content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px; background:var(--accent); opacity:.7; }
+@media (max-width:640px) {
+  .admin-preset-grid { grid-template-columns:1fr; }
+  .admin-preset { display:grid; grid-template-columns:auto 1fr; align-items:center; }
+  .admin-preset b { margin:0; }
+  .admin-preset span { grid-column:2; }
+}

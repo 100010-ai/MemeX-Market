@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { syncGiftCatalog } from "@/lib/gift-catalog";
 import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
+import { ensureBotCanVerifyChat, normalizeSponsoredUrl, telegramChatIdFrom } from "@/lib/sponsored-tasks";
 
 export const runtime = "nodejs";
 
@@ -219,6 +220,153 @@ export async function POST(request: Request) {
       const result = await ensureNpcMarketLiquidity({ force: true, targetListings });
       await audit(actor, "npc.tick", "gift_liquidity", undefined, { result });
       return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "sponsor.create") {
+      const advertiserName = text(body.advertiserName, 80);
+      const title = text(body.title, 120);
+      const description = text(body.description, 500);
+      const instructions = text(body.instructions, 1000);
+      const verificationType = ["telegram_membership", "link_visit", "manual"].includes(String(body.verificationType)) ? String(body.verificationType) : "manual";
+      const targetUrl = normalizeSponsoredUrl(body.targetUrl);
+      const telegramChatId = telegramChatIdFrom(body.telegramChatId, targetUrl) || null;
+      const buttonLabel = text(body.buttonLabel, 40) || "Открыть";
+      const reward = number(body.reward);
+      const maxCompletions = Math.floor(number(body.maxCompletions) ?? 0);
+      const priority = Math.max(0, Math.min(10000, Math.floor(number(body.priority) ?? 100)));
+      const status = ["draft", "active", "paused", "ended"].includes(String(body.status)) ? String(body.status) : "draft";
+      const startsAt = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
+      const endsAt = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
+      const featured = Boolean(body.featured);
+      const internalNote = text(body.internalNote, 1000);
+      if (!advertiserName || !title || reward == null || reward <= 0 || reward > 100000 || maxCompletions < 1 || maxCompletions > 1000000) return NextResponse.json({ error: "Проверьте название, награду и лимит участников" }, { status: 400 });
+      if (endsAt && startsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) return NextResponse.json({ error: "Дата окончания должна быть позже даты старта" }, { status: 400 });
+      if (verificationType === "telegram_membership") {
+        if (!telegramChatId) return NextResponse.json({ error: "Укажите @username или ID Telegram-канала" }, { status: 400 });
+        if (status === "active") await ensureBotCanVerifyChat(telegramChatId);
+      }
+      const { data, error } = await supabase.from("sponsored_campaigns").insert({ advertiser_name: advertiserName, title, description, instructions, verification_type: verificationType, target_url: targetUrl, telegram_chat_id: telegramChatId, button_label: buttonLabel, reward, max_completions: maxCompletions, status, starts_at: startsAt, ends_at: endsAt, priority, featured, internal_note: internalNote, created_by: actor }).select("id").single();
+      if (error) throw error;
+      await audit(actor, "sponsor.create", "sponsored_campaign", String(data.id), { advertiserName, title, verificationType, reward, maxCompletions, status });
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
+    if (action === "sponsor.update") {
+      const id = text(body.id, 80);
+      if (!id) return NextResponse.json({ error: "Кампания не выбрана" }, { status: 400 });
+      const current = await supabase.from("sponsored_campaigns").select("verification_type,target_url,telegram_chat_id,status,completed_count").eq("id", id).single();
+      if (current.error || !current.data) throw current.error || new Error("Кампания не найдена");
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (body.advertiserName !== undefined) patch.advertiser_name = text(body.advertiserName, 80);
+      if (body.title !== undefined) patch.title = text(body.title, 120);
+      if (body.description !== undefined) patch.description = text(body.description, 500);
+      if (body.instructions !== undefined) patch.instructions = text(body.instructions, 1000);
+      if (body.buttonLabel !== undefined) patch.button_label = text(body.buttonLabel, 40) || "Открыть";
+      if (body.targetUrl !== undefined) patch.target_url = normalizeSponsoredUrl(body.targetUrl);
+      if (body.telegramChatId !== undefined) patch.telegram_chat_id = text(body.telegramChatId, 120) || null;
+      if (["telegram_membership", "link_visit", "manual"].includes(String(body.verificationType))) patch.verification_type = String(body.verificationType);
+      if (["draft", "active", "paused", "ended"].includes(String(body.status))) patch.status = String(body.status);
+      if (number(body.reward) != null) { const reward = number(body.reward)!; if (reward <= 0 || reward > 100000) return NextResponse.json({ error: "Некорректная награда" }, { status: 400 }); if (Number(current.data.completed_count||0)>0) return NextResponse.json({ error: "Награду нельзя менять после первых выполнений — скопируйте кампанию и запустите новую" }, { status: 409 }); patch.reward = reward; }
+      if (number(body.maxCompletions) != null) { const max = Math.floor(number(body.maxCompletions)!); if (max < Math.max(1,Number(current.data.completed_count||0)) || max > 1000000) return NextResponse.json({ error: "Лимит не может быть меньше уже выполненных заданий" }, { status: 400 }); patch.max_completions = max; }
+      if (number(body.priority) != null) patch.priority = Math.max(0, Math.min(10000, Math.floor(number(body.priority)!)));
+      if (typeof body.featured === "boolean") patch.featured = body.featured;
+      if (body.startsAt !== undefined) patch.starts_at = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
+      if (body.endsAt !== undefined) patch.ends_at = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
+      if (body.internalNote !== undefined) patch.internal_note = text(body.internalNote, 1000);
+      const nextType = String(patch.verification_type ?? current.data.verification_type);
+      const nextUrl = String(patch.target_url ?? current.data.target_url);
+      const nextChat = telegramChatIdFrom(patch.telegram_chat_id ?? current.data.telegram_chat_id, nextUrl);
+      const nextStatus = String(patch.status ?? current.data.status);
+      if (nextType === "telegram_membership" && nextStatus === "active") {
+        if (!nextChat) return NextResponse.json({ error: "Укажите Telegram-канал" }, { status: 400 });
+        await ensureBotCanVerifyChat(nextChat);
+        patch.telegram_chat_id = nextChat;
+      }
+      const { error } = await supabase.from("sponsored_campaigns").update(patch).eq("id", id);
+      if (error) throw error;
+      await audit(actor, "sponsor.update", "sponsored_campaign", id, patch);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "sponsor.clone") {
+      const id = text(body.id, 80);
+      const source = await supabase.from("sponsored_campaigns").select("advertiser_name,title,description,instructions,verification_type,target_url,telegram_chat_id,button_label,reward,max_completions,priority,featured,internal_note").eq("id", id).single();
+      if (source.error || !source.data) throw source.error || new Error("Кампания не найдена");
+      const { data, error } = await supabase.from("sponsored_campaigns").insert({ ...source.data, title: `${source.data.title} — копия`, status: "draft", completed_count: 0, starts_at: null, ends_at: null, created_by: actor }).select("id").single();
+      if (error) throw error;
+      await audit(actor, "sponsor.clone", "sponsored_campaign", String(data.id), { sourceId: id });
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
+    if (action === "sponsor.delete") {
+      const id = text(body.id, 80);
+      if (!id) return NextResponse.json({ error: "Кампания не выбрана" }, { status: 400 });
+      const current = await supabase.from("sponsored_campaigns").select("completed_count").eq("id", id).single();
+      if (current.error || !current.data) throw current.error || new Error("Кампания не найдена");
+      if (Number(current.data.completed_count||0)>0) return NextResponse.json({ error: "Кампанию с выполнениями нельзя удалить. Переведите её в статус «Завершена», чтобы сохранить историю." }, { status: 409 });
+      const { error } = await supabase.from("sponsored_campaigns").delete().eq("id", id);
+      if (error) throw error;
+      await audit(actor, "sponsor.delete", "sponsored_campaign", id);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "sponsor.review") {
+      const claimId = text(body.claimId, 80);
+      const approve = body.approve === true;
+      const claim = await supabase.from("sponsored_task_claims").select("id,campaign_id,profile_id,status").eq("id", claimId).single();
+      if (claim.error || !claim.data) throw claim.error || new Error("Заявка не найдена");
+      if (claim.data.status === "claimed") return NextResponse.json({ ok: true, alreadyClaimed: true });
+      if (approve) {
+        const result = await supabase.rpc("claim_sponsored_campaign_v047", { p_profile_id: claim.data.profile_id, p_campaign_id: claim.data.campaign_id, p_verification_source: "admin_manual" });
+        if (result.error) throw result.error;
+        await supabase.from("sponsored_task_claims").update({ reviewed_by: actor, updated_at: new Date().toISOString() }).eq("id", claimId);
+        await audit(actor, "sponsor.approve", "sponsored_claim", claimId, { campaignId: claim.data.campaign_id, profileId: claim.data.profile_id });
+        return NextResponse.json({ ok: true, result: result.data });
+      }
+      const { error } = await supabase.from("sponsored_task_claims").update({ status: "rejected", reviewed_by: actor, updated_at: new Date().toISOString() }).eq("id", claimId);
+      if (error) throw error;
+      await audit(actor, "sponsor.reject", "sponsored_claim", claimId, { campaignId: claim.data.campaign_id, profileId: claim.data.profile_id });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "promo.create") {
+      const code = text(body.code, 32).toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+      const reward = number(body.reward);
+      const maxUses = Math.floor(number(body.maxUses) ?? 0);
+      const note = text(body.note, 500);
+      const startsAt = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
+      const endsAt = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
+      if (!/^[A-Z0-9_-]{3,32}$/.test(code) || reward == null || reward <= 0 || reward > 100000 || maxUses < 1 || maxUses > 1000000) return NextResponse.json({ error: "Проверьте промокод, награду и лимит" }, { status: 400 });
+      const { data, error } = await supabase.from("promo_codes").insert({ code, reward, max_uses: maxUses, active: true, starts_at: startsAt, ends_at: endsAt, note, created_by: actor }).select("id").single();
+      if (error) throw error;
+      await audit(actor, "promo.create", "promo_code", String(data.id), { code, reward, maxUses });
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
+    if (action === "promo.update") {
+      const id = text(body.id, 80);
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (typeof body.active === "boolean") patch.active = body.active;
+      if (number(body.reward) != null) patch.reward = number(body.reward);
+      if (number(body.maxUses) != null) patch.max_uses = Math.floor(number(body.maxUses)!);
+      if (body.note !== undefined) patch.note = text(body.note, 500);
+      if (!id) return NextResponse.json({ error: "Промокод не выбран" }, { status: 400 });
+      const { error } = await supabase.from("promo_codes").update(patch).eq("id", id);
+      if (error) throw error;
+      await audit(actor, "promo.update", "promo_code", id, patch);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "promo.delete") {
+      const id = text(body.id, 80);
+      if (!id) return NextResponse.json({ error: "Промокод не выбран" }, { status: 400 });
+      const current = await supabase.from("promo_codes").select("uses_count").eq("id", id).single();
+      if (current.error || !current.data) throw current.error || new Error("Промокод не найден");
+      if (Number(current.data.uses_count||0)>0) return NextResponse.json({ error: "Использованный промокод нельзя удалить — отключите его, чтобы сохранить историю." }, { status: 409 });
+      const { error } = await supabase.from("promo_codes").delete().eq("id", id);
+      if (error) throw error;
+      await audit(actor, "promo.delete", "promo_code", id);
+      return NextResponse.json({ ok: true });
     }
 
     if (action === "economy.update") {

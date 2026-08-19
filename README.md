@@ -1,8 +1,27 @@
-# MXM Market v0.45.0
+# MXM Market v0.47.0
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+
+## v0.47 — Партнёрские задания и маркетинг
+
+- В `/admin` появился отдельный раздел **«Реклама»** с конструктором рекламных кампаний.
+- Поддерживаются задания на подписку в Telegram с автоматической проверкой, переходы по ссылке и произвольные задания с ручным подтверждением.
+- Для кампании настраиваются рекламодатель, награда, лимит участников, расписание, приоритет, закрепление, CTA, инструкция и внутренняя заметка.
+- Добавлена очередь ручной проверки, пауза/запуск, клонирование и сохранение истории кампаний.
+- Добавлены промокоды с лимитом активаций.
+- Партнёрские награды и промокоды участвуют в реферальной системе.
+- Игроки видят партнёрские задания прямо в разделе «Задания и награды».
+
+**Обязательная миграция при обновлении с v0.46:**
+
+```text
+supabase/migrations/022_v047_sponsored_tasks_admin_marketing.sql
+```
+
+Для автоматической проверки подписки MXM-бот должен быть администратором рекламируемого Telegram-канала/группы. Подробнее: `docs/ADMIN_MARKETING_V047.md`.
 
 ## v0.45 — Economy, Rewarded Ads, Market UI + Audit
 

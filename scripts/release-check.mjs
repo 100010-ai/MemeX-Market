@@ -44,12 +44,13 @@ function secretLeaks() {
   return hits;
 }
 
-console.log("MXM v0.46 release gate\n");
+console.log("MXM v0.47 release gate\n");
 const migration017 = read("supabase/migrations/017_v030_market_foundation.sql");
 const migration018 = read("supabase/migrations/018_v040_games_speed_compact.sql");
 const migration019 = read("supabase/migrations/019_v041_remove_games_interface.sql");
 const migration020 = read("supabase/migrations/020_v045_economy_rewarded_ads.sql");
 const migration021 = read("supabase/migrations/021_v046_stars_referrals_market_polish.sql");
+const migration022 = read("supabase/migrations/022_v047_sponsored_tasks_admin_marketing.sql");
 const packageJson = read("package.json");
 const packageLock = read("package-lock.json");
 const marketPage = read("app/market/page.tsx");
@@ -71,8 +72,9 @@ check("Migration 018 present", Boolean(migration018));
 check("Migration 019 present", Boolean(migration019));
 check("Migration 020 v0.45 present", Boolean(migration020));
 check("Migration 021 v0.46 present", Boolean(migration021));
-check("v0.46 package version", packageJson.includes('"version": "0.46.0"'));
-check("package-lock version synced", packageLock.includes('"version": "0.46.0"'));
+check("Migration 022 v0.47 present", Boolean(migration022));
+check("v0.47 package version", packageJson.includes('"version": "0.47.0"'));
+check("package-lock version synced", packageLock.includes('"version": "0.47.0"'));
 check("Environment template present", Boolean(envTemplate));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
@@ -105,6 +107,11 @@ check("Referral graph + idempotent rewards", migration021.includes("referrer_pro
 check("Rewarded ads capped at five/day", migration021.includes("rewarded_ad_daily_limit=5") && economy.includes("REWARDED_AD_DAILY_LIMIT = 5"));
 check("Full-market filter dictionary", migration021.includes("gift_market_filter_options_v046") && read("app/api/market/route.ts").includes("gift_market_filter_options_v046"));
 check("Referral link auth binding", read("app/api/auth/telegram/route.ts").includes("attach_referrer_v046"));
+check("Sponsored campaign schema", migration022.includes("create table if not exists public.sponsored_campaigns") && migration022.includes("sponsored_task_claims"));
+check("Sponsored task atomic reward", migration022.includes("claim_sponsored_campaign_v047") && read("app/api/sponsored-tasks/route.ts").includes("claim_sponsored_campaign_v047"));
+check("Telegram membership verification", read("lib/sponsored-tasks.ts").includes("getChatMember") && read("lib/sponsored-tasks.ts").includes("ensureBotCanVerifyChat"));
+check("Admin marketing console", read("app/admin/page.tsx").includes("MarketingPanel") && read("app/admin/page.tsx").includes("Новая рекламная кампания"));
+check("Promo codes", migration022.includes("promo_codes") && exists("app/api/promo/route.ts"));
 
 check("PnL uses realized trading PnL", auth.includes("pnl: finance.realizedPnl") && !auth.includes("netWorth - 100"));
 check("Economy audit ledger", migration020.includes("create table if not exists public.economy_events") && read("app/api/admin/overview/route.ts").includes("economyEmissionToday"));
