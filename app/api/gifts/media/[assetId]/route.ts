@@ -1,10 +1,15 @@
 import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
+import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
+
+const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
+const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
+const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
 
 function trustedMediaHost(hostname: string) {
   const host = hostname.toLowerCase();
@@ -22,60 +27,8 @@ function trustedMediaHost(hostname: string) {
     || host === "ipfs.io";
 }
 
-function telegramCollectibleSlug(telegramName: unknown, baseName: unknown, giftNumber: unknown) {
-  const stored = String(telegramName || "").trim();
-  if (/^[A-Za-z0-9_-]{3,160}-\d{1,12}$/.test(stored)) return stored;
-
-  const base = String(baseName || "").replace(/[^A-Za-z0-9]/g, "");
-  const number = Number(giftNumber);
-  if (!base || !Number.isSafeInteger(number) || number <= 0) return null;
-  return `${base}-${number}`;
-}
-
-function decodeHtmlAttribute(value: string) {
-  return value
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#x2f;/gi, "/")
-    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)));
-}
-
-function tgsFromTelegramHtml(html: string) {
-  const tags = html.match(/<source\b[^>]*>/gi) || [];
-  for (const tag of tags) {
-    if (!/\btype\s*=\s*["']application\/x-tgsticker["']/i.test(tag)) continue;
-    const source = tag.match(/\bsrcset\s*=\s*["']([^"']+)["']/i)?.[1]
-      || tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
-    if (source) return decodeHtmlAttribute(source.trim().split(/\s+/)[0]);
-  }
-  return null;
-}
-
-async function officialTelegramTgs(slug: string, signal: AbortSignal) {
-  const response = await fetch(`https://t.me/nft/${encodeURIComponent(slug)}`, {
-    signal,
-    cache: "force-cache",
-    headers: {
-      accept: "text/html,application/xhtml+xml",
-      "user-agent": "Mozilla/5.0 MXM-Market/0.14",
-    },
-  });
-  if (!response.ok) return null;
-  const source = tgsFromTelegramHtml(await response.text());
-  if (!source) return null;
-
-  try {
-    const url = new URL(source, "https://t.me");
-    if (url.protocol !== "https:" || !trustedMediaHost(url.hostname)) return null;
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-async function storedTonApiAnimation(source: unknown) {
-  const raw = String(source || "");
+function trustedUrl(source: unknown) {
+  const raw = String(source || "").trim();
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -86,7 +39,68 @@ async function storedTonApiAnimation(source: unknown) {
   }
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ assetId: string }> }) {
+async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
+  const response = await fetch(url, {
+    signal,
+    cache: "force-cache",
+    headers: {
+      accept,
+      "user-agent": "MXM-Market/0.15",
+      referer: "https://fragment.com/",
+    },
+  });
+  return response.ok ? response : null;
+}
+
+async function previewResponse(candidates: Array<URL | null>, signal: AbortSignal) {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
+    if (!upstream) continue;
+    const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) continue;
+    const bytes = Buffer.from(await upstream.arrayBuffer());
+    if (!bytes.length || bytes.length > MAX_PREVIEW_BYTES) continue;
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        "content-type": contentType.split(";")[0] || "image/jpeg",
+        "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+  return null;
+}
+
+async function animationResponse(candidates: Array<URL | null>, signal: AbortSignal) {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
+    if (!upstream) continue;
+    const compressed = Buffer.from(await upstream.arrayBuffer());
+    if (!compressed.length || compressed.length > MAX_ANIMATION_SOURCE_BYTES) continue;
+
+    try {
+      const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
+      const jsonBytes = isGzip ? gunzipSync(compressed) : compressed;
+      if (!jsonBytes.length || jsonBytes.length > MAX_ANIMATION_BYTES) continue;
+      const animation = JSON.parse(jsonBytes.toString("utf8")) as Record<string, unknown>;
+      if (!animation || typeof animation !== "object" || !Array.isArray(animation.layers)) continue;
+      return NextResponse.json(animation, {
+        headers: {
+          "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    } catch {
+      // Try the next official source rather than returning a broken Lottie.
+    }
+  }
+  return null;
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -98,65 +112,42 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ass
   const supabase = getSupabaseAdmin();
   const result = await supabase
     .from("gift_assets")
-    .select("model_media_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
+    .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
     .eq("id", assetId)
     .maybeSingle();
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   if (!result.data || result.data.is_burned || result.data.catalog_source !== "tonapi") {
-    return NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
+    return NextResponse.json({ error: "Gift media not found" }, { status: 404 });
   }
 
+  const slug = telegramCollectibleSlug(result.data.telegram_name, result.data.base_name, result.data.gift_number);
+  const fragment = slug ? fragmentGiftMedia(slug) : null;
+  const variant = new URL(request.url).searchParams.get("variant") === "preview" ? "preview" : "animation";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
+
   try {
-    // Telegram's public collectible page exposes the official full TGS for the
-    // exact numbered Gift. Prefer it over a static TON NFT preview. This keeps
-    // the animation tied to the real Telegram collectible rather than guessing
-    // by model name or rendering a synthetic animation.
-    const slug = telegramCollectibleSlug(result.data.telegram_name, result.data.base_name, result.data.gift_number);
-    let url = slug ? await officialTelegramTgs(slug, controller.signal) : null;
-
-    // Some TonAPI metadata already exposes a direct Lottie/TGS URL. Keep that
-    // as a second real-media source if the public Telegram page is unavailable.
-    if (!url && result.data.model_is_animated === true) {
-      url = await storedTonApiAnimation(result.data.model_media_url);
-    }
-    if (!url) return NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
-
-    const upstream = await fetch(url, {
-      signal: controller.signal,
-      cache: "force-cache",
-      headers: {
-        accept: "application/x-tgsticker,application/json,application/gzip,application/octet-stream;q=0.9,*/*;q=0.8",
-        "user-agent": "MXM-Market/0.14",
-      },
-    });
-    if (!upstream.ok) {
-      return NextResponse.json({ error: `Media upstream ${upstream.status}` }, { status: 502 });
+    if (variant === "preview") {
+      // Fragment's JPG is the complete collectible render, including the exact
+      // Telegram backdrop and symbol pattern. TonAPI's preview can be only the
+      // transparent model, which is what caused the black cards in v0.14.
+      const response = await previewResponse([
+        trustedUrl(fragment?.large),
+        trustedUrl(fragment?.medium),
+        trustedUrl(result.data.model_preview_url),
+        result.data.model_is_animated ? null : trustedUrl(result.data.model_media_url),
+      ], controller.signal);
+      return response || NextResponse.json({ error: "Gift preview not found" }, { status: 404 });
     }
 
-    // TGS is gzipped Lottie JSON. Decompress and validate it server-side so
-    // older Telegram WebViews do not need CompressionStream support at all.
-    const compressed = Buffer.from(await upstream.arrayBuffer());
-    if (!compressed.length || compressed.length > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: "Animation payload is invalid" }, { status: 502 });
-    }
-    const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
-    const jsonBytes = isGzip ? gunzipSync(compressed) : compressed;
-    if (jsonBytes.length > 8 * 1024 * 1024) {
-      return NextResponse.json({ error: "Animation payload is too large" }, { status: 502 });
-    }
-    const animation = JSON.parse(jsonBytes.toString("utf8")) as unknown;
-    if (!animation || typeof animation !== "object") {
-      return NextResponse.json({ error: "Animation payload is invalid" }, { status: 502 });
-    }
-
-    return NextResponse.json(animation, {
-      headers: {
-        "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
-        "x-content-type-options": "nosniff",
-      },
-    });
+    // Prefer Fragment's full collectible Lottie. Unlike the TGS extracted from
+    // t.me/nft, it is the composed NFT presentation rather than only the model
+    // sticker layer, so the backdrop does not disappear when animation starts.
+    const response = await animationResponse([
+      trustedUrl(fragment?.animation),
+      result.data.model_is_animated ? trustedUrl(result.data.model_media_url) : null,
+    ], controller.signal);
+    return response || NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
   } catch (error) {
     const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
     return NextResponse.json({ error: message }, { status: 502 });

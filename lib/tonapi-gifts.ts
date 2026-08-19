@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -263,8 +264,8 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
   const collectionName = str(collectionMetadata.name || item.collection?.name);
   const itemName = str(metadata.name);
   const identity = parseGiftIdentity(itemName, collectionName, item.index);
-  const media = metadataMedia(metadata, item.previews);
-  if (!identity || !media) return null;
+  const tonApiMedia = metadataMedia(metadata, item.previews);
+  if (!identity || !tonApiMedia) return null;
 
   const rows = traitRows(metadata);
   const descriptionTraits = traitsFromDescription(metadata);
@@ -279,6 +280,10 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
   // indexer exposes neither structured attributes nor that description, skip.
   if (!model || !symbol || !backdrop) return null;
 
+  const telegramSlug = findTelegramSlug(metadata)
+    || telegramCollectibleSlug(null, identity.baseName, identity.number);
+  const fragmentMedia = telegramSlug ? fragmentGiftMedia(telegramSlug) : null;
+
   return {
     address: item.address,
     collectionAddress: collection.address,
@@ -286,10 +291,14 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
     name: itemName || `${identity.baseName} #${identity.number}`,
     baseName: identity.baseName,
     number: identity.number,
-    telegramSlug: findTelegramSlug(metadata),
-    mediaUrl: media.mediaUrl,
-    previewUrl: media.previewUrl,
-    mediaKind: media.mediaKind,
+    telegramSlug,
+    // Fragment publishes the complete Telegram collectible render: the model,
+    // the real backdrop and the repeating symbol pattern. TonAPI previews are
+    // kept only as a validation/source fallback because many of them contain
+    // the transparent model layer without Telegram's backdrop.
+    mediaUrl: fragmentMedia?.animation || tonApiMedia.mediaUrl,
+    previewUrl: fragmentMedia?.large || tonApiMedia.previewUrl,
+    mediaKind: fragmentMedia ? "animated" : tonApiMedia.mediaKind,
     resalePriceTon: nativeTonSalePrice(item.sale),
     model,
     symbol,

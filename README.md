@@ -1,8 +1,16 @@
-# MemeX Market (MXM) v0.14.0
+# MemeX Market (MXM) v0.15.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts provide real source artwork/metadata, while ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+## v0.15 — Correct Telegram Gift Backdrops + Full Fragment Animations
+
+- TonAPI Gift cards no longer render a transparent model on a black square. MXM now uses Fragment's official full collectible preview (`*.large.jpg`) which already contains the exact Telegram backdrop and symbol pattern.
+- Animated cards use Fragment's official full collectible Lottie (`*.lottie.json`) through the same-origin media proxy. The old `t.me/nft` TGS path is no longer preferred because that asset can represent only the transparent model sticker layer.
+- The static full preview stays visible while Lottie is loading and remains as a fallback if animation is unavailable, eliminating black flashes and empty cards.
+- Newly imported TonAPI assets store Fragment full-render media URLs when the Telegram collectible slug is known. Existing database rows are fixed at request time, so **no new SQL migration is required** for v0.15.
+- Media responses are host-whitelisted, size-limited, validated and CDN-cacheable.
 
 ## v0.10 — Instant Trading + Economy Guardrails
 
@@ -144,25 +152,4 @@ After the migration, opening the Gift market can bootstrap the first real cohort
 - Late pagination/bootstrap responses are ignored after switching Market tabs, so an in-flight Gift request cannot overwrite the Coins view.
 - Removed the obsolete MTProto session helper from the project; production remains Bot API + TonAPI only.
 
-## v0.14 — Real TON Listings + Animated Gift Media
-
-- Removed synthetic Genesis pricing. System Gift listings are now created only when TonAPI exposes a live sale price for that exact NFT in native TON.
-- Non-TON sale currencies are never relabeled as TON. If an exact NFT has no current native-TON sale price, MXM does not invent one and does not keep it as a system listing.
-- Existing v0.13 system inventory is reconciled during migration: stale generated prices are replaced with the current observed TonAPI native-TON price, while unpriced system listings are hidden from Market.
-- Added ongoing NPC price reconciliation so system-owned external-market inventory follows observed native-TON listings instead of drifting from source data.
-- TonAPI imports now preserve separate static preview and animated/video media URLs.
-- TonAPI Gift cards lazily resolve the official TGS for the exact numbered collectible from its public `t.me/nft/...` page, so a static on-chain preview no longer forces a static card.
-- Gift cards also support animated WebP/GIF/APNG, MP4/WebM video and direct Lottie/TGS content, with viewport-based lazy playback to avoid loading every animation at once.
-- Lottie/TGS media uses an authenticated same-origin proxy for trusted Telegram/TonAPI/IPFS hosts, avoiding WebView CORS failures while retaining the real static preview as fallback.
-- The Market overview exposes `model_preview_url`, allowing animated cards to fail gracefully without replacing real artwork with placeholders.
-
-### Database upgrade from v0.13
-
-Run after `014_v012_tonapi_polish.sql`:
-
-```text
-supabase/migrations/015_v014_real_prices_animations.sql
-```
-
-Apply `015` before deploying v0.14 application code because the importer and Market view now use `model_preview_url` and the real-price reconciliation RPC.
-
+No new database migration is required beyond `014_v012_tonapi_polish.sql`.

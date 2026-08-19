@@ -81,23 +81,21 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
 function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const lottieRef = useRef<HTMLDivElement>(null);
-  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const [animationFailedKey, setAnimationFailedKey] = useState<string | null>(null);
+  const [animationReadyKey, setAnimationReadyKey] = useState<string | null>(null);
+  const [previewFailedKey, setPreviewFailedKey] = useState<string | null>(null);
   const visible = useNearViewport(compact, holderRef);
-  const source = gift.modelMediaUrl || gift.modelPreviewUrl;
-  const preview = gift.modelPreviewUrl || (gift.mediaKind === "static" ? gift.modelMediaUrl : null);
-  const animationKey = `telegram-animation:${gift.id}`;
-  const mediaKey = source ? `ton-media:${source}` : null;
-  const animationFailed = failedSource === animationKey;
-  const mediaFailed = Boolean(mediaKey && failedSource === mediaKey);
+  const previewSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview`;
+  const animationFailed = animationFailedKey === gift.id;
+  const animationReady = animationReadyKey === gift.id;
+  const previewFailed = previewFailedKey === gift.id;
 
   useEffect(() => {
-    // Every verified TonAPI row represents an exported Telegram collectible.
-    // The proxy first resolves the exact numbered collectible's official TGS
-    // from t.me/nft and only then falls back to a direct TonAPI animation URL.
     if (!visible || animationFailed || !lottieRef.current) return;
     let destroyed = false;
     let animation: { destroy: () => void } | null = null;
-    const animationSource = `/api/gifts/media/${encodeURIComponent(gift.id)}`;
+    const animationSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=animation`;
+
     Promise.all([import("lottie-web"), loadLottieJson(animationSource)]).then(([module, animationData]) => {
       if (destroyed || !lottieRef.current) return;
       animation = module.default.loadAnimation({
@@ -106,52 +104,58 @@ function TonApiMedia({ gift, compact }: { gift: GiftAsset; compact: boolean }) {
         loop: true,
         autoplay: true,
         animationData,
+        rendererSettings: { preserveAspectRatio: "xMidYMid meet" },
       });
-    }).catch(() => { if (!destroyed) setFailedSource(animationKey); });
+      requestAnimationFrame(() => {
+        if (!destroyed) setAnimationReadyKey(gift.id);
+      });
+    }).catch(() => {
+      if (!destroyed) {
+        setAnimationFailedKey(gift.id);
+      }
+    });
+
     return () => {
       destroyed = true;
       animation?.destroy();
     };
-  }, [animationFailed, animationKey, gift.id, visible]);
+  }, [animationFailed, gift.id, visible]);
 
-  const fallback = preview ? <img src={preview} alt={`${gift.baseName} #${gift.number}`} loading={compact ? "lazy" : "eager"} decoding="async" referrerPolicy="no-referrer" className="h-full w-full object-contain" /> : <div className="grid h-full w-full place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>;
-
-  if (!visible) return <div ref={holderRef} className="h-full w-full">{fallback}</div>;
-
-  // Prefer Telegram's real collectible animation even when TonAPI only exposes
-  // a static rendered NFT preview. If Telegram has no TGS for this item, the
-  // request fails once and the card falls back to the real static/video source.
-  if (!animationFailed) {
-    return <div ref={(node) => { holderRef.current = node; lottieRef.current = node; }} aria-label={`${gift.baseName} #${gift.number}`} className="h-full w-full" />;
-  }
-
-  if (!source || mediaFailed) return <div ref={holderRef} className="h-full w-full">{fallback}</div>;
-
-  if (gift.mediaKind === "video") {
-    return (
-      <div ref={holderRef} className="h-full w-full">
-        <video
-          src={source}
-          poster={preview || undefined}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload={compact ? "metadata" : "auto"}
-          onError={() => mediaKey && setFailedSource(mediaKey)}
-          className="h-full w-full object-contain"
-        />
-      </div>
-    );
-  }
-
-  // A direct TonAPI Lottie/TGS may have failed only because Telegram's public
-  // page was unavailable. Do not feed a known Lottie source to <img>.
-  if (gift.mediaKind === "animated") return <div ref={holderRef} className="h-full w-full">{fallback}</div>;
+  const storedPreview = gift.modelPreviewUrl || (gift.mediaKind === "static" ? gift.modelMediaUrl : null);
 
   return (
-    <div ref={holderRef} className="h-full w-full">
-      <img src={source} alt={`${gift.baseName} #${gift.number}`} loading={compact ? "lazy" : "eager"} decoding="async" referrerPolicy="no-referrer" onError={() => mediaKey && setFailedSource(mediaKey)} className="h-full w-full object-contain" />
+    <div ref={holderRef} className="relative h-full w-full overflow-hidden bg-[#0b0d0f]">
+      {!previewFailed ? (
+        <img
+          src={previewSource}
+          alt={`${gift.baseName} #${gift.number}`}
+          loading={compact ? "lazy" : "eager"}
+          decoding="async"
+          onError={() => setPreviewFailedKey(gift.id)}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${animationReady ? "opacity-0" : "opacity-100"}`}
+        />
+      ) : storedPreview ? (
+        <img
+          src={storedPreview}
+          alt={`${gift.baseName} #${gift.number}`}
+          loading={compact ? "lazy" : "eager"}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${animationReady ? "opacity-0" : "opacity-100"}`}
+        />
+      ) : null}
+
+      {visible && !animationFailed ? (
+        <div
+          ref={lottieRef}
+          aria-label={`${gift.baseName} #${gift.number}`}
+          className="absolute inset-0 h-full w-full"
+        />
+      ) : null}
+
+      {previewFailed && !storedPreview && (animationFailed || !visible) ? (
+        <div className="absolute inset-0 grid place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>
+      ) : null}
     </div>
   );
 }
@@ -162,7 +166,7 @@ export function GiftMedia({ gift, className = "", compact = false }: { gift: Gif
 
   if (gift.catalogSource === "tonapi") {
     return (
-      <div className={`relative isolate overflow-hidden bg-black ${className}`}>
+      <div className={`relative isolate overflow-hidden bg-[#0b0d0f] ${className}`}>
         <TonApiMedia gift={gift} compact={compact} />
       </div>
     );
