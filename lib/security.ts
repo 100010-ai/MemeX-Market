@@ -9,15 +9,23 @@ function securitySecret() {
 
 export function sameOriginMutation(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (!host) return false;
-  try {
-    const parsed = new URL(origin);
-    return parsed.host === host;
-  } catch {
-    return false;
+  if (origin) {
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
   }
+
+  // Some Telegram WebViews omit Origin on same-origin fetches. Sec-Fetch-Site
+  // still lets us reject explicit cross-site mutations without breaking those
+  // legitimate clients. Requests with neither header are accepted because
+  // authenticated mutations also require the signed HttpOnly session cookie.
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite === "cross-site") return false;
+  return true;
 }
 
 export function requestIp(request: Request) {

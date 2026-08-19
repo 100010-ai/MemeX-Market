@@ -100,7 +100,7 @@ export function mapGift(row: Record<string, any>): GiftAsset {
     isBurned: Boolean(row.is_burned),
     isFromBlockchain: Boolean(row.is_from_blockchain),
     lastSeenAt: requiredString(row.last_seen_at, "gift last_seen_at"),
-    catalogSource: row.catalog_source === "bot_catalog" ? "bot_catalog" : "profile_sync",
+    catalogSource: row.catalog_source === "tonapi" ? "tonapi" : row.catalog_source === "bot_catalog" ? "bot_catalog" : "profile_sync",
     bestOffer: nullableNumber(row.best_offer, "gift best offer"),
     offerCount: requiredNumber(row.offer_count, "gift offer count"),
     ownerId: requiredString(row.owner_profile_id, "gift owner id"),

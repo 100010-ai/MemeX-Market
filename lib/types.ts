@@ -111,7 +111,7 @@ export type GiftAsset = {
   isBurned: boolean;
   isFromBlockchain: boolean;
   lastSeenAt: string;
-  catalogSource: "profile_sync" | "bot_catalog";
+  catalogSource: "profile_sync" | "bot_catalog" | "tonapi";
   bestOffer: number | null;
   offerCount: number;
   ownerId: string;

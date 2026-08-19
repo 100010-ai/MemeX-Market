@@ -22,3 +22,5 @@ for (const [label, names] of pairs) {
   const found = names.find((name) => process.env[name]);
   console.log(`${found ? "OK     " : "MISSING"} ${label}${found ? ` (${found})` : ` — ${names.join(" / ")}`}`);
 }
+const tonApiKey = process.env.TONAPI_KEY;
+console.log(`${tonApiKey ? "OK     " : "OPTIONAL"} TonAPI key${tonApiKey ? " (TONAPI_KEY)" : " — public rate-limited access will be used"}`);

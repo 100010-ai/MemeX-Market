@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { Profile } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
@@ -10,28 +10,66 @@ type TelegramContextValue = {
   loading: boolean;
   error: string | null;
   refreshProfile: () => Promise<void>;
+  retryAuth: () => void;
   patchProfile: (patch: Partial<Profile>) => void;
   haptic: (style?: "light" | "medium" | "heavy") => void;
 };
 
 const TelegramContext = createContext<TelegramContextValue | null>(null);
 
-async function existingSession(): Promise<Profile | null> {
-  const response = await fetch("/api/me", { cache: "no-store", credentials: "same-origin" });
-  if (response.status === 401) return null;
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Не удалось проверить сессию");
-  return payload.profile as Profile;
+class SessionCheckError extends Error {
+  readonly status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "SessionCheckError";
+    this.status = status;
+  }
 }
 
-async function waitForInitData(timeoutMs = 2500) {
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function existingSession(attempts = 3): Promise<Profile | null> {
+  let lastError: SessionCheckError | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch("/api/me", { cache: "no-store", credentials: "same-origin" });
+      if (response.status === 401) return null;
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.profile) return payload.profile as Profile;
+      const message = typeof payload?.error === "string" ? payload.error : "Не удалось проверить сессию";
+      lastError = new SessionCheckError(message, response.status);
+      // 4xx other than 401 is authoritative and should not be hammered.
+      if (response.status >= 400 && response.status < 500) throw lastError;
+    } catch (cause) {
+      if (cause instanceof SessionCheckError && cause.status != null && cause.status >= 400 && cause.status < 500) throw cause;
+      lastError = cause instanceof SessionCheckError
+        ? cause
+        : new SessionCheckError(cause instanceof Error ? cause.message : "Сеть временно недоступна", null);
+    }
+    if (attempt + 1 < attempts) await sleep(120 * (attempt + 1));
+  }
+  throw lastError || new SessionCheckError("Не удалось проверить сессию", null);
+}
+
+async function waitForInitData(timeoutMs = 3500) {
   const started = performance.now();
   while (performance.now() - started < timeoutMs) {
     const webApp = window.Telegram?.WebApp;
     if (webApp?.initData) return webApp;
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    await sleep(50);
   }
   return window.Telegram?.WebApp ?? null;
+}
+
+function prepareWebApp() {
+  const webApp = window.Telegram?.WebApp;
+  if (!webApp) return;
+  webApp.ready();
+  webApp.expand();
+  webApp.setHeaderColor?.("#050607");
+  webApp.setBackgroundColor?.("#050607");
 }
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
@@ -40,11 +78,24 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authNonce, setAuthNonce] = useState(0);
+  const authInFlight = useRef(false);
 
   const refreshProfile = useCallback(async () => {
-    const result = await apiFetch<{ profile: Profile }>("/api/me");
-    setProfile(result.profile);
-    setError(null);
+    try {
+      const result = await apiFetch<{ profile: Profile }>("/api/me");
+      setProfile(result.profile);
+      setError(null);
+    } catch (cause) {
+      // A transient profile refresh must never wipe an already authenticated UI.
+      if (!profile) throw cause;
+      console.error("profile refresh", cause);
+    }
+  }, [profile]);
+
+  const retryAuth = useCallback(() => {
+    if (authInFlight.current) return;
+    setAuthNonce((value) => value + 1);
   }, []);
 
   const patchProfile = useCallback((patch: Partial<Profile>) => {
@@ -57,6 +108,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    prepareWebApp();
     if (isControl) {
       setLoading(false);
       setError(null);
@@ -64,23 +116,33 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     }
 
     async function authenticateOnce() {
-      setLoading(true);
+      if (authInFlight.current) return;
+      authInFlight.current = true;
+      if (!profile) setLoading(true);
       setError(null);
       try {
-        // A valid signed cookie is authoritative. Navigation inside the Mini App
-        // must not re-run Telegram auth and consume login rate-limit entries.
-        const sessionProfile = await existingSession();
-        if (sessionProfile) {
-          if (!cancelled) setProfile(sessionProfile);
-          return;
+        let sessionError: unknown = null;
+        try {
+          const sessionProfile = await existingSession();
+          if (sessionProfile) {
+            if (!cancelled) setProfile(sessionProfile);
+            return;
+          }
+        } catch (cause) {
+          // Supabase/network can have a short transient failure. If Telegram
+          // initData is present, use it to recover instead of showing a false
+          // "Telegram session required" screen.
+          sessionError = cause;
         }
 
         const webApp = await waitForInitData();
-        if (!webApp?.initData) throw new Error("Открой MXM через @MemeXMarketBot в Telegram.");
-        webApp.ready();
-        webApp.expand();
-        webApp.setHeaderColor?.("#050607");
-        webApp.setBackgroundColor?.("#050607");
+        if (!webApp?.initData) {
+          if (profile) return;
+          throw sessionError instanceof Error
+            ? sessionError
+            : new Error("Открой MXM через @MemeXMarketBot в Telegram.");
+        }
+        prepareWebApp();
 
         const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
           method: "POST",
@@ -88,17 +150,21 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         });
         if (!cancelled) setProfile(result.profile);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
+        if (!cancelled && !profile) setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
       } finally {
+        authInFlight.current = false;
         if (!cancelled) setLoading(false);
       }
     }
 
     void authenticateOnce();
     return () => { cancelled = true; };
-  }, [isControl]);
+    // profile is intentionally not a dependency: normal page navigation and
+    // profile patches must never restart Telegram authentication.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isControl, authNonce]);
 
-  const value = useMemo(() => ({ profile, loading, error, refreshProfile, patchProfile, haptic }), [profile, loading, error, refreshProfile, patchProfile, haptic]);
+  const value = useMemo(() => ({ profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
 }
 

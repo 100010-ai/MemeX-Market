@@ -27,11 +27,13 @@ export default function CoinPage() {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [sellAll, setSellAll] = useState(false);
+  const [slippage, setSlippage] = useState(2);
   const [busy, setBusy] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadSeq = useRef(0);
   const tradeInFlight = useRef(false);
+  const tradeRequestId = useRef<string | null>(null);
   const { refreshProfile, patchProfile, haptic } = useTelegramProfile();
 
   const load = useCallback(async (silent = false) => {
@@ -68,11 +70,13 @@ export default function CoinPage() {
     setSide(next);
     setAmount("");
     setSellAll(false);
+    tradeRequestId.current = null;
     setError(null);
   }
 
   function applyFraction(fraction: number) {
     if (!data) return;
+    tradeRequestId.current = null;
     if (side === "sell" && fraction === 1) {
       setSellAll(true);
       setAmount(amountText(data.holding.quantity));
@@ -119,11 +123,15 @@ export default function CoinPage() {
     haptic("medium");
 
     try {
+      const minOutput = Math.max(0, quote.outputAmount * (1 - slippage / 100));
+      const requestId = tradeRequestId.current || crypto.randomUUID();
+      tradeRequestId.current = requestId;
       await apiFetch("/api/trade", {
         method: "POST",
-        body: JSON.stringify({ coinId: id, side, amount: inputAmount, sellAll: side === "sell" && sellAll }),
+        body: JSON.stringify({ requestId, coinId: id, side, amount: inputAmount, sellAll: side === "sell" && sellAll, minOutput }),
       });
       haptic("light");
+      tradeRequestId.current = null;
       tradeInFlight.current = false;
       setBusy(false);
       void refreshProfile();
@@ -194,10 +202,11 @@ export default function CoinPage() {
             <div className="grid grid-cols-2 border-b border-[var(--border-soft)]"><button onClick={() => switchSide("buy")} className={`py-2.5 text-xs font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button><button onClick={() => switchSide("sell")} className={`py-2.5 text-xs font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button></div>
             <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Доступно</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.quantity)} ${coin.symbol}`}</span></div>
             {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} в резерве по офферам подарков</p> : null}
-            <div className="mt-2 flex items-center border-b border-[var(--border)] px-1"><input value={amount} onChange={(e) => { setAmount(e.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><span className="text-xs text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span></div>
+            <div className="mt-2 flex items-center border-b border-[var(--border)] px-1"><input value={amount} onChange={(e) => { tradeRequestId.current = null; setAmount(e.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><span className="text-xs text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span></div>
             <div className="mxm-hscroll mt-2 gap-4 border-b border-[var(--border-soft)] pb-2">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} onClick={() => applyFraction(fraction)} className="shrink-0 py-1 text-[10px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
 
-            {quote ? <div className="mt-3 space-y-2 py-1"><QuoteRow label="Вы получите" value={side === "buy" ? `${compact(quote.outputAmount)} ${coin.symbol}` : money(quote.outputAmount)} strong /><QuoteRow label="Цена исполнения" value={price(quote.executionPrice)} /><QuoteRow label={`Комиссия · ${(COIN_FEE_RATE * 100).toFixed(1)}%`} value={money(quote.feeAmount)} /><QuoteRow label="Влияние на цену" value={`${quote.priceImpact.toFixed(2)}%`} warning={quote.priceImpact >= 10} /><QuoteRow label="Цена после сделки" value={price(quote.projectedPrice)} /></div> : null}
+            {quote ? <div className="mt-3 space-y-2 py-1"><QuoteRow label="Вы получите" value={side === "buy" ? `${compact(quote.outputAmount)} ${coin.symbol}` : money(quote.outputAmount)} strong /><QuoteRow label="Цена исполнения" value={price(quote.executionPrice)} /><QuoteRow label={`Комиссия · ${(COIN_FEE_RATE * 100).toFixed(1)}%`} value={money(quote.feeAmount)} /><QuoteRow label="Влияние на цену" value={`${quote.priceImpact.toFixed(2)}%`} warning={quote.priceImpact >= 10} /><QuoteRow label="Цена после сделки" value={price(quote.projectedPrice)} /><QuoteRow label="Минимум к получению" value={side === "buy" ? `${compact(quote.outputAmount * (1 - slippage / 100))} ${coin.symbol}` : money(quote.outputAmount * (1 - slippage / 100))} /></div> : null}
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border-soft)] pt-2"><span className="text-[10px] text-[var(--muted)]">Проскальзывание</span><div className="mxm-hscroll max-w-[210px] justify-end gap-3">{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => setSlippage(value)} className={`shrink-0 py-1 text-[10px] transition ${slippage === value ? "text-white underline decoration-[var(--accent)] underline-offset-4" : "text-[var(--muted)] hover:text-white"}`}>{value}%</button>)}</div></div>
             {Number.isFinite(numericAmount) && numericAmount > max && !sellAll ? <p className="mt-2 text-[10px] text-[var(--negative)]">Сумма превышает доступный баланс.</p> : null}
             {error ? <div className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1.5 text-xs text-[#ff9aa4]">{error}</div> : null}
             <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-3 w-full py-3 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>

@@ -4,6 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
 import { ensureGenesisGiftMarket } from "@/lib/npc-market";
+import { ensureTonApiGiftBootstrap } from "@/lib/tonapi-gifts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -69,14 +70,20 @@ export async function GET(request: NextRequest) {
       ? suppliedSeed
       : crypto.randomBytes(18).toString("base64url");
 
-    // Finite Genesis release: every top-level market opening may release the
-    // next small batch, but sold system inventory is NEVER replenished.
+    // Zero-config bootstrap: if the verified catalogue is still empty, import
+    // a small real on-chain Telegram Gift cohort through TonAPI. No sample or
+    // generated Gift is ever inserted. The external call is attempted only
+    // while the catalogue is below the bootstrap threshold and is throttled
+    // after failures in tonapi_catalog_state.
     if (offset === 0) {
       try {
-        await ensureGenesisGiftMarket({ batchSize: 12 });
+        await ensureTonApiGiftBootstrap(72);
+      } catch (catalogError) {
+        console.error("TonAPI Gift bootstrap", catalogError);
+      }
+      try {
+        await ensureGenesisGiftMarket({ batchSize: 72 });
       } catch (genesisError) {
-        // Catalogue may be empty/not initialized. Market should still load its
-        // authoritative DB state instead of replacing it with fake data.
         console.error("Genesis Gift release", genesisError);
       }
     }

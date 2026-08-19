@@ -1,4 +1,4 @@
-# MemeX Market (MXM) v0.11.0
+# MemeX Market (MXM) v0.12.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -18,7 +18,7 @@ MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Te
 - Reduced the heavy panel/pill styling on coin Market and coin detail: transparent/flat tabs, simpler avatars, separator-based stats and fewer nested rounded backgrounds.
 - Long category/filter rails remain true horizontal swipe containers in Telegram WebView.
 
-## Database upgrade
+## Legacy v0.10 database upgrade
 
 If the database is already on v0.9.2, run only:
 
@@ -105,3 +105,27 @@ supabase/migrations/013_v011_genesis_market_auth.sql
 ```
 
 `013` creates no demo/mock/fallback Gifts. If the verified Telegram catalogue is empty, the Genesis pool stays empty instead of inventing assets.
+
+## v0.12 — Real Gift Bootstrap + Trading/Chart/Security Polish
+
+- The empty Gift-market problem is fixed at its source. On the first Gift-market request, MXM can import a bounded cohort of **real exported Telegram Gift NFTs from TON through TonAPI**, then release real rows into the finite Genesis pool. No fake Gift, fallback artwork or generated trait is inserted.
+- The existing Bot API catalogue remains an additional source for real Gifts from explicitly known Telegram users. TonAPI is used for on-chain exported collectibles; Bot API data keeps exact Telegram model/symbol/backdrop rarity when available.
+- No MTProto user session, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` or `TELEGRAM_USER_SESSION` is required.
+- `TONAPI_KEY` is optional. Without it the importer respects TonAPI's public rate limit; normal gameplay never waits on TonAPI after the catalogue has been populated.
+- Catalogue import validates NFT identity, collection/source signals, real media and real model/background/symbol metadata. Incomplete rows are skipped rather than repaired with placeholder data.
+- Rarity for TonAPI-only rows is recomputed from the real imported cohort of that collection. It is an empirical catalogue frequency; Bot API rows continue to use Telegram-provided rarity metadata.
+- The finite Genesis logic is unchanged: system inventory is released once, players buy it, and subsequent supply is player-to-player.
+- Telegram authentication is resilient to short `/api/me`/network failures and no longer replaces an already authenticated UI with a false session screen.
+- Coin charts now have 1m/5m/15m/1h/4h/1d aggregation, volume histogram, crosshair OHLC inspection, dynamic small-price precision, fit-content control and touch-friendly zoom/scroll.
+- Coin detail loads only the latest bounded candle history and recent trades instead of pulling an unnecessarily large history on every open.
+- Client quotes stay instantaneous, while `buy_coin_v2`, `sell_coin_v2` and `sell_coin_all_v2` recompute under Postgres locks and enforce the user's minimum output/slippage before committing balances and reserves.
+
+### Database upgrade from v0.11
+
+Run only:
+
+```text
+supabase/migrations/014_v012_tonapi_polish.sql
+```
+
+After the migration, opening the Gift market can bootstrap the first real cohort automatically. In local God Mode, **Загрузить реальные Gifts** performs a broader catalogue pass, and **Выпустить Genesis** releases the imported finite inventory.

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation } from "@/lib/security";
-import { syncConfiguredGiftCatalogSources } from "@/lib/gift-catalog";
+import { syncGiftCatalog } from "@/lib/gift-catalog";
 import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
@@ -206,9 +206,9 @@ export async function POST(request: Request) {
     }
 
     if (action === "catalog.sync") {
-      const catalog = await syncConfiguredGiftCatalogSources();
-      const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 18 });
-      await audit("catalog.sync", "telegram_bot_catalog", undefined, { catalog, liquidity });
+      const catalog = await syncGiftCatalog();
+      const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 1000 });
+      await audit("catalog.sync", "telegram_hybrid_catalog", undefined, { catalog, liquidity });
       return NextResponse.json({ ok: true, catalog, liquidity });
     }
 

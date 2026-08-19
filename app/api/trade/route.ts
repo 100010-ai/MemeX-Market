@@ -11,23 +11,32 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    const requestId = String(body.requestId || "");
     const coinId = String(body.coinId || "");
     const side = body.side === "sell" ? "sell" : body.side === "buy" ? "buy" : null;
     const amount = Number(body.amount);
+    const minOutput = Number(body.minOutput ?? 0);
     const sellAll = side === "sell" && body.sellAll === true;
-    if (!coinId || !side || (!sellAll && (!Number.isFinite(amount) || amount <= 0))) return NextResponse.json({ error: "Некорректная сделка" }, { status: 400 });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId) || !coinId || !side || (!sellAll && (!Number.isFinite(amount) || amount <= 0)) || !Number.isFinite(minOutput) || minOutput < 0) {
+      return NextResponse.json({ error: "Некорректная сделка" }, { status: 400 });
+    }
 
     const supabase = getSupabaseAdmin();
-    const fn = side === "buy" ? "buy_coin" : sellAll ? "sell_coin_all" : "sell_coin";
-    const args = side === "buy"
-      ? { p_profile_id: profile.id, p_coin_id: coinId, p_quote_amount: amount }
-      : sellAll
-        ? { p_profile_id: profile.id, p_coin_id: coinId }
-        : { p_profile_id: profile.id, p_coin_id: coinId, p_token_amount: amount };
+    const args = {
+      p_request_id: requestId,
+      p_profile_id: profile.id,
+      p_coin_id: coinId,
+      p_side: side,
+      p_amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+      p_sell_all: sellAll,
+      p_min_output: minOutput,
+    };
 
-    const { data, error } = await supabase.rpc(fn, args);
+    const { data, error } = await supabase.rpc("execute_coin_trade_v3", args);
     if (error) {
-      const message = error.message.includes("Insufficient token balance") ? "Недостаточно токенов" : error.message;
+      let message = error.message;
+      if (message.includes("Insufficient token balance")) message = "Недостаточно токенов";
+      if (message.includes("Price moved beyond slippage limit")) message = "Цена изменилась сильнее допустимого проскальзывания. Повтори сделку.";
       return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });

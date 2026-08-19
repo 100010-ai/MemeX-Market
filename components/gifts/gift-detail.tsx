@@ -61,7 +61,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
         ) : (
           <Link href="/market" className="grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><ArrowLeft size={17} /></Link>
         )}
-        <a href={`https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">Открыть в Telegram <ExternalLink size={12} /></a>
+        <a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "Открыть в TON" : "Открыть в Telegram"} <ExternalLink size={12} /></a>
       </div>
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">

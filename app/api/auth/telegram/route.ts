@@ -24,8 +24,8 @@ export async function POST(request: Request) {
     if (!validated.ok) return NextResponse.json({ error: validated.reason }, { status: 401 });
     const { user } = validated;
 
-    if (!(await enforceRateLimit(request, "telegram-auth", user.id, 12, 300))) {
-      return NextResponse.json({ error: "Слишком много попыток входа. Попробуйте через минуту." }, { status: 429, headers: { "retry-after": "60" } });
+    if (!(await enforceRateLimit(request, "telegram-auth", user.id, 60, 300))) {
+      return NextResponse.json({ error: "Слишком много запросов авторизации. Повторите через минуту." }, { status: 429, headers: { "retry-after": "60" } });
     }
 
     const supabase = getSupabaseAdmin();

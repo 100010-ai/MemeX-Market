@@ -12,9 +12,9 @@ export async function GET() {
     ok: true,
     app: "MemeX Market",
     short: "MXM",
-    version: "0.11.0",
+    version: "0.12.0",
     currency: "virtual TON",
-    catalogMode: "verified Telegram Gifts + finite Genesis NPC supply + secondary virtual TON trading",
+    catalogMode: "Bot API + validated TON NFT catalog via TonAPI + finite Genesis + secondary virtual TON trading",
     realtimeConfigured: Boolean(realtimeUrl && realtimeKey),
   });
 }

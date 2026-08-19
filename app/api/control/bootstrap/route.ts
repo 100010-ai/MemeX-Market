@@ -80,6 +80,15 @@ export async function GET(request: Request) {
         .limit(60),
     ]);
 
+    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult] = await Promise.all([
+      supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi"),
+      supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi").eq("chain_verified", true),
+      supabase.from("tonapi_catalog_state").select("last_discovery_at,last_sync_at,last_error,lock_until,updated_at").eq("singleton", true).maybeSingle(),
+    ]);
+    if (tonapiCountResult.error) throw tonapiCountResult.error;
+    if (tonapiVerifiedResult.error) throw tonapiVerifiedResult.error;
+    if (tonapiStateResult.error) throw tonapiStateResult.error;
+
     const systemIds = new Set(profileRows.filter((row) => row.is_system).map((row) => String(row.id)));
     return NextResponse.json({
       metrics: {
@@ -92,6 +101,8 @@ export async function GET(request: Request) {
         listedGifts: giftRows.filter((row) => row.status === "listed").length,
         npcListings: giftRows.filter((row) => row.status === "listed" && systemIds.has(String(row.owner_profile_id))).length,
         catalogSources: sourceRows.filter((row) => row.active).length,
+        tonapiAssets: tonapiCountResult.count || 0,
+        tonapiVerified: tonapiVerifiedResult.count || 0,
       },
       profiles: profileRows,
       missions: missionRows,
@@ -101,6 +112,7 @@ export async function GET(request: Request) {
       catalogSources: sourceRows,
       npcState: npcStateRows[0] || null,
       npcLog: npcLogRows.data || [],
+      tonapiState: tonapiStateResult.data || null,
       checkedAt: new Date().toISOString(),
     });
   } catch (error) {

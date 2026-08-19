@@ -23,7 +23,7 @@ function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; siz
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
-  const { profile, loading, error } = useTelegramProfile();
+  const { profile, loading, error, retryAuth } = useTelegramProfile();
 
   if (pathname.startsWith("/control")) {
     return <>{children}</>;
@@ -34,7 +34,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   if (!profile) {
-    return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-4"><div className="w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-5"><h1 className="text-base font-semibold">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p></div></main>;
+    return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-4"><div className="w-full rounded-[24px] border border-[var(--border)] bg-[var(--panel)] p-5"><h1 className="text-base font-semibold">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p><button type="button" onClick={retryAuth} className="mt-4 border-b border-[var(--border)] pb-1 text-xs font-medium text-white">Повторить вход</button></div></main>;
   }
 
   return (

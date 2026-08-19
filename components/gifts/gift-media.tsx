@@ -50,6 +50,13 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
 
 export function GiftMedia({ gift, className = "", compact = false }: { gift: GiftAsset; className?: string; compact?: boolean }) {
   const [modelError, setModelError] = useState<string | null>(null);
+  if (gift.catalogSource === "tonapi" && gift.modelMediaUrl) {
+    return (
+      <div className={`relative isolate overflow-hidden bg-black ${className}`}>
+        {modelError ? <div className="grid h-full w-full place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div> : <img src={gift.modelMediaUrl} alt={`${gift.baseName} #${gift.number}`} loading={compact ? "lazy" : "eager"} decoding="async" referrerPolicy="no-referrer" onError={() => setModelError("TonAPI media unavailable")} className="h-full w-full object-contain" />}
+      </div>
+    );
+  }
   const staticSymbolFileId = gift.symbolThumbFileId || (gift.symbolMediaKind === "static" ? gift.symbolFileId : null);
   const symbolUrl = gift.symbolMediaUrl && gift.symbolMediaKind === "static"
     ? gift.symbolMediaUrl

@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { importTelegramGiftCatalog, type GiftCatalogImportResult } from "@/lib/gifts";
+import { syncTonApiGiftCatalog, type TonApiGiftSyncResult } from "@/lib/tonapi-gifts";
 
 export type CatalogSource = {
   id: string;
@@ -56,4 +57,24 @@ export async function syncConfiguredGiftCatalogSources(): Promise<{
   }
 
   return { sources: sources.length, successful, failed, assetsUpserted, results };
+}
+
+
+export async function syncGiftCatalog(): Promise<{
+  bot: Awaited<ReturnType<typeof syncConfiguredGiftCatalogSources>>;
+  tonapi: TonApiGiftSyncResult | { error: string };
+  totalAssetsUpserted: number;
+}> {
+  const bot = await syncConfiguredGiftCatalogSources();
+  let tonapi: TonApiGiftSyncResult | { error: string };
+  try {
+    tonapi = await syncTonApiGiftCatalog({ discoverPages: 3, maxCollections: 10, itemsPerCollection: 300 });
+  } catch (error) {
+    tonapi = { error: error instanceof Error ? error.message : "TonAPI sync failed" };
+  }
+  return {
+    bot,
+    tonapi,
+    totalAssetsUpserted: bot.assetsUpserted + ("assetsUpserted" in tonapi ? tonapi.assetsUpserted : 0),
+  };
 }
