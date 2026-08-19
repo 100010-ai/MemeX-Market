@@ -41,6 +41,9 @@ export type Coin = {
   athPrice: number;
   buyVolume24h: number;
   sellVolume24h: number;
+  totalSupply: number;
+  tokenReserve: number;
+  quoteReserve: number;
   sparkline?: number[];
 };
 

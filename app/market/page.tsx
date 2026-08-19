@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Flame, Gift, ListFilter, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { ActivityItem, Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
@@ -18,12 +18,12 @@ type CoinSort = "trending" | "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyWatchlist: Watchlist = { coinIds: [], giftCollections: [] };
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [] });
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 20_000;
 
 export default function MarketPage() {
-  const [data, setData] = useState<MarketPayload>({ coins: [], gifts: [], collections: [], watchlist: emptyWatchlist, cartIds: [] });
+  const [data, setData] = useState<MarketPayload>(() => emptyMarketPayload());
   const [tab, setTab] = useState<"gifts" | "coins">("gifts");
   const [query, setQuery] = useState("");
   const [watchOnly, setWatchOnly] = useState(false);
@@ -42,22 +42,36 @@ export default function MarketPage() {
   const [sideActivity, setSideActivity] = useState<ActivityItem[]>([]);
   const [remoteGiftSearch, setRemoteGiftSearch] = useState<GiftAsset[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  const loadSeq = useRef(0);
+  const scopeDataRef = useRef<Partial<Record<"gifts" | "coins", MarketPayload>>>({});
 
   const load = useCallback(async (silent = false) => {
-    const cached = marketCache.get(tab);
+    const seq = ++loadSeq.current;
+    const forced = typeof window !== "undefined" && sessionStorage.getItem("mxm-market-dirty") === "1";
+    if (forced) {
+      marketCache.clear();
+      scopeDataRef.current = {};
+    }
+    const cached = forced ? undefined : marketCache.get(tab);
+    const remembered = forced ? undefined : scopeDataRef.current[tab];
+    const warmPayload = cached?.payload || remembered;
     const cacheFresh = cached && Date.now() - cached.at < MARKET_CACHE_MS;
-    if (cached && !silent) { setData(cached.payload); setLoading(false); }
-    else if (!silent) setLoading(true);
+    if (warmPayload && !silent) { setData(warmPayload); setLoading(false); }
+    else if (!silent) { setData(emptyMarketPayload()); setLoading(true); }
     setError(null);
     if (cacheFresh && !silent) silent = true;
     try {
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}`);
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&t=${forced ? Date.now() : 0}`);
+      if (seq !== loadSeq.current) return;
       marketCache.set(tab, { at: Date.now(), payload });
+      scopeDataRef.current[tab] = payload;
       setData(payload);
+      if (forced) sessionStorage.removeItem("mxm-market-dirty");
     } catch (cause) {
-      if (!cached) setError(cause instanceof Error ? cause.message : "Не удалось загрузить рынок");
+      if (seq !== loadSeq.current) return;
+      if (!warmPayload) setError(cause instanceof Error ? cause.message : "Не удалось загрузить рынок");
       else console.error("market revalidate", cause);
-    } finally { if (!silent) setLoading(false); }
+    } finally { if (!silent && seq === loadSeq.current) setLoading(false); }
   }, [tab]);
 
   useEffect(() => { void load(); }, [load]);
@@ -139,6 +153,17 @@ export default function MarketPage() {
     });
   }, [data.coins, query, watchOnly, watchedCoins, coinSort]);
 
+  function switchTab(next: "gifts" | "coins") {
+    if (next === tab) return;
+    const remembered = scopeDataRef.current[next] || marketCache.get(next)?.payload;
+    setData(remembered || emptyMarketPayload());
+    setLoading(!remembered);
+    setQuery("");
+    setRemoteGiftSearch(null);
+    setSearchLoading(false);
+    setTab(next);
+  }
+
   function resetGiftFilters() {
     setCollection("all"); setModel("all"); setBackdrop("all"); setSymbol("all"); setPriceBand("all"); setGiftSort("price"); setGiftView("all"); setWatchOnly(false);
   }
@@ -152,12 +177,17 @@ export default function MarketPage() {
         method: "POST",
         body: JSON.stringify(kind === "coin" ? { kind, coinId: id, enabled } : { kind, baseName: id, enabled }),
       });
-      setData((current) => ({
-        ...current,
-        watchlist: kind === "coin"
-          ? { ...current.watchlist, coinIds: enabled ? [...new Set([...current.watchlist.coinIds, id])] : current.watchlist.coinIds.filter((value) => value !== id) }
-          : { ...current.watchlist, giftCollections: enabled ? [...new Set([...current.watchlist.giftCollections, id])] : current.watchlist.giftCollections.filter((value) => value !== id) },
-      }));
+      setData((current) => {
+        const next = {
+          ...current,
+          watchlist: kind === "coin"
+            ? { ...current.watchlist, coinIds: enabled ? [...new Set([...current.watchlist.coinIds, id])] : current.watchlist.coinIds.filter((value) => value !== id) }
+            : { ...current.watchlist, giftCollections: enabled ? [...new Set([...current.watchlist.giftCollections, id])] : current.watchlist.giftCollections.filter((value) => value !== id) },
+        };
+        scopeDataRef.current[tab] = next;
+        marketCache.set(tab, { at: Date.now(), payload: next });
+        return next;
+      });
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось обновить избранное");
@@ -171,7 +201,11 @@ export default function MarketPage() {
     setCartBusy(gift.virtualGiftId);
     try {
       await apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: enabled ? "add" : "remove", virtualGiftId: gift.virtualGiftId }) });
-      setData((current) => ({ ...current, cartIds: enabled ? [...new Set([...current.cartIds, gift.virtualGiftId])] : current.cartIds.filter((id) => id !== gift.virtualGiftId) }));
+      setData((current) => {
+        const next = { ...current, cartIds: enabled ? [...new Set([...current.cartIds, gift.virtualGiftId])] : current.cartIds.filter((id) => id !== gift.virtualGiftId) };
+        scopeDataRef.current[tab] = next;
+        return next;
+      });
       marketCache.clear();
       setError(null);
     } catch (cause) {
@@ -183,13 +217,13 @@ export default function MarketPage() {
     <div className="mx-auto max-w-6xl">
       <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} />
 
-      <div className="mb-3 flex items-center gap-2">
-        <div className="grid min-w-0 flex-1 grid-cols-2 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-0.5">
-          <button onClick={() => setTab("gifts")} className={`flex h-9 items-center justify-center gap-2 rounded-[17px] text-xs font-medium ${tab === "gifts" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><Gift size={15} />Подарки</button>
-          <button onClick={() => setTab("coins")} className={`flex h-9 items-center justify-center gap-2 rounded-[17px] text-xs font-medium ${tab === "coins" ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}><BarChart3 size={15} />Мемкоины</button>
+      <div className="mb-3 flex items-center gap-3 border-b border-[var(--border-soft)]">
+        <div className="grid min-w-0 flex-1 grid-cols-2">
+          <button onClick={() => switchTab("gifts")} className={`flex h-10 items-center justify-center gap-2 border-b-2 text-xs font-medium ${tab === "gifts" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}><Gift size={15} />Подарки</button>
+          <button onClick={() => switchTab("coins")} className={`flex h-10 items-center justify-center gap-2 border-b-2 text-xs font-medium ${tab === "coins" ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}><BarChart3 size={15} />Мемкоины</button>
         </div>
-        <button onClick={() => setWatchOnly((value) => !value)} aria-label="Показать только избранное" className={`grid h-10 w-10 shrink-0 place-items-center rounded-[17px] border ${watchOnly ? "border-[var(--accent)] bg-[rgba(198,170,88,.09)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Star size={16} fill={watchOnly ? "currentColor" : "none"} /></button>
-        <Link href="/cart" aria-label="Корзина" className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[17px] border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"><ShoppingCart size={16} />{data.cartIds.length ? <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-[var(--accent)] px-1 text-[8px] font-bold text-black">{data.cartIds.length}</span> : null}</Link>
+        <button onClick={() => setWatchOnly((value) => !value)} aria-label="Показать только избранное" className={`grid h-9 w-8 shrink-0 place-items-center ${watchOnly ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={16} fill={watchOnly ? "currentColor" : "none"} /></button>
+        <Link href="/cart" aria-label="Корзина" className="relative grid h-9 w-8 shrink-0 place-items-center text-[var(--muted)]"><ShoppingCart size={16} />{data.cartIds.length ? <span className="absolute right-0 top-0 text-[8px] font-bold text-[var(--accent)]">{data.cartIds.length}</span> : null}</Link>
       </div>
 
       <div className="mb-2.5 flex gap-2">
@@ -207,7 +241,7 @@ export default function MarketPage() {
           <div className="mxm-hscroll mb-2 gap-1.5 pb-1">
             {([
               ["all","Все"],["deals","Выгодно"],["rare","Редкие"],["new","Новые"],["offers","С офферами"]
-            ] as [GiftView,string][]).map(([value,label]) => <button key={value} onClick={() => setGiftView(value)} className={`shrink-0 whitespace-nowrap rounded-[15px] px-3 py-2 text-[10px] ${giftView === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{label}</button>)}
+            ] as [GiftView,string][]).map(([value,label]) => <button key={value} onClick={() => setGiftView(value)} className={`shrink-0 whitespace-nowrap border-b px-1.5 py-2 text-[10px] ${giftView === value ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>{label}</button>)}
           </div>
           <div className="mxm-hscroll mb-2 gap-1.5 pb-1">
             <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
@@ -224,8 +258,8 @@ export default function MarketPage() {
         </>
       ) : (
         <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
-          {(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 whitespace-nowrap rounded-2xl px-2.5 py-2 text-[10px] capitalize ${coinSort === value ? "bg-[var(--panel-3)] text-white" : "bg-[var(--panel)] text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
-          <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 rounded-[17px] bg-[var(--accent)] px-3 text-xs font-semibold text-black"><Plus size={14} />Создать</Link>
+          {(["trending","gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`shrink-0 whitespace-nowrap border-b px-1.5 py-2 text-[10px] capitalize ${coinSort === value ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
+          <Link href="/create" className="flex h-9 shrink-0 items-center gap-1.5 border-b border-[var(--accent)] px-2 text-xs font-semibold text-[var(--accent)]"><Plus size={14} />Создать</Link>
         </div>
       )}
 
@@ -238,8 +272,8 @@ export default function MarketPage() {
         </div>
       ) : (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-3 py-3"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "В тренде" : coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{coins.length} активов</span></div>
+          <div>
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "В тренде" : coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{loading ? "Загрузка…" : `${coins.length} активов`}</span></div>
             {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное на маркете или на странице торговли." : "Коины появятся после запуска игроками."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
           </div>
           <MarketSide activity={sideActivity} collections={data.collections} />
@@ -262,7 +296,7 @@ function CollectionRail({ collections, watched, busy, onWatch }: { collections: 
 function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (enabled: boolean) => void }) {
   const flowTotal = coin.buyVolume24h + coin.sellVolume24h;
   const buyShare = flowTotal > 0 ? Math.round((coin.buyVolume24h / flowTotal) * 100) : 0;
-  return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto]">
+  return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto]">
     <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} владельцев · {buyShare}% покупок</p></div></Link>
     <Link href={`/coin/${coin.id}`} className="text-right md:text-left"><p className="text-xs font-medium">{price(coin.currentPrice)}</p><p className={`text-[10px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Капитализация</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
@@ -275,7 +309,7 @@ function MarketSide({ activity, collections }: { activity: ActivityItem[]; colle
   return <aside className="hidden space-y-3 lg:block"><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Коллекции</div><div className="divide-y divide-[var(--border-soft)]">{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><div className="flex items-center justify-between gap-2"><span className="truncate text-xs">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[10px] text-[var(--muted)]">Флор {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} в продаже</p></Link>)}</div></section><section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium">Лента рынка</div><div className="divide-y divide-[var(--border-soft)]">{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block px-3 py-2.5 hover:bg-[var(--panel-2)]"><p className="truncate text-[11px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[10px] text-[var(--muted)]"><span>{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
 }
 
-function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-7 text-center"><div className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-[var(--panel-2)] text-[var(--muted)]">{icon}</div><p className="mt-3 text-xs font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
+function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-7 text-center"><div className="mx-auto grid h-8 w-8 place-items-center text-[var(--muted)]">{icon}</div><p className="mt-3 text-xs font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
 function GridSkeleton() { return <div className="market-grid grid gap-2.5">{Array.from({ length: 8 }, (_, index) => <div key={index} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]"><div className="mxm-skeleton aspect-square" /><div className="p-2"><div className="mxm-skeleton h-4 rounded" /><div className="mxm-skeleton mt-2 h-8 rounded" /></div></div>)}</div>; }
 function RowsSkeleton() { return <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div>; }
 

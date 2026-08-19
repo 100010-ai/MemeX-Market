@@ -60,6 +60,9 @@ export function mapCoin(row: Record<string, any>): Coin {
     athPrice: requiredNumber(row.ath_price, "coin ATH"),
     buyVolume24h: requiredNumber(row.buy_volume_24h, "coin 24h buy volume"),
     sellVolume24h: requiredNumber(row.sell_volume_24h, "coin 24h sell volume"),
+    totalSupply: requiredNumber(row.total_supply, "coin total supply"),
+    tokenReserve: requiredNumber(row.token_reserve, "coin token reserve"),
+    quoteReserve: requiredNumber(row.quote_reserve, "coin quote reserve"),
   };
 }
 

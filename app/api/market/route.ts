@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     if (scope === "coins") {
       const [coinsResult, watchlistResult, cartResult] = await Promise.all([
-        supabase.from("market_overview").select("*").eq("status", "active").order("volume_24h", { ascending: false }).limit(90),
+        supabase.from("market_overview").select("*").eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(90),
         watchlistPromise,
         cartPromise,
       ]);

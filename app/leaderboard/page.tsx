@@ -55,28 +55,28 @@ export default function LeaderboardPage() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div><h1 className="text-base font-semibold">Рейтинг</h1><p className="mt-0.5 text-[11px] text-[var(--muted)]">Глобальный рейтинг рынка MXM</p></div>
-        {meRank ? <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[9px] uppercase tracking-wide text-[var(--muted)]">Вы</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></div> : null}
+        {meRank ? <div className="border-l border-[var(--border-soft)] pl-3 text-right"><p className="text-[9px] uppercase tracking-wide text-[var(--muted)]">Вы</p><p className="text-sm font-semibold text-[var(--accent)]">#{meRank}</p></div> : null}
       </div>
 
       <div className="mxm-hscroll mb-3 flex gap-1.5 pb-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          return <button key={tab.key} onClick={() => setBoard(tab.key)} className={`flex shrink-0 items-center gap-1.5 rounded-[17px] border px-3 py-2 text-[10px] ${board === tab.key ? "border-[#55585e] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Icon size={13} />{tab.label}</button>;
+          return <button key={tab.key} onClick={() => setBoard(tab.key)} className={`flex shrink-0 items-center gap-1.5 border-b px-1.5 py-2 text-[10px] ${board === tab.key ? "border-white text-white" : "border-transparent text-[var(--muted)]"}`}><Icon size={13} />{tab.label}</button>;
         })}
       </div>
 
       {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
+      <div>
         {loading ? <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div> : players.length ? (
           <div className="divide-y divide-[var(--border-soft)]">
             {players.map((player) => {
               const value = boardValue(player, board);
               const pnlBoard = board === "pnl" || board === "giftPnl" || board === "coinPnl";
-              return <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 active:bg-[var(--panel-2)] ${player.isMe ? "bg-[rgba(198,170,88,.045)]" : ""}`}>
+              return <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 py-3 ${player.isMe ? "border-l-2 border-[var(--accent)] pl-2" : ""}`}>
                 <div className={`text-center text-xs font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>{player.rank}</div>
                 <div className="flex min-w-0 items-center gap-2.5">
-                  {player.photoUrl ? <img src={player.photoUrl} alt="" className="h-9 w-9 rounded-2xl object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[var(--panel-2)] text-xs">{player.name.replace("@", "").slice(0, 1).toUpperCase()}</span>}
+                  {player.photoUrl ? <img src={player.photoUrl} alt="" className="h-9 w-9 rounded-2xl object-cover" /> : <span className="inline-flex h-9 w-7 items-center justify-center text-xs font-semibold text-[#c8cdd3]">{player.name.replace("@", "").slice(0, 1).toUpperCase()}</span>}
                   <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}{player.isMe ? <span className="ml-1.5 text-[9px] text-[var(--accent)]">ВЫ</span> : null}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} подарков · {player.coinTrades + player.giftTrades} сделок</p></div>
                 </div>
                 <div className="text-right"><p className={`text-xs font-semibold ${pnlBoard ? value >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]" : ""}`}>{value > 0 && pnlBoard ? "+" : ""}{money(value)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{boardCaption(board)}</p></div>

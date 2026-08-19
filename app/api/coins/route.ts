@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { removeCoinImage, uploadCoinImage } from "@/lib/coin-media";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR } from "@/lib/economy";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,30 @@ function validate(name: string, symbol: string, description: string) {
   if (!/^[A-Z0-9]{2,8}$/.test(symbol)) return "Тикер должен содержать 2–8 латинских букв или цифр";
   if (description.length > 180) return "Описание слишком длинное";
   return null;
+}
+
+
+export async function GET() {
+  const profile = await requireProfile();
+  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const supabase = getSupabaseAdmin();
+  const { data: coins, error } = await supabase
+    .from("coins")
+    .select("id,status,created_at")
+    .eq("creator_profile_id", profile.id)
+    .order("created_at", { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const rows = (coins || []) as Array<{ id: string; status: string; created_at: string }>;
+  const active = rows.filter((coin) => coin.status === "active");
+  const last = active[0]?.created_at ? new Date(active[0].created_at) : null;
+  const nextLaunchAt = last ? new Date(last.getTime() + COIN_LAUNCH_COOLDOWN_HOURS * 60 * 60 * 1000) : null;
+  return NextResponse.json({
+    launchFee: COIN_LAUNCH_FEE_TON,
+    cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS,
+    maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR,
+    activeCoins: active.length,
+    nextLaunchAt: nextLaunchAt?.toISOString() || null,
+  }, { headers: { "cache-control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -63,7 +88,17 @@ export async function POST(request: Request) {
       await removeCoinImage(uploadedPath);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ coin: data });
+    const coinId = data && typeof data === "object" && "id" in data ? String((data as { id: unknown }).id) : "";
+    if (!coinId) {
+      await removeCoinImage(uploadedPath);
+      return NextResponse.json({ error: "Сервер не вернул ID созданного мемкоина" }, { status: 500 });
+    }
+    const { error: visibilityError } = await supabase.from("coins").update({ status: "active", hidden_from_market: false }).eq("id", coinId);
+    if (visibilityError) {
+      console.error("coin visibility", visibilityError);
+      return NextResponse.json({ error: "Мемкоин создан, но не удалось включить его в маркет. Проверь миграцию v0.10." }, { status: 500 });
+    }
+    return NextResponse.json({ coin: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     await removeCoinImage(uploadedPath);
     console.error("coin create", error);

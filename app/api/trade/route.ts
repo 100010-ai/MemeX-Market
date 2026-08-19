@@ -14,17 +14,23 @@ export async function POST(request: Request) {
     const coinId = String(body.coinId || "");
     const side = body.side === "sell" ? "sell" : body.side === "buy" ? "buy" : null;
     const amount = Number(body.amount);
-    if (!coinId || !side || !Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "Некорректная сделка" }, { status: 400 });
+    const sellAll = side === "sell" && body.sellAll === true;
+    if (!coinId || !side || (!sellAll && (!Number.isFinite(amount) || amount <= 0))) return NextResponse.json({ error: "Некорректная сделка" }, { status: 400 });
 
     const supabase = getSupabaseAdmin();
-    const fn = side === "buy" ? "buy_coin" : "sell_coin";
+    const fn = side === "buy" ? "buy_coin" : sellAll ? "sell_coin_all" : "sell_coin";
     const args = side === "buy"
       ? { p_profile_id: profile.id, p_coin_id: coinId, p_quote_amount: amount }
-      : { p_profile_id: profile.id, p_coin_id: coinId, p_token_amount: amount };
+      : sellAll
+        ? { p_profile_id: profile.id, p_coin_id: coinId }
+        : { p_profile_id: profile.id, p_coin_id: coinId, p_token_amount: amount };
 
     const { data, error } = await supabase.rpc(fn, args);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ trade: data });
+    if (error) {
+      const message = error.message.includes("Insufficient token balance") ? "Недостаточно токенов" : error.message;
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("trade", error);
     return NextResponse.json({ error: "Сделка не выполнена" }, { status: 500 });

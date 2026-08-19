@@ -17,7 +17,7 @@ const nav = [
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
   const cls = size === "md" ? "h-10 w-10 rounded-[18px]" : "h-8 w-8 rounded-[15px]";
   if (photoUrl) return <img src={photoUrl} alt="Профиль Telegram" className={`${cls} object-cover`} />;
-  return <span className={`grid ${cls} place-items-center border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
+  return <span className={`grid ${cls} place-items-center text-[var(--muted)]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
@@ -59,7 +59,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-4">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="hidden lg:block"><p className="text-xs font-semibold">MemeX Market</p><p className="text-[10px] text-[var(--muted)]">Виртуальный рынок MXM</p></div>
-            <Link href="/vault" className="ml-auto flex h-9 items-center gap-1.5 rounded-[17px] border border-[var(--border)] bg-[var(--panel)] px-3 text-xs font-medium lg:ml-auto" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(profile.balance)}</Link>
+            <Link href="/vault" className="ml-auto flex h-9 items-center gap-1.5 border-b border-[var(--border)] px-1 text-xs font-medium lg:ml-auto" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(profile.balance)}</Link>
           </div>
         </header>
         <main key={pathname} className="mxm-page-enter min-h-0 px-2.5 py-3 md:px-4 md:py-4">{children}</main>
@@ -69,7 +69,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
-          return <Link key={item.href} href={item.href} className={`relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 pb-1 pt-1 text-[9px] transition ${active ? "text-white" : "text-[var(--muted)]"}`}><span className={`grid h-8 w-10 place-items-center rounded-[15px] transition ${active ? "bg-[var(--panel-2)]" : "bg-transparent"}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /></span><span className="max-w-full truncate">{item.label}</span></Link>;
+          return <Link key={item.href} href={item.href} className={`relative flex min-w-0 flex-col items-center gap-0.5 px-0.5 pb-1 pt-1 text-[9px] transition ${active ? "text-white" : "text-[var(--muted)]"}`}><span className="grid h-8 w-10 place-items-center"><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /></span><span className="max-w-full truncate">{item.label}</span></Link>;
         })}
       </nav>
 

@@ -16,7 +16,7 @@ export function SelectSheet({ label, value, options, onChange, searchable = fals
   }, [options, query]);
 
   return <>
-    <button type="button" onClick={() => { setQuery(""); setOpen(true); }} className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[16px] border px-2.5 text-[11px] transition active:scale-[.985] ${active ? "border-[#4b5056] bg-[var(--panel-3)] text-white" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b7bcc2]"}`}>
+    <button type="button" onClick={() => { setQuery(""); setOpen(true); }} className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[12px] border px-2.5 text-[11px] transition active:scale-[.985] ${active ? "border-[#4b5056] text-white" : "border-[var(--border)] bg-transparent text-[#b7bcc2]"}`}>
       {icon}<span className="max-w-[150px] truncate">{active && selected ? selected.label : label}</span><ChevronDown size={11} className="shrink-0 text-[var(--muted)]" />
     </button>
     {open ? <div className="mxm-sheet-backdrop fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-0 backdrop-blur-[3px] md:items-center md:p-5" onMouseDown={(event) => { if (event.currentTarget === event.target) setOpen(false); }}>

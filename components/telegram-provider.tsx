@@ -10,6 +10,7 @@ type TelegramContextValue = {
   loading: boolean;
   error: string | null;
   refreshProfile: () => Promise<void>;
+  patchProfile: (patch: Partial<Profile>) => void;
   haptic: (style?: "light" | "medium" | "heavy") => void;
 };
 
@@ -24,6 +25,10 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async () => {
     const result = await apiFetch<{ profile: Profile }>("/api/me");
     setProfile(result.profile);
+  }, []);
+
+  const patchProfile = useCallback((patch: Partial<Profile>) => {
+    setProfile((current) => current ? { ...current, ...patch } : current);
   }, []);
 
   const haptic = useCallback((style: "light" | "medium" | "heavy" = "light") => {
@@ -56,7 +61,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, [pathname]);
 
-  const value = useMemo(() => ({ profile, loading, error, refreshProfile, haptic }), [profile, loading, error, refreshProfile, haptic]);
+  const value = useMemo(() => ({ profile, loading, error, refreshProfile, patchProfile, haptic }), [profile, loading, error, refreshProfile, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
 }
 

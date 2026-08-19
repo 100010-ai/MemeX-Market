@@ -27,9 +27,9 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
 }
 
 export function CoinAvatar({ symbol, imageUrl = null, size = "md" }: { symbol: string; imageUrl?: string | null; size?: "sm" | "md" | "lg" }) {
-  const sizes = size === "sm" ? "h-8 w-8 text-[10px]" : size === "lg" ? "h-12 w-12 text-sm" : "h-10 w-10 text-xs";
-  if (imageUrl) return <img src={imageUrl} alt={`${symbol} logo`} loading="lazy" decoding="async" className={`shrink-0 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] object-cover ${sizes}`} />;
-  return <span className={`grid shrink-0 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,.025)] ${sizes}`}>{symbol.slice(0, 4)}</span>;
+  const sizes = size === "sm" ? "h-7 w-7 text-[9px]" : size === "lg" ? "h-10 w-10 text-xs" : "h-8 w-8 text-[10px]";
+  if (imageUrl) return <img src={imageUrl} alt={`${symbol} logo`} loading="lazy" decoding="async" className={`shrink-0 rounded-[12px] object-cover ${sizes}`} />;
+  return <span className={`inline-flex shrink-0 items-center justify-center font-semibold tracking-[-.03em] text-[#c8cdd3] ${sizes}`}>{symbol.slice(0, 4)}</span>;
 }
 
 export function PrimaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -41,5 +41,5 @@ export function SecondaryButton({ className = "", children, ...props }: ButtonHT
 }
 
 export function Chip({ children, active = false }: { children: ReactNode; active?: boolean }) {
-  return <span className={`inline-flex h-9 items-center rounded-[18px] border px-3 text-xs ${active ? "border-[rgba(198,170,88,.42)] bg-[rgba(198,170,88,.09)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel-2)] text-[#b8c0c9]"}`}>{children}</span>;
+  return <span className={`inline-flex h-8 items-center border-b px-1 text-xs ${active ? "border-[var(--accent)] text-white" : "border-transparent text-[#9098a1]"}`}>{children}</span>;
 }
