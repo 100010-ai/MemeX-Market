@@ -62,6 +62,11 @@ const knownFileCache = new Map<string, { ok: boolean; expiresAt: number }>();
 const telegramPathCache = new Map<string, { path: string; size: number | null; expiresAt: number }>();
 const tgsJsonCache = new Map<string, { data: Record<string, unknown>; expiresAt: number }>();
 
+const TELEGRAM_FILE_TIMEOUT_MS = 15_000;
+export const MAX_TELEGRAM_GIFT_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_TGS_COMPRESSED_BYTES = 4 * 1024 * 1024;
+const MAX_TGS_JSON_BYTES = 12 * 1024 * 1024;
+
 export type GiftSyncResult = {
   runId: string;
   pagesFetched: number;
@@ -342,7 +347,7 @@ export async function isKnownGiftFile(fileId: string) {
   return ok;
 }
 
-export async function getTelegramFile(fileId: string) {
+export async function getTelegramFile(fileId: string, maxBytes = MAX_TELEGRAM_GIFT_FILE_BYTES) {
   let filePath: string;
   let fileSize: number | null = null;
   const cached = telegramPathCache.get(fileId);
@@ -357,20 +362,32 @@ export async function getTelegramFile(fileId: string) {
     telegramPathCache.set(fileId, { path: filePath, size: fileSize, expiresAt: Date.now() + 45 * 60_000 });
     if (telegramPathCache.size > 1000) telegramPathCache.delete(telegramPathCache.keys().next().value as string);
   }
-  const response = await fetch(`https://api.telegram.org/file/bot${botToken()}/${filePath}`, { cache: "force-cache" });
+  if (fileSize !== null && fileSize > maxBytes) throw new Error("Telegram gift media exceeds the allowed size");
+
+  const response = await fetch(`https://api.telegram.org/file/bot${botToken()}/${filePath}`, {
+    cache: "force-cache",
+    signal: AbortSignal.timeout(TELEGRAM_FILE_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Telegram file download failed (${response.status})`);
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    await response.body?.cancel();
+    throw new Error("Telegram gift media exceeds the allowed size");
+  }
   return { response, filePath, fileSize };
 }
 
 export async function getTelegramTgsJson(fileId: string) {
   const cached = tgsJsonCache.get(fileId);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
-  const { response } = await getTelegramFile(fileId);
+  const { response } = await getTelegramFile(fileId, MAX_TGS_COMPRESSED_BYTES);
   const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > MAX_TGS_COMPRESSED_BYTES) throw new Error("Telegram TGS is too large");
   const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  const jsonBytes = isGzip ? gunzipSync(bytes) : bytes;
+  const jsonBytes = isGzip ? gunzipSync(bytes, { maxOutputLength: MAX_TGS_JSON_BYTES }) : bytes;
+  if (jsonBytes.length > MAX_TGS_JSON_BYTES) throw new Error("Telegram TGS JSON is too large");
   const parsed = JSON.parse(jsonBytes.toString("utf8"));
-  if (!parsed || typeof parsed !== "object") throw new Error("Telegram TGS did not contain Lottie JSON");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Telegram TGS did not contain Lottie JSON");
   const data = parsed as Record<string, unknown>;
   tgsJsonCache.set(fileId, { data, expiresAt: Date.now() + 6 * 60 * 60_000 });
   if (tgsJsonCache.size > 300) tgsJsonCache.delete(tgsJsonCache.keys().next().value as string);

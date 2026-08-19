@@ -81,14 +81,31 @@ export async function GET() {
         .limit(60),
     ]);
 
-    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult] = await Promise.all([
+    const dayStart = new Date(); dayStart.setUTCHours(0,0,0,0);
+    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult, economyResult, rewardedTodayResult, economyEventsTodayResult] = await Promise.all([
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi").eq("chain_verified", true),
       supabase.from("tonapi_catalog_state").select("last_discovery_at,last_sync_at,last_error,lock_until,updated_at").eq("singleton", true).maybeSingle(),
+      supabase.from("economy_settings").select("rewarded_ad_reward,rewarded_ad_daily_limit,rewarded_ad_cooldown_minutes,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,gift_fee_bps,updated_at").eq("singleton", true).maybeSingle(),
+      supabase.from("rewarded_ad_sessions").select("id", { head: true, count: "exact" }).eq("status", "claimed").gte("claimed_at", dayStart.toISOString()),
+      supabase.from("economy_events").select("kind,amount").gte("created_at", dayStart.toISOString()).limit(5000),
     ]);
     if (tonapiCountResult.error) throw tonapiCountResult.error;
     if (tonapiVerifiedResult.error) throw tonapiVerifiedResult.error;
     if (tonapiStateResult.error) throw tonapiStateResult.error;
+    const economyMissing = economyResult.error && (economyResult.error.code === "42P01" || /economy_settings|schema cache/i.test(economyResult.error.message || ""));
+    if (economyResult.error && !economyMissing) throw economyResult.error;
+    const rewardedMissing = rewardedTodayResult.error && (rewardedTodayResult.error.code === "42P01" || /rewarded_ad_sessions|schema cache/i.test(rewardedTodayResult.error.message || ""));
+    if (rewardedTodayResult.error && !rewardedMissing) throw rewardedTodayResult.error;
+    const economyEventsMissing = economyEventsTodayResult.error && (economyEventsTodayResult.error.code === "42P01" || /economy_events|schema cache/i.test(economyEventsTodayResult.error.message || ""));
+    if (economyEventsTodayResult.error && !economyEventsMissing) throw economyEventsTodayResult.error;
+    const economyEvents = (economyEventsTodayResult.data || []) as Array<{ kind: string; amount: number | string }>;
+    const emissionToday = economyEvents.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+    const sinksToday = economyEvents.reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
+    const adsEmissionToday = economyEvents.filter((row) => row.kind === "rewarded_ad").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+    const missionEmissionToday = economyEvents.filter((row) => row.kind === "mission").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+    const launchSinkToday = economyEvents.filter((row) => row.kind === "coin_launch").reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
+    const tradeFeeSinkToday = economyEvents.filter((row) => row.kind === "coin_trade_fee").reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
 
     const systemIds = new Set(profileRows.filter((row) => row.is_system).map((row) => String(row.id)));
     return NextResponse.json({
@@ -111,7 +128,16 @@ export async function GET() {
         newCoins24h: coinRows.filter((row) => Date.now() - new Date(row.created_at).getTime() < 86400000).length,
         newGifts24h: giftRows.filter((row) => Date.now() - new Date(row.created_at).getTime() < 86400000).length,
         listedValue: giftRows.filter((row) => row.status === "listed").reduce((sum, row) => sum + Number(row.listing_price || 0), 0),
+        rewardedAdsToday: rewardedTodayResult.count || 0,
+        economyEmissionToday: emissionToday,
+        economySinksToday: sinksToday,
+        economyNetToday: emissionToday - sinksToday,
+        adsEmissionToday,
+        missionEmissionToday,
+        launchSinkToday,
+        tradeFeeSinkToday,
       },
+      economy: economyResult.data || null,
       profiles: profileRows,
       missions: missionRows,
       coins: coinRows,

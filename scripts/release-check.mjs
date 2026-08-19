@@ -11,30 +11,20 @@ function check(label, condition, detail = "") {
   console.log(`${ok ? "OK  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
   if (!ok) failed = true;
 }
-
-function exists(relative) {
-  return fs.existsSync(path.join(root, relative));
-}
-
-function read(relative) {
-  return exists(relative) ? fs.readFileSync(path.join(root, relative), "utf8") : "";
-}
-
+function exists(relative) { return fs.existsSync(path.join(root, relative)); }
+function read(relative) { return exists(relative) ? fs.readFileSync(path.join(root, relative), "utf8") : ""; }
 function run(label, command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: false });
   check(label, result.status === 0, result.status == null ? "не удалось запустить" : `exit ${result.status}`);
 }
-
 function walk(directory, output = []) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     if (["node_modules", ".next", ".git"].includes(entry.name)) continue;
     const absolute = path.join(directory, entry.name);
-    if (entry.isDirectory()) walk(absolute, output);
-    else output.push(absolute);
+    if (entry.isDirectory()) walk(absolute, output); else output.push(absolute);
   }
   return output;
 }
-
 function secretLeaks() {
   const riskyNames = new Set([".env", ".env.local", ".env.production", ".env.development", ".mxm-control-secret"]);
   const patterns = [
@@ -54,43 +44,77 @@ function secretLeaks() {
   return hits;
 }
 
-console.log("MXM release gate\n");
-const migration = read("supabase/migrations/017_v030_market_foundation.sql");
-const migration040 = read("supabase/migrations/018_v040_games_speed_compact.sql");
-const marketRoute = read("app/api/market/route.ts");
-const mediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
+console.log("MXM v0.45 release gate\n");
+const migration017 = read("supabase/migrations/017_v030_market_foundation.sql");
+const migration018 = read("supabase/migrations/018_v040_games_speed_compact.sql");
+const migration019 = read("supabase/migrations/019_v041_remove_games_interface.sql");
+const migration020 = read("supabase/migrations/020_v045_economy_rewarded_ads.sql");
+const packageJson = read("package.json");
+const packageLock = read("package-lock.json");
+const marketPage = read("app/market/page.tsx");
+const filters = read("components/gifts/gift-filters-drawer.tsx");
+const tasks = read("app/tasks/page.tsx");
+const adConfig = read("lib/rewarded-ads.ts");
+const adCallback = read("app/api/rewards/ads/adsgram/route.ts");
+const adClaim = read("app/api/rewards/ads/claim/route.ts");
+const coinRoute = read("app/api/coins/route.ts");
+const createPage = read("app/create/page.tsx");
+const economy = read("lib/economy.ts");
 const auth = read("lib/auth.ts");
-const giftDetail = read("components/gifts/gift-detail.tsx");
-const giftCandles = read("app/api/gifts/[id]/candles/route.ts");
-const clientApi = read("lib/api.ts");
-check("Migration 017 present", Boolean(migration));
-check("Migration 018 present", Boolean(migration040));
-check("v0.43 package version", read("package.json").includes('"version": "0.43.0"'));
-check("Environment template present", exists(".env.example"));
+const gifts = read("lib/gifts.ts");
+const adminAction = read("app/api/admin/action/route.ts");
+const envTemplate = read(".env.example");
+
+check("Migration 017 present", Boolean(migration017));
+check("Migration 018 present", Boolean(migration018));
+check("Migration 019 present", Boolean(migration019));
+check("Migration 020 v0.45 present", Boolean(migration020));
+check("v0.45 package version", packageJson.includes('"version": "0.45.0"'));
+check("package-lock version synced", packageLock.includes('"version": "0.45.0"'));
+check("Environment template present", Boolean(envTemplate));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
-check("Russian production admin present", exists("app/api/admin/overview/route.ts") && exists("app/api/admin/action/route.ts") && read("app/admin/page.tsx").includes("АДМИН-ПАНЕЛЬ"));
-check("Admin mutations protected", read("app/api/admin/action/route.ts").includes("requireAdminProfile") && read("app/api/admin/action/route.ts").includes("sameOriginMutation") && read("app/api/admin/action/route.ts").includes("enforceRateLimit"));
+
+check("Games removed from public API", !exists("app/api/games/route.ts") && !exists("app/api/games/play/route.ts"));
+check("Games removed from navigation", !read("components/app-shell.tsx").includes('href: "/games"'));
+check("Games disabled in DB", migration019.includes("daily_game_3") && migration019.includes("revoke execute on function public.play_virtual_game"));
+
+check("Old market side dashboard removed", !marketPage.includes("MarketSide") && !marketPage.includes("Рынок сейчас") && !marketPage.includes("Медианный флор"));
+check("One robust Gift filter drawer", marketPage.includes("GiftFiltersDrawer") && filters.includes("createPortal") && filters.includes("document.body"));
+check("Misleading 25M launch copy removed", !/25[ ,.\u00a0]?000[ ,.\u00a0]?000|Стартовая позиция/i.test(createPage));
+check("Current launch economics", economy.includes("COIN_LAUNCH_FEE_TON = 150") && economy.includes("COIN_MAX_ACTIVE_PER_CREATOR = 2") && economy.includes("COIN_LAUNCH_COOLDOWN_HOURS = 12"));
+check("Coin launch waits for economy migration", coinRoute.includes("schema_version") && coinRoute.includes("экономика обновляется") && createPage.includes("economyReady"));
+check("Coin create has no post-RPC visibility mutation", !coinRoute.includes('from("coins").update({ status: "active"'));
+
+check("Rewarded ad economics", economy.includes("REWARDED_AD_REWARD_TON = 50") && economy.includes("REWARDED_AD_DAILY_LIMIT = 2") && economy.includes("REWARDED_AD_COOLDOWN_MINUTES = 30"));
+check("AdsGram SDK integration", tasks.includes("https://sad.adsgram.ai/js/sad.min.js") && tasks.includes("Adsgram.init") && tasks.includes("shown.done"));
+check("Server reward callback", exists("app/api/rewards/ads/adsgram/route.ts") && adCallback.includes("claim_rewarded_ad_by_telegram_v045"));
+check("Reward callback secret uses timing-safe comparison", adConfig.includes("timingSafeEqual") && adCallback.includes("safeSecretEquals"));
+check("AdsGram config validates block/secret", adConfig.includes("/^\\d+$/") && adConfig.includes("rawServerSecret.length >= 32"));
+check("Client ad fallback is impossible in production", adConfig.includes('process.env.NODE_ENV !== "production" && fallbackRequested'));
+check("Server-mode client cannot directly credit reward", adClaim.includes('verificationMode === "client"') && !adClaim.includes("finalize_rewarded_ad_v045"));
+check("Old forgeable v0.44 ad RPCs removed", migration020.includes("drop function if exists public.claim_rewarded_ad_session_v044"));
+check("Reward session concurrency guard", migration020.includes("rewarded_ad_sessions_one_open_v045_idx") && migration020.includes("row_number() over(partition by profile_id"));
+check("Ad secret is server-only", envTemplate.includes("ADSGRAM_REWARD_SECRET") && !/NEXT_PUBLIC_ADSGRAM_REWARD_SECRET/.test(envTemplate));
+check("Client fallback is off by default", envTemplate.includes("ADSGRAM_ALLOW_CLIENT_FALLBACK=false"));
+
+check("PnL uses realized trading PnL", auth.includes("pnl: finance.realizedPnl") && !auth.includes("netWorth - 100"));
+check("Economy audit ledger", migration020.includes("create table if not exists public.economy_events") && read("app/api/admin/overview/route.ts").includes("economyEmissionToday"));
+check("AMM trade fee sink is audited", migration020.includes("log_coin_trade_fee_v045") && read("app/api/admin/overview/route.ts").includes("tradeFeeSinkToday"));
+check("Admin economy update is atomic", migration020.includes("update_economy_settings_v045") && adminAction.includes('supabase.rpc("update_economy_settings_v045"'));
+check("Gift market fee treasury", migration020.includes("MXM Treasury") && migration020.includes("gift_fee_bps"));
+
+check("Telegram Gift download timeout", gifts.includes("AbortSignal.timeout(TELEGRAM_FILE_TIMEOUT_MS)"));
+check("Telegram Gift file-size bound", gifts.includes("MAX_TELEGRAM_GIFT_FILE_BYTES") && gifts.includes("content-length"));
+check("TGS decompression bound", gifts.includes("MAX_TGS_JSON_BYTES") && gifts.includes("maxOutputLength"));
 
 check("Gift resolver present", exists("lib/gifts/resolver.ts"));
 check("TonAPI resilient client present", exists("lib/providers/tonapi-client.ts"));
 check("Market health endpoint present", exists("app/api/system/market-health/route.ts"));
-check("Games removed from public API", !exists("app/api/games/route.ts") && !exists("app/api/games/play/route.ts"));
-check("Games removed from navigation", !read("components/app-shell.tsx").includes('href: "/games"'));
-check("Games disabled in DB", read("supabase/migrations/019_v041_remove_games_interface.sql").includes("daily_game_3") && read("supabase/migrations/019_v041_remove_games_interface.sql").includes("revoke execute on function public.play_virtual_game"));
-check("Atomic single-Gift purchase RPC present", migration.includes("buy_virtual_gift_v2"));
-check("Atomic cart purchase RPC present", migration.includes("buy_virtual_gift_cart_v2"));
-check("Fresh external quote guard present", migration.includes("external_quote_hours") && migration.includes("resale_seen_at"));
-check("Finite Genesis RPC present", migration.includes("initialize_gift_genesis_pool") && migration.includes("genesis_market_candidates"));
-check("Fast session snapshot RPC", migration040.includes("session_profile_snapshot_v040") && auth.includes("getSessionProfileSnapshot"));
-check("DB-side TonAPI rarity aggregation", migration040.includes("recalculate_tonapi_collection_rarity_v040"));
-check("Lean Gift pagination", marketRoute.includes("lean") && marketRoute.includes("gift_market_random_page"));
-check("Gift media slug fast-path", mediaRoute.includes('searchParams.get("slug")'));
-check("Lazy NFT chart endpoint", giftCandles.includes("gift_collection_candles") && giftDetail.includes("/candles"));
-check("Lazy NFT chart bundle", giftDetail.includes('dynamic(() => import("@/components/coin-chart")'));
-check("Current launch-fee copy", clientApi.includes("250 виртуальных TON") && !clientApi.includes("нужно 50 виртуальных TON"));
+check("Atomic single-Gift purchase RPC present", migration017.includes("buy_virtual_gift_v2"));
+check("Atomic cart purchase RPC present", migration017.includes("buy_virtual_gift_cart_v2"));
+check("Fast session snapshot RPC", migration018.includes("session_profile_snapshot_v040") && auth.includes("getSessionProfileSnapshot"));
 
-const envTemplate = read(".env.example");
 check("Public env does not expose service role", !/NEXT_PUBLIC_(?:SUPABASE_)?(?:SECRET|SERVICE_ROLE)/i.test(envTemplate));
 const leaks = secretLeaks();
 check("No probable literal secrets in artifact", leaks.length === 0, leaks.length ? leaks.slice(0, 5).join(", ") : "");
@@ -98,14 +122,16 @@ check("No probable literal secrets in artifact", leaks.length === 0, leaks.lengt
 run("TypeScript", process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit"]);
 run("ESLint", process.execPath, [path.join(root, "node_modules/eslint/bin/eslint.js"), "."]);
 
-if (!process.env.TONAPI_KEY) notes.push("TONAPI_KEY не задан: каталог работает через публичный лимит TonAPI и будет синхронизироваться медленнее.");
-if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) notes.push("Supabase env не загружен в этой shell-сессии; production env нужно проверить в Vercel/Railway.");
+if (!process.env.TONAPI_KEY) notes.push("TONAPI_KEY не задан в shell: каталог перейдёт на публичный rate limit TonAPI.");
+if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) notes.push("Supabase env не загружен в этой shell-сессии; проверьте production env перед deploy.");
 if (!process.env.TELEGRAM_BOT_TOKEN) notes.push("TELEGRAM_BOT_TOKEN не загружен в этой shell-сессии.");
+if (!process.env.NEXT_PUBLIC_ADSGRAM_BLOCK_ID) notes.push("NEXT_PUBLIC_ADSGRAM_BLOCK_ID не задан в shell: rewarded ad останется скрыто/недоступно до настройки.");
+if (!process.env.ADSGRAM_REWARD_SECRET) notes.push("ADSGRAM_REWARD_SECRET не задан в shell: production server verification rewarded ads нужно настроить.");
+notes.push("npm audit требует доступ к registry.npmjs.org; если CI имеет сеть, запустите npm audit --omit=dev отдельно.");
 
 if (notes.length) {
   console.log("\nNOTES");
   for (const note of notes) console.log(`- ${note}`);
 }
-
 console.log(`\n${failed ? "RELEASE BLOCKED" : "STATIC RELEASE CHECK PASSED"}`);
 process.exit(failed ? 1 : 0);

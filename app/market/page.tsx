@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Flame, Gift, ListFilter, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
+import { BarChart3, Flame, Gift, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { ActivityItem, Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
-import { ago, money, percent, price } from "@/lib/format";
+import type { Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
+import { money, percent, price } from "@/lib/format";
 import { CoinAvatar } from "@/components/ui";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
-import { SelectSheet } from "@/components/select-sheet";
+import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
@@ -44,12 +44,12 @@ export default function MarketPage() {
   const [watchBusy, setWatchBusy] = useState<string | null>(null);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sideActivity, setSideActivity] = useState<ActivityItem[]>([]);
   const [remoteGiftSearch, setRemoteGiftSearch] = useState<GiftAsset[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const bootstrapInFlight = useRef(false);
   const activeTabRef = useRef(tab);
   useEffect(() => { activeTabRef.current = tab; }, [tab]);
@@ -88,14 +88,6 @@ export default function MarketPage() {
   }, [tab]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-    let cancelled = false;
-    const run = () => void apiFetch<{ activity: ActivityItem[] }>("/api/feed?limit=12").then((value) => { if (!cancelled) setSideActivity(value.activity); }).catch((cause) => console.error("desktop market feed", cause));
-    const idle = window.requestIdleCallback ? window.requestIdleCallback(run, { timeout: 900 }) : window.setTimeout(run, 250);
-    return () => { cancelled = true; if (window.cancelIdleCallback && typeof idle === "number") window.cancelIdleCallback(idle); else clearTimeout(idle as number); };
-  }, []);
-
   useEffect(() => {
     if (tab !== "gifts") { setRemoteGiftSearch(null); setSearchLoading(false); return; }
     const q = query.trim();
@@ -185,6 +177,7 @@ export default function MarketPage() {
   const watchedCollections = useMemo(() => new Set(data.watchlist.giftCollections), [data.watchlist.giftCollections]);
   const cartIds = useMemo(() => new Set(data.cartIds), [data.cartIds]);
   const hasGiftFilters = collection !== "all" || model !== "all" || backdrop !== "all" || symbol !== "all" || priceBand !== "all" || giftSort !== "random" || giftView !== "all" || watchOnly;
+  const advancedFilterCount = [collection !== "all", model !== "all", backdrop !== "all", symbol !== "all", priceBand !== "all", giftSort !== "random"].filter(Boolean).length;
 
   const gifts = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -316,25 +309,33 @@ export default function MarketPage() {
 
       {tab === "gifts" ? (
         <>
-          {!loading && data.collections.length ? <CollectionRail collections={data.collections} watched={watchedCollections} busy={watchBusy} onWatch={(name, enabled) => toggleWatch("gift_collection", name, enabled)} /> : null}
           <div className="mxm-view-tabs mxm-hscroll mb-3 gap-5">
             {([
               ["all","Все"],["deals","Выгодно"],["rare","Редкие"],["new","Новые"],["offers","С офферами"]
             ] as [GiftView,string][]).map(([value,label]) => <button key={value} onClick={() => setGiftView(value)} className={`mxm-tab-chip ${giftView === value ? "is-active" : ""}`}>{label}</button>)}
           </div>
-          <div className="mxm-filter-row mxm-hscroll mb-2 gap-4">
-            <FilterSelect value={collection} onChange={setCollection} label="Коллекция" options={data.collections.map((item) => item.baseName)} />
-            <FilterSelect value={model} onChange={setModel} label="Модель" options={models} />
-            <FilterSelect value={backdrop} onChange={setBackdrop} label="Фон" options={backdrops} />
-            <FilterSelect value={symbol} onChange={setSymbol} label="Символ" options={symbols} />
-            <SelectSheet label="Цена" value={priceBand} onChange={(value) => setPriceBand(value as PriceBand)} options={[{ value: "all", label: "Любая цена" }, { value: "under50", label: "До 50 TON" }, { value: "50to250", label: "50–250 TON" }, { value: "250to1000", label: "250–1K TON" }, { value: "over1000", label: "1K+ TON" }]} />
-            <SelectSheet label="Сортировка" value={giftSort} onChange={(value) => setGiftSort(value as GiftSort)} icon={<ListFilter size={13} />} options={[{ value: "random", label: "Случайно" }, { value: "price", label: "Цена" }, { value: "newest", label: "Сначала новые" }, { value: "offers", label: "Больше офферов" }, { value: "number", label: "По номеру" }, { value: "rarity", label: "По редкости" }]} />
+          <div className="mxm-market-tools mb-4">
+            <button type="button" onClick={() => setFiltersOpen(true)} className={`mxm-market-filter-trigger ${advancedFilterCount ? "is-active" : ""}`}>
+              <SlidersHorizontal size={14} /><span>Фильтры</span>{advancedFilterCount ? <b>{advancedFilterCount}</b> : null}
+            </button>
+            <span className="mxm-market-result-count">{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация…" : searchLoading ? "Поиск…" : `${gifts.length} ${gifts.length === 1 ? "лот" : "лотов"}${watchOnly ? " · избранное" : ""}`}</span>
+            {hasGiftFilters ? <button onClick={resetGiftFilters} className="mxm-market-clear">Сбросить</button> : null}
           </div>
-          <div className="mxm-market-meta mb-4">
-            <span>{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация Gifts…" : searchLoading ? "Поиск…" : `${gifts.length} из ${data.totalGifts}${watchOnly ? " · избранное" : ""}`}</span>
-            {hasGiftFilters ? <button onClick={resetGiftFilters} className="mxm-reset-filters"><SlidersHorizontal size={12} />Сбросить</button> : null}
-          </div>
-          {!loading && data.genesis && data.genesis.total > 0 ? <div className="mb-2 text-[8px] text-[var(--muted-2)]">Genesis {data.genesis.released}/{data.genesis.total}{data.genesis.completed ? " · завершён" : ""}</div> : null}
+          <GiftFiltersDrawer
+            open={filtersOpen}
+            onClose={() => setFiltersOpen(false)}
+            values={{ collection, model, backdrop, symbol, priceBand, giftSort }}
+            onChange={(key, value) => {
+              if (key === "collection") setCollection(value);
+              else if (key === "model") setModel(value);
+              else if (key === "backdrop") setBackdrop(value);
+              else if (key === "symbol") setSymbol(value);
+              else if (key === "priceBand") setPriceBand(value as PriceBand);
+              else setGiftSort(value as GiftSort);
+            }}
+            onReset={() => { setCollection("all"); setModel("all"); setBackdrop("all"); setSymbol("all"); setPriceBand("all"); setGiftSort("random"); }}
+            collections={data.collections.map((item) => item.baseName)} models={models} backdrops={backdrops} symbols={symbols}
+          />
         </>
       ) : (
         <div className="mxm-view-tabs mxm-hscroll mb-4 gap-5">
@@ -346,31 +347,17 @@ export default function MarketPage() {
       {error ? <div className="mb-3 flex items-center justify-between gap-3 mxm-alert mxm-alert-error"><span>{error}</span>{tab === "gifts" && data.totalGifts === 0 ? <button disabled={bootstrapLoading} onClick={() => { setError(null); setBootstrapError(null); void bootstrapGifts(); }} className="shrink-0 rounded-xl border border-[#704149] px-2.5 py-1.5 text-[10px] font-medium text-[#ffc2c8] disabled:opacity-50">Повторить</button> : null}</div> : null}
 
       {tab === "gifts" ? (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
-          <MarketSide activity={sideActivity} collections={data.collections} />
-        </div>
+        <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div>
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "В тренде" : coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{loading ? "Загрузка…" : `${coins.length} активов`}</span></div>
-            {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное." : "Коинов пока нет."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
-          </div>
-          <MarketSide activity={sideActivity} collections={data.collections} />
+        <div>
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "trending" ? "В тренде" : coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{loading ? "Загрузка…" : `${coins.length} активов`}</span></div>
+          {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное." : "Коинов пока нет."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
         </div>
       )}
 
       {tab === "gifts" && data.cartIds.length ? <Link href="/cart" className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-[17px] border border-[rgba(198,170,88,.25)] bg-[rgba(19,20,22,.96)] px-4 py-2.5 text-[11px] font-semibold mxm-floating-glass shadow-[0_10px_28px_rgba(0,0,0,.38)] lg:bottom-5"><ShoppingCart size={14} className="text-[var(--accent)]"/><span>Корзина · {data.cartIds.length}</span></Link> : null}
     </div>
   );
-}
-
-function FilterSelect({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) {
-  return <SelectSheet label={label} value={value} onChange={onChange} searchable={options.length > 12} options={[{ value: "all", label: `Все · ${label.toLowerCase()}` }, ...options.map((option) => ({ value: option, label: option }))]} />;
-}
-
-function CollectionRail({ collections, watched, busy, onWatch }: { collections: GiftCollection[]; watched: Set<string>; busy: string | null; onWatch: (name: string, enabled: boolean) => void }) {
-  return <div className="mxm-hscroll mb-5 hidden gap-6 border-b border-[var(--border-soft)] pb-3 lg:flex">{collections.slice(0, 12).map((item) => { const active = watched.has(item.baseName); return <div key={item.baseName} className="w-[168px] shrink-0"><div className="flex items-start justify-between gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-0"><p className="truncate text-[11px] font-semibold">{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.listedCount} лотов · {item.holderCount} владельцев</p></Link><button disabled={Boolean(busy)} onClick={() => onWatch(item.baseName, !active)} aria-label={active ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-7 w-7 shrink-0 place-items-center text-[var(--muted)] transition ${active ? "text-[var(--accent)]" : "hover:text-white"}`}><Star size={13} fill={active ? "currentColor" : "none"} /></button></div><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="mt-2 flex items-end justify-between gap-2"><div><p className="text-[9px] text-[var(--muted)]">Флор</p><p className="mt-0.5 text-[12px] font-semibold">{item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></Link></div>; })}</div>;
 }
 
 function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (enabled: boolean) => void }) {
@@ -385,14 +372,6 @@ function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: n
   </div>;
 }
 
-function MarketSide({ activity, collections }: { activity: ActivityItem[]; collections: GiftCollection[] }) {
-  return <aside className="hidden space-y-7 border-l border-[var(--border-soft)] pl-5 lg:block"><section><div className="mb-3 flex items-center justify-between text-[11px] font-semibold"><span>Коллекции</span><span className="text-[9px] font-normal text-[var(--muted)]">рынок</span></div><div>{collections.slice(0, 7).map((item) => <Link href={`/collections/${encodeURIComponent(item.baseName)}`} key={item.baseName} className="block border-b border-[var(--border-soft)] py-2.5 last:border-b-0"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px]">{item.baseName}</span><span className={`text-[10px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[9px] text-[var(--muted)]">Флор {item.floorPrice == null ? "—" : money(item.floorPrice)} · {item.listedCount} в продаже</p></Link>)}</div></section><section><div className="mb-3 text-[11px] font-semibold">Лента рынка</div><div>{activity.slice(0, 9).map((item) => <Link href={item.href} key={item.id} className="block border-b border-[var(--border-soft)] py-2.5 last:border-b-0"><p className="truncate text-[10px]"><span className="text-[#cfd2d7]">{item.label}</span> <span className="text-white">{item.detail}</span></p><div className="mt-1 flex justify-between text-[9px] text-[var(--muted)]"><span>{item.amount == null ? activityKind(item.kind) : money(item.amount)}</span><span>{ago(item.createdAt)}</span></div></Link>)}</div></section></aside>;
-}
-
 function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-7 text-center"><div className="mx-auto grid h-8 w-8 place-items-center text-[var(--muted)]">{icon}</div><p className="mt-3 text-xs font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
 function GridSkeleton() { return <div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{Array.from({ length: 8 }, (_, index) => <div key={index}><div className="mxm-skeleton aspect-square rounded-[18px]" /><div className="mt-2.5 px-0.5"><div className="mxm-skeleton h-3.5 w-2/3 rounded" /><div className="mxm-skeleton mt-2 h-3 w-1/2 rounded" /></div></div>)}</div>; }
 function RowsSkeleton() { return <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div>; }
-
-function activityKind(kind: ActivityItem["kind"]) {
-  return kind === "coin" ? "коин" : kind === "gift" ? "подарок" : kind === "launch" ? "запуск" : kind === "listing" ? "лот" : "оффер";
-}

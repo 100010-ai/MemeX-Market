@@ -1,5 +1,45 @@
-# MXM Market v0.40.0
+# MXM Market v0.45.0
 
+Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
+
+> MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+## v0.45 — Economy, Rewarded Ads, Market UI + Audit
+
+- Removed the old collection/floor dashboard block from the public Gift market and replaced the scattered filter chips with one reliable portal-based filter drawer.
+- Reworked memecoin launch economics: **150 virtual TON** launch fee, **12-hour** cooldown and **2 active coins** per creator. The creation screen now shows real internal AMM parameters instead of misleading huge “starting position” numbers.
+- Added controlled rewarded advertising: **50 virtual TON** per completed ad, **2 rewards/day**, **30-minute** cooldown. Rewards are internal MXM balance only.
+- Added AdsGram Reward integration with server callback verification. Production should set `ADSGRAM_REWARD_SECRET` and keep `ADSGRAM_ALLOW_CLIENT_FALLBACK=false`.
+- Added economy ledger/metrics, admin economy controls, atomic fee-setting updates and a system treasury for Gift marketplace fees.
+- Corrected profile PnL so virtual rewards, admin balance changes and launch fees no longer masquerade as trading profit/loss.
+- Hardened Telegram Gift media downloads with timeouts and size/decompression bounds.
+- Blocked coin launches when the v0.45 economy migration is missing, preventing UI/database fee mismatches during rolling deploys.
+- Games stay disabled and absent from the public interface.
+- Static audit: `docs/AUDIT_V045.md`. AdsGram setup: `docs/ADS_REWARDED_SETUP_V045.md`.
+
+**Required DB migration when upgrading from v0.43:**
+
+```text
+supabase/migrations/020_v045_economy_rewarded_ads.sql
+```
+
+If `019_v041_remove_games_interface.sql` was never applied on the database, apply `019` first and then `020`.
+
+### AdsGram setup
+
+```env
+NEXT_PUBLIC_ADSGRAM_BLOCK_ID=YOUR_REWARD_BLOCK_ID
+ADSGRAM_REWARD_SECRET=replace-with-a-long-random-server-secret
+ADSGRAM_ALLOW_CLIENT_FALLBACK=false
+```
+
+Set the AdsGram Reward URL to:
+
+```text
+https://YOUR_DOMAIN/api/rewards/ads/adsgram?userid=[userId]&token=YOUR_SECRET
+```
+
+Then redeploy so the server and client receive the new environment variables.
 
 ## v0.40 — Audit, Games 2.0, Speed
 
@@ -12,11 +52,7 @@
 - Global density pass shortened labels/copy and tightened navigation, profile, vault, tasks, hub, market, collections and game controls.
 - Release audit checks migrations 017 + 018, game engine, fast snapshot, market pagination, media path and secrets.
 
-**Required DB migration after v0.40:** `supabase/migrations/019_v041_remove_games_interface.sql`.
-
-Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
-
-> MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+**DB migration used by the later no-games release:** `supabase/migrations/019_v041_remove_games_interface.sql`.
 
 ## v0.30 — Market Foundation
 

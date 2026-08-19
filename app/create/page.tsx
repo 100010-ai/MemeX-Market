@@ -8,11 +8,11 @@ import { money } from "@/lib/format";
 import { PrimaryButton } from "@/components/ui";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { prepareCoinImage } from "@/lib/client-image";
-import { COIN_LAUNCH_FEE_TON } from "@/lib/economy";
+import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR, COIN_TRADE_FEE_PERCENT, INITIAL_COIN_AMM_LIQUIDITY_TON, INITIAL_COIN_MARKET_CAP_TON } from "@/lib/economy";
 
 const MAX_IMAGE = 2 * 1024 * 1024;
 const ACCEPTED = new Set(["image/png", "image/jpeg", "image/webp"]);
-type Rules = { launchFee:number; cooldownHours:number; maxActiveCoins:number; activeCoins:number; nextLaunchAt:string|null };
+type Rules = { launchFee:number; cooldownHours:number; maxActiveCoins:number; activeCoins:number; nextLaunchAt:string|null; economyReady:boolean };
 
 export default function CreatePage() {
   const router = useRouter();
@@ -23,12 +23,24 @@ export default function CreatePage() {
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: 12, maxActiveCoins: 3, activeCoins: 0, nextLaunchAt: null });
+  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS, maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR, activeCoins: 0, nextLaunchAt: null, economyReady: false });
+  const [rulesLoaded, setRulesLoaded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { void apiFetch<Rules>("/api/coins").then(setRules).catch(() => undefined); }, []);
+  useEffect(() => {
+    void apiFetch<Rules>("/api/coins", { cacheMs: 0 })
+      .then(setRules)
+      .catch(() => setError("Не удалось загрузить параметры запуска"))
+      .finally(() => setRulesLoaded(true));
+  }, []);
+  useEffect(() => {
+    if (!rules.nextLaunchAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [rules.nextLaunchAt]);
   useEffect(() => {
     if (!image) { setPreview(null); return; }
     const url = URL.createObjectURL(image);
@@ -48,10 +60,10 @@ export default function CreatePage() {
     finally { setImageBusy(false); }
   }
 
-  const cooldownActive = Boolean(rules.nextLaunchAt && new Date(rules.nextLaunchAt).getTime() > Date.now());
+  const cooldownActive = Boolean(rules.nextLaunchAt && new Date(rules.nextLaunchAt).getTime() > now);
   const hasSlot = rules.activeCoins < rules.maxActiveCoins;
   const hasBalance = Boolean(profile && profile.availableBalance >= rules.launchFee);
-  const canLaunch = Boolean(profile && hasBalance && hasSlot && !cooldownActive && name.trim().length >= 2 && symbol.length >= 2 && !busy && !imageBusy);
+  const canLaunch = Boolean(rulesLoaded && rules.economyReady && profile && hasBalance && hasSlot && !cooldownActive && name.trim().length >= 2 && symbol.length >= 2 && !busy && !imageBusy);
 
   async function create() {
     if (!canLaunch) return;
@@ -70,13 +82,13 @@ export default function CreatePage() {
     finally { setBusy(false); }
   }
 
-  const blocker = !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных коина` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasBalance ? `Нужно ${money(rules.launchFee)} доступного баланса` : null;
+  const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Запуск временно недоступен: экономика обновляется" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных коина` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasBalance ? `Нужно ${money(rules.launchFee)} доступного баланса` : null;
 
   return (
     <div className="mx-auto max-w-xl mxm-page-enter">
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-2.5">
         <h1 className="text-sm font-semibold tracking-[-.02em]">Новый мемкоин</h1>
-        <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Запуск</p><p className="mt-1 text-xs font-semibold">{money(rules.launchFee)}</p></div>
+        <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Комиссия запуска</p><p className="mt-1 text-xs font-semibold">{money(rules.launchFee)}</p></div>
       </div>
 
       <section>
@@ -98,13 +110,17 @@ export default function CreatePage() {
           <Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={180} rows={3} placeholder="Идея мемкоина" className="mxm-input min-h-[84px] resize-none" /></Field>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-y border-[var(--border-soft)] py-3">
-          <Info icon={<Sparkles size={12} />} label="Старт" value="100 TON" />
-          <Info icon={<ShieldCheck size={12} />} label="Торговля" value="AMM · 0.5%" />
-          <Info icon={<Rocket size={12} />} label="Лимит" value={`${rules.activeCoins}/${rules.maxActiveCoins} активных`} />
-          <Info icon={<WalletCards size={12} />} label="Доступно" value={profile ? money(profile.availableBalance) : "—"} />
+        <div className="mt-4 border-y border-[var(--border-soft)] py-3">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+            <Info icon={<Sparkles size={12} />} label="Начальная капитализация" value={money(INITIAL_COIN_MARKET_CAP_TON)} />
+            <Info icon={<ShieldCheck size={12} />} label="Ликвидность AMM" value={money(INITIAL_COIN_AMM_LIQUIDITY_TON)} />
+            <Info icon={<Rocket size={12} />} label="Комиссия сделки" value={`${COIN_TRADE_FEE_PERCENT.toLocaleString("ru-RU")}%`} />
+            <Info icon={<WalletCards size={12} />} label="Доступный баланс" value={profile ? money(profile.availableBalance) : "—"} />
+          </div>
+          <p className="mt-3 text-[9px] leading-4 text-[var(--muted-2)]">Все значения внутри MXM виртуальные. Здесь нет депозита, вывода или обещания реальной стоимости TON.</p>
         </div>
 
+        <div className="mt-3 flex items-center justify-between gap-3 text-[9px] text-[var(--muted)]"><span>Активных мемкоинов: {rules.activeCoins}/{rules.maxActiveCoins}</span><span>Пауза между запусками: {rules.cooldownHours} ч</span></div>
 
         {blocker ? <p className="mt-3 border-l-2 border-[var(--accent)] px-2 text-[10px] text-[#d4c596]">{blocker}</p> : null}
         {error ? <p className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1 text-[11px] text-[#ff9aa4]">{error}</p> : null}

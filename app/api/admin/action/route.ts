@@ -215,9 +215,45 @@ export async function POST(request: Request) {
     }
 
     if (action === "npc.tick") {
-      const result = await ensureNpcMarketLiquidity({ force: true, targetListings: Math.floor(number(body.targetListings) ?? 18) });
+      const targetListings = Math.max(1, Math.min(2000, Math.floor(number(body.targetListings) ?? 18)));
+      const result = await ensureNpcMarketLiquidity({ force: true, targetListings });
       await audit(actor, "npc.tick", "gift_liquidity", undefined, { result });
       return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "economy.update") {
+      const reward = number(body.rewardedAdReward);
+      const dailyLimit = Math.floor(number(body.rewardedAdDailyLimit) ?? -1);
+      const cooldownMinutes = Math.floor(number(body.rewardedAdCooldownMinutes) ?? -1);
+      const launchFee = number(body.coinLaunchFee);
+      const launchCooldown = Math.floor(number(body.coinLaunchCooldownHours) ?? -1);
+      const maxActive = Math.floor(number(body.coinMaxActive) ?? -1);
+      const giftFeeBps = Math.floor(number(body.giftFeeBps) ?? -1);
+      if (reward == null || reward < 1 || reward > 500 || dailyLimit < 0 || dailyLimit > 20 || cooldownMinutes < 0 || cooldownMinutes > 1440 || launchFee == null || launchFee < 0 || launchFee > 100000 || launchCooldown < 1 || launchCooldown > 168 || maxActive < 1 || maxActive > 20 || giftFeeBps < 0 || giftFeeBps > 1000) {
+        return NextResponse.json({ error: "Некорректные параметры экономики" }, { status: 400 });
+      }
+      const patch = {
+        rewarded_ad_reward: reward,
+        rewarded_ad_daily_limit: dailyLimit,
+        rewarded_ad_cooldown_minutes: cooldownMinutes,
+        coin_launch_fee: launchFee,
+        coin_launch_cooldown_hours: launchCooldown,
+        coin_max_active: maxActive,
+        gift_fee_bps: giftFeeBps,
+        updated_at: new Date().toISOString(),
+      };
+      const settings = await supabase.rpc("update_economy_settings_v045", {
+        p_rewarded_ad_reward: reward,
+        p_rewarded_ad_daily_limit: dailyLimit,
+        p_rewarded_ad_cooldown_minutes: cooldownMinutes,
+        p_coin_launch_fee: launchFee,
+        p_coin_launch_cooldown_hours: launchCooldown,
+        p_coin_max_active: maxActive,
+        p_gift_fee_bps: giftFeeBps,
+      });
+      if (settings.error) throw settings.error;
+      await audit(actor, "economy.update", "economy_settings", "singleton", patch);
+      return NextResponse.json({ ok: true, economy: settings.data });
     }
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });

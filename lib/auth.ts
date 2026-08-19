@@ -59,6 +59,7 @@ type FinanceSnapshot = {
   coinValue: number;
   giftValue: number;
   netWorth: number;
+  realizedPnl: number;
 };
 
 function formatProfileSnapshot(profileRow: Record<string, unknown>, finance: FinanceSnapshot) {
@@ -82,7 +83,7 @@ function formatProfileSnapshot(profileRow: Record<string, unknown>, finance: Fin
     coinValue: finance.coinValue,
     giftValue: finance.giftValue,
     netWorth: finance.netWorth,
-    pnl: finance.netWorth - 100,
+    pnl: finance.realizedPnl,
     tier: tierForWorth(finance.netWorth),
     joinedAt,
     lastGiftSyncAt: profileRow.last_gift_sync_at == null ? null : String(profileRow.last_gift_sync_at),
@@ -100,6 +101,7 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
     coinValue: 0,
     giftValue: 0,
     netWorth: requiredNumber(profileRow.balance, "balance"),
+    realizedPnl: 0,
   };
 
   const fastSnapshot = await supabase.rpc("profile_snapshot_v040", { p_profile_id: id });
@@ -111,12 +113,13 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
       coinValue: requiredNumber(row.coinValue ?? 0, "coin value"),
       giftValue: requiredNumber(row.giftValue ?? 0, "gift value"),
       netWorth: requiredNumber(row.netWorth ?? row.balance, "net worth"),
+      realizedPnl: requiredNumber(row.realizedPnl ?? 0, "realized pnl"),
     };
   } else {
     const missingFastRpc = fastSnapshot.error && (fastSnapshot.error.code === "42883" || /profile_snapshot_v040|schema cache|could not find the function/i.test(fastSnapshot.error.message || ""));
     if (fastSnapshot.error && !missingFastRpc) throw fastSnapshot.error;
     const [leaderboardResult, reservedResult] = await Promise.all([
-      supabase.from("profile_financial_overview").select("coin_value,gift_value,net_worth").eq("id", id).single(),
+      supabase.from("profile_financial_overview").select("coin_value,gift_value,net_worth,realized_pnl").eq("id", id).single(),
       supabase.rpc("pending_gift_offer_total", { p_profile_id: id, p_exclude_virtual_gift_id: null }),
     ]);
     if (leaderboardResult.error) throw leaderboardResult.error;
@@ -128,6 +131,7 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
       coinValue: requiredNumber(leaderboardResult.data.coin_value, "coin_value"),
       giftValue: requiredNumber(leaderboardResult.data.gift_value, "gift_value"),
       netWorth: requiredNumber(leaderboardResult.data.net_worth, "net_worth"),
+      realizedPnl: requiredNumber(leaderboardResult.data.realized_pnl ?? 0, "realized_pnl"),
     };
   }
 
@@ -150,6 +154,7 @@ export async function getSessionProfileSnapshot() {
       coinValue: requiredNumber(row.coin_value ?? 0, "coin value"),
       giftValue: requiredNumber(row.gift_value ?? 0, "gift value"),
       netWorth: requiredNumber(row.net_worth ?? row.balance, "net worth"),
+      realizedPnl: requiredNumber(row.realized_pnl ?? 0, "realized pnl"),
     });
   }
 

@@ -178,9 +178,10 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, [isControl, authNonce]);
 
 
+  const profileId = profile?.id ?? null;
   useEffect(() => {
-    if (profile && !isControl) warmCurrentRoute(pathname);
-  }, [profile?.id, isControl, pathname]);
+    if (profileId && !isControl) warmCurrentRoute(pathname);
+  }, [profileId, isControl, pathname]);
 
   const value = useMemo(() => ({ profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;

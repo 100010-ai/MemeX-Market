@@ -17,10 +17,10 @@ function contentType(path: string) {
 export async function GET(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
   // Media requests are numerous; verifying the signed Telegram session cookie is
   // enough here and avoids a Supabase profile query for every image tile.
-  if (!(await readSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await readSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   try {
     const { fileId } = await params;
-    if (!(await isKnownGiftFile(fileId))) return NextResponse.json({ error: "Unknown gift file" }, { status: 404 });
+    if (!(await isKnownGiftFile(fileId))) return NextResponse.json({ error: "Файл подарка не найден" }, { status: 404 });
     const { response, filePath } = await getTelegramFile(fileId);
     const headers = new Headers({
       "content-type": response.headers.get("content-type") || contentType(filePath),
@@ -31,6 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
     if (length) headers.set("content-length", length);
     return new NextResponse(response.body, { headers });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "File unavailable" }, { status: 404 });
+    console.warn("telegram gift file unavailable", error);
+    return NextResponse.json({ error: "Медиа подарка временно недоступно" }, { status: 404 });
   }
 }

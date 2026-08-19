@@ -17,33 +17,48 @@ function validate(name: string, symbol: string, description: string) {
 
 export async function GET() {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  const { data: coins, error } = await supabase
-    .from("coins")
-    .select("id,status,created_at")
-    .eq("creator_profile_id", profile.id)
-    .order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const rows = (coins || []) as Array<{ id: string; status: string; created_at: string }>;
+  const [coinsResult, settingsResult] = await Promise.all([
+    supabase.from("coins").select("id,status,created_at").eq("creator_profile_id", profile.id).order("created_at", { ascending: false }),
+    supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active").eq("singleton", true).maybeSingle(),
+  ]);
+  if (coinsResult.error) {
+    console.error("coin rules list", coinsResult.error);
+    return NextResponse.json({ error: "Не удалось загрузить правила запуска" }, { status: 500 });
+  }
+  const settingsUnavailable = Boolean(settingsResult.error || !settingsResult.data || Number(settingsResult.data.schema_version || 0) < 45);
+  if (settingsResult.error && !["42P01", "42703", "PGRST204"].includes(String(settingsResult.error.code || ""))) console.error("coin economy settings", settingsResult.error);
+  const rows = (coinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
   const active = rows.filter((coin) => coin.status === "active");
+  const launchFee = settingsResult.data ? Number(settingsResult.data.coin_launch_fee) : COIN_LAUNCH_FEE_TON;
+  const cooldownHours = settingsResult.data ? Number(settingsResult.data.coin_launch_cooldown_hours) : COIN_LAUNCH_COOLDOWN_HOURS;
+  const maxActiveCoins = settingsResult.data ? Number(settingsResult.data.coin_max_active) : COIN_MAX_ACTIVE_PER_CREATOR;
   const last = active[0]?.created_at ? new Date(active[0].created_at) : null;
-  const nextLaunchAt = last ? new Date(last.getTime() + COIN_LAUNCH_COOLDOWN_HOURS * 60 * 60 * 1000) : null;
+  const nextLaunchAt = last ? new Date(last.getTime() + cooldownHours * 60 * 60 * 1000) : null;
   return NextResponse.json({
-    launchFee: COIN_LAUNCH_FEE_TON,
-    cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS,
-    maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR,
+    launchFee,
+    cooldownHours,
+    maxActiveCoins,
     activeCoins: active.length,
     nextLaunchAt: nextLaunchAt?.toISOString() || null,
+    economyReady: !settingsUnavailable,
   }, { headers: { "cache-control": "private, no-store" } });
 }
 
 export async function POST(request: Request) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-create", String(profile.id), 6, 600))) {
     return NextResponse.json({ error: "Слишком много запусков. Подождите несколько минут." }, { status: 429 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  const readiness = await supabase.from("economy_settings").select("schema_version").eq("singleton", true).maybeSingle();
+  if (readiness.error || !readiness.data || Number(readiness.data.schema_version || 0) < 45) {
+    if (readiness.error) console.warn("coin create blocked: economy migration required", readiness.error.code);
+    return NextResponse.json({ error: "Запуск мемкоинов временно недоступен: экономика обновляется" }, { status: 503 });
   }
 
   let uploadedPath: string | null = null;
@@ -76,7 +91,6 @@ export async function POST(request: Request) {
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.rpc("create_coin_with_image", {
       p_profile_id: profile.id,
       p_name: name,
@@ -90,13 +104,9 @@ export async function POST(request: Request) {
     }
     const coinId = data && typeof data === "object" && "id" in data ? String((data as { id: unknown }).id) : "";
     if (!coinId) {
-      await removeCoinImage(uploadedPath);
-      return NextResponse.json({ error: "Сервер не вернул ID созданного мемкоина" }, { status: 500 });
-    }
-    const { error: visibilityError } = await supabase.from("coins").update({ status: "active", hidden_from_market: false }).eq("id", coinId);
-    if (visibilityError) {
-      console.error("coin visibility", visibilityError);
-      return NextResponse.json({ error: "Мемкоин создан, но не удалось включить его в маркет. Проверь миграцию v0.10." }, { status: 500 });
+      // The RPC is atomic: if it succeeded, do not delete an uploaded logo or attempt a second mutation.
+      console.error("coin create: RPC returned no id", data);
+      return NextResponse.json({ error: "Мемкоин создан, но сервер вернул неполный ответ. Обновите маркет перед повторной попыткой." }, { status: 502 });
     }
     return NextResponse.json({ coin: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
