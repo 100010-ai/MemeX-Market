@@ -11,6 +11,17 @@ const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
 const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
 
+type GiftMediaRow = {
+  model_media_url: string | null;
+  model_preview_url: string | null;
+  model_is_animated: boolean | null;
+  catalog_source: string | null;
+  is_burned: boolean | null;
+  telegram_name: string | null;
+  base_name: string | null;
+  gift_number: number | string | null;
+};
+
 function trustedMediaHost(hostname: string) {
   const host = hostname.toLowerCase();
   return host === "tonapi.io"
@@ -45,7 +56,7 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
     cache: "force-cache",
     headers: {
       accept,
-      "user-agent": "MXM-Market/0.15",
+      "user-agent": "MXM-Market/0.17",
       referer: "https://fragment.com/",
     },
   });
@@ -110,32 +121,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
   }
 
   const supabase = getSupabaseAdmin();
-  let result = await supabase
+  const primary = await supabase
     .from("gift_assets")
     .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
     .eq("id", assetId)
     .maybeSingle();
 
+  let queryError = primary.error;
+  let row = primary.data as unknown as GiftMediaRow | null;
+
   // Backward-compatible read for deployments that have not applied the v0.14
   // model_preview_url column yet. Fragment media can be derived from the Gift
   // slug, so the preview/animation endpoint does not actually need that column.
-  if (result.error && (result.error.code === "42703" || /model_preview_url/i.test(result.error.message || ""))) {
+  if (queryError && (queryError.code === "42703" || /model_preview_url/i.test(queryError.message || ""))) {
     const legacy = await supabase
       .from("gift_assets")
       .select("model_media_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
       .eq("id", assetId)
       .maybeSingle();
-    result = legacy.error
-      ? { data: null, error: legacy.error } as typeof result
-      : { data: legacy.data ? { ...legacy.data, model_preview_url: null } : null, error: null } as typeof result;
+    queryError = legacy.error;
+    row = legacy.data
+      ? { ...(legacy.data as unknown as Omit<GiftMediaRow, "model_preview_url">), model_preview_url: null }
+      : null;
   }
 
-  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
-  if (!result.data || result.data.is_burned || result.data.catalog_source !== "tonapi") {
+  if (queryError) return NextResponse.json({ error: queryError.message }, { status: 500 });
+  if (!row || row.is_burned || row.catalog_source !== "tonapi") {
     return NextResponse.json({ error: "Gift media not found" }, { status: 404 });
   }
 
-  const slug = telegramCollectibleSlug(result.data.telegram_name, result.data.base_name, result.data.gift_number);
+  const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
   const fragment = slug ? fragmentGiftMedia(slug) : null;
   const variant = new URL(request.url).searchParams.get("variant") === "preview" ? "preview" : "animation";
   const controller = new AbortController();
@@ -149,8 +164,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
       const response = await previewResponse([
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
-        trustedUrl(result.data.model_preview_url),
-        result.data.model_is_animated ? null : trustedUrl(result.data.model_media_url),
+        trustedUrl(row.model_preview_url),
+        row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ], controller.signal);
       return response || NextResponse.json({ error: "Gift preview not found" }, { status: 404 });
     }
@@ -160,7 +175,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
     // sticker layer, so the backdrop does not disappear when animation starts.
     const response = await animationResponse([
       trustedUrl(fragment?.animation),
-      result.data.model_is_animated ? trustedUrl(result.data.model_media_url) : null,
+      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
     ], controller.signal);
     return response || NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
   } catch (error) {

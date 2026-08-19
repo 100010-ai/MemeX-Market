@@ -6,6 +6,17 @@ import { giftMarketSelect, mapGift } from "@/lib/mappers";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const legacyGiftMarketSelect = giftMarketSelect.split(",").filter((column) => column !== "model_preview_url").join(",");
 
+type GiftMarketRow = Record<string, unknown> & {
+  asset_id: string;
+  virtual_gift_id: string;
+  telegram_name: string;
+  base_name: string;
+  model_name: string;
+  backdrop_name: string;
+  symbol_name: string;
+  model_preview_url: string | null;
+};
+
 function personName(names: Map<string, string>, id: string) {
   return names.get(id) || "Пользователь";
 }
@@ -28,15 +39,23 @@ async function lookupGiftRow(
     .limit(1)
     .maybeSingle();
 
-  let result = await run(giftMarketSelect);
+  const primary = await run(giftMarketSelect);
+  let error = primary.error;
+  let data = primary.data as unknown as Record<string, unknown> | null;
+
   // v0.15 introduced model_preview_url. Older deployments could still render
   // the market because the RPC returns the view wholesale, while this explicit
   // select failed and was incorrectly translated into a 404. Retry against the
   // v0.14-compatible column set so the detail page can still resolve the Gift.
-  if (result.error && isLegacyPreviewColumnError(result.error)) result = await run(legacyGiftMarketSelect);
-  if (result.error) throw result.error;
-  if (!result.data) return null;
-  return { model_preview_url: null, ...(result.data as unknown as Record<string, any>) };
+  if (error && isLegacyPreviewColumnError(error)) {
+    const legacy = await run(legacyGiftMarketSelect);
+    error = legacy.error;
+    data = legacy.data as unknown as Record<string, unknown> | null;
+  }
+
+  if (error) throw error;
+  if (!data) return null;
+  return { model_preview_url: null, ...data } as GiftMarketRow;
 }
 
 async function resolveGiftRow(supabase: ReturnType<typeof getSupabaseAdmin>, routeId: string) {

@@ -320,8 +320,8 @@ function sourceIdentity(item: ParsedItem) {
 let unauthenticatedNextRequestAt = 0;
 let unauthenticatedQueue = Promise.resolve();
 
-async function respectTonApiLimit() {
-  if (process.env.TONAPI_KEY?.trim()) return;
+async function respectTonApiLimit(authenticated: boolean) {
+  if (authenticated) return;
   const previous = unauthenticatedQueue;
   let release!: () => void;
   unauthenticatedQueue = new Promise<void>((resolve) => { release = resolve; });
@@ -339,27 +339,41 @@ function retryDelay(attempt: number, retryAfter: string | null) {
 }
 
 async function tonapi<T>(path: string): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.14" };
   const key = process.env.TONAPI_KEY?.trim();
-  if (key) headers.authorization = `Bearer ${key}`;
-
+  let authenticated = Boolean(key);
+  let authFallbackUsed = false;
   let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      await respectTonApiLimit();
+      await respectTonApiLimit(authenticated);
+      const headers: Record<string, string> = { accept: "application/json", "user-agent": "MXM-Market/0.17" };
+      if (authenticated && key) headers.authorization = `Bearer ${key}`;
+
       const response = await fetch(`${TONAPI_BASE}${path}`, { headers, signal: controller.signal, cache: "no-store" });
       if (response.ok) return await response.json() as T;
 
+      // TonAPI's public REST methods are available without authentication at a
+      // lower rate limit. An expired/mistyped TONAPI_KEY must therefore not
+      // brick the whole Gift catalog with 401/403: retry once anonymously and
+      // let the unauthenticated 1-request-per-4s limiter take over.
+      if ((response.status === 401 || response.status === 403) && authenticated && !authFallbackUsed) {
+        authenticated = false;
+        authFallbackUsed = true;
+        lastError = new Error(`TonAPI ${response.status}: configured TONAPI_KEY was rejected; retrying without it`);
+        continue;
+      }
+
       const transient = response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504;
       lastError = new Error(`TonAPI ${response.status} for ${path}`);
-      if (!transient || attempt === 2) throw lastError;
+      if (!transient || attempt === 3) throw lastError;
       await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, response.headers.get("retry-after"))));
     } catch (cause) {
       lastError = cause instanceof Error ? cause : new Error("TonAPI request failed");
       const transient = lastError.name === "AbortError" || /fetch|network|timeout|TonAPI (429|502|503|504)/i.test(lastError.message);
-      if (!transient || attempt === 2) throw lastError;
+      if (!transient || attempt === 3) throw lastError;
       await new Promise((resolve) => setTimeout(resolve, retryDelay(attempt, null)));
     } finally {
       clearTimeout(timeout);

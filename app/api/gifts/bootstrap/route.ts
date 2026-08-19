@@ -13,6 +13,9 @@ function friendlyBootstrapError(error: unknown) {
   if (/tonapi_catalog_state|tonapi_gift_collections|acquire_tonapi_catalog_lock|chain_nft_address|chain_verified|model_preview_url|reconcile_npc_external_prices/i.test(message)) {
     return "База данных не обновлена до актуальной схемы Gifts. Примените миграции 014_v012_tonapi_polish.sql и 015_v014_real_prices_animations.sql.";
   }
+  if (/TonAPI (401|403)/i.test(message)) {
+    return "TonAPI отклонил TONAPI_KEY. MX Market попробует публичный режим автоматически; если ошибка повторяется, удалите невалидный TONAPI_KEY или выпустите новый ключ в TonConsole.";
+  }
   if (/fetch|network|timeout|abort|TonAPI 429|TonAPI 5\d\d/i.test(message)) {
     return "TonAPI временно недоступен или ограничил запросы. Повторите загрузку через несколько секунд.";
   }

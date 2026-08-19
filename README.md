@@ -1,6 +1,14 @@
-# MemeX Market (MXM) v0.16.0
+# MemeX Market (MXM) v0.17.0
 
 Telegram Mini App for a multiplayer simulated market built with Next.js, TypeScript, Supabase/Postgres and Vercel.
+
+## v0.17 — Build fix + TonAPI auth fallback
+
+- Fixed the TypeScript production-build failures in `app/api/gifts/[id]/route.ts` caused by Supabase narrowing the fallback row to `{ model_preview_url: null }`. Detail rows now normalize into an explicit `GiftMarketRow` before property access.
+- Fixed the incompatible PostgREST response cast in `app/api/gifts/media/[assetId]/route.ts`; primary and legacy reads are normalized into `GiftMediaRow` without pretending one Supabase response type is another.
+- If a configured `TONAPI_KEY` is expired or invalid and TonAPI returns 401/403, the importer retries once without the key and switches to the public rate limiter instead of emptying the whole Gifts market.
+- Bootstrap errors no longer dump the raw collection endpoint for the common invalid-key case.
+- No database migration is required when upgrading from v0.16.
 
 MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts provide real source artwork/metadata, while ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
@@ -129,7 +137,7 @@ supabase/migrations/013_v011_genesis_market_auth.sql
 - The empty Gift-market problem is fixed at its source. On the first Gift-market request, MXM can import a bounded cohort of **real exported Telegram Gift NFTs from TON through TonAPI**, then release real rows into the finite Genesis pool. No fake Gift, fallback artwork or generated trait is inserted.
 - The existing Bot API catalogue remains an additional source for real Gifts from explicitly known Telegram users. TonAPI is used for on-chain exported collectibles; Bot API data keeps exact Telegram model/symbol/backdrop rarity when available.
 - No MTProto user session, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` or `TELEGRAM_USER_SESSION` is required.
-- `TONAPI_KEY` is optional. Without it the importer respects TonAPI's public rate limit; normal gameplay never waits on TonAPI after the catalogue has been populated.
+- `TONAPI_KEY` is optional. Without it the importer respects TonAPI's public rate limit. If a configured key is rejected with 401/403, MXM retries anonymously and enables the same public limiter; normal gameplay never waits on TonAPI after the catalogue has been populated.
 - Catalogue import validates NFT identity, collection/source signals, real media and real model/background/symbol metadata. Incomplete rows are skipped rather than repaired with placeholder data.
 - Rarity for TonAPI-only rows is recomputed from the real imported cohort of that collection. It is an empirical catalogue frequency; Bot API rows continue to use Telegram-provided rarity metadata.
 - The finite Genesis logic is unchanged: system inventory is released once, players buy it, and subsequent supply is player-to-player.
