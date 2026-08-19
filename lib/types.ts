@@ -163,6 +163,7 @@ export type GiftTrade = {
   id: string;
   price: number;
   createdAt: string;
+  expiresAt?: string | null;
   buyerId: string;
   buyerName: string;
   sellerId: string | null;
@@ -187,6 +188,7 @@ export type GiftOffer = {
   amount: number;
   status: "pending" | "accepted" | "rejected" | "cancelled";
   createdAt: string;
+  expiresAt?: string | null;
   buyerId: string;
   buyerName: string;
   ownerId: string;

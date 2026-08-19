@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     // into one global bucket and caused random 429 screens.
     const validated = validateTelegramInitData(initData, botToken, 60 * 15);
     if (!validated.ok) return NextResponse.json({ error: validated.reason }, { status: 401 });
-    const { user } = validated;
+    const { user, startParam } = validated;
 
     if (!(await enforceRateLimit(request, "telegram-auth", user.id, 60, 300))) {
       return NextResponse.json({ error: "Слишком много запросов авторизации. Повторите через минуту." }, { status: 429, headers: { "retry-after": "60" } });
@@ -37,6 +37,13 @@ export async function POST(request: Request) {
       p_photo_url: user.photo_url ?? null,
     });
     if (error || !data) throw error || new Error("Could not sync profile");
+    if (startParam?.startsWith("ref_")) {
+      const code = startParam.slice(4);
+      if (/^[A-Za-z0-9_-]{6,32}$/.test(code)) {
+        const referral = await supabase.rpc("attach_referrer_v046", { p_profile_id: data.id, p_referral_code: code });
+        if (referral.error && !/attach_referrer_v046|schema cache|could not find the function/i.test(referral.error.message || "")) console.warn("referral attach", referral.error);
+      }
+    }
     const bannedUntil = data.banned_until ? new Date(String(data.banned_until)).getTime() : null;
     if (data.is_banned && (bannedUntil == null || bannedUntil > Date.now())) {
       return NextResponse.json({ error: data.ban_reason ? `Аккаунт заблокирован: ${String(data.ban_reason)}` : "Аккаунт заблокирован" }, { status: 403 });

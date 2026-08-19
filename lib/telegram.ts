@@ -42,7 +42,7 @@ export function validateTelegramInitData(initData: string, botToken: string, max
   try {
     const user = JSON.parse(rawUser) as TelegramUser;
     if (!user.id || !user.first_name) return { ok: false as const, reason: "Invalid user" };
-    return { ok: true as const, user, authDate };
+    return { ok: true as const, user, authDate, startParam: params.get("start_param") };
   } catch {
     return { ok: false as const, reason: "Invalid user payload" };
   }

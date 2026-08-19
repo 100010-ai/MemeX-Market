@@ -13,14 +13,15 @@ import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
-type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null };
+type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
+type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; filterOptions?: GiftFilterOptions };
 type GiftPageChunk = { gifts: GiftAsset[]; nextOffset: number | null; marketSeed: string };
 type GiftSort = "random" | "price" | "newest" | "number" | "rarity" | "offers";
 type CoinSort = "trending" | "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null });
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
 const GIFT_PAGE_SIZE = 24;
@@ -170,9 +171,11 @@ export default function MarketPage() {
     void bootstrapGifts();
   }, [tab, loading, data.bootstrapRecommended, data.totalGifts, bootstrapLoading, bootstrapError, bootstrapGifts]);
 
-  const models = useMemo(() => [...new Set(data.gifts.map((gift) => gift.modelName))].sort(), [data.gifts]);
-  const backdrops = useMemo(() => [...new Set(data.gifts.map((gift) => gift.backdropName))].sort(), [data.gifts]);
-  const symbols = useMemo(() => [...new Set(data.gifts.map((gift) => gift.symbolName))].sort(), [data.gifts]);
+  const filterOptions = data.filterOptions || { collections: [], models: [], backdrops: [], symbols: [] };
+  const filterCollections = useMemo(() => filterOptions.collections.length ? filterOptions.collections : data.collections.map((item) => item.baseName), [filterOptions.collections, data.collections]);
+  const models = useMemo(() => filterOptions.models.length ? filterOptions.models : [...new Set(data.gifts.map((gift) => gift.modelName))].sort(), [filterOptions.models, data.gifts]);
+  const backdrops = useMemo(() => filterOptions.backdrops.length ? filterOptions.backdrops : [...new Set(data.gifts.map((gift) => gift.backdropName))].sort(), [filterOptions.backdrops, data.gifts]);
+  const symbols = useMemo(() => filterOptions.symbols.length ? filterOptions.symbols : [...new Set(data.gifts.map((gift) => gift.symbolName))].sort(), [filterOptions.symbols, data.gifts]);
   const watchedCoins = useMemo(() => new Set(data.watchlist.coinIds), [data.watchlist.coinIds]);
   const watchedCollections = useMemo(() => new Set(data.watchlist.giftCollections), [data.watchlist.giftCollections]);
   const cartIds = useMemo(() => new Set(data.cartIds), [data.cartIds]);
@@ -210,6 +213,12 @@ export default function MarketPage() {
       return Number(a.listingPrice) - Number(b.listingPrice);
     });
   }, [data.gifts, remoteGiftSearch, deferredQuery, collection, model, backdrop, symbol, priceBand, giftSort, giftView, watchOnly, watchedCollections, marketNow]);
+
+  useEffect(() => {
+    if (tab !== "gifts" || loading || loadingMore || query.trim().length >= 2) return;
+    if (!hasGiftFilters || gifts.length >= 12 || data.nextOffset == null) return;
+    void loadMoreGifts();
+  }, [tab, loading, loadingMore, query, hasGiftFilters, gifts.length, data.nextOffset, loadMoreGifts]);
 
   const coins = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -334,7 +343,7 @@ export default function MarketPage() {
               else setGiftSort(value as GiftSort);
             }}
             onReset={() => { setCollection("all"); setModel("all"); setBackdrop("all"); setSymbol("all"); setPriceBand("all"); setGiftSort("random"); }}
-            collections={data.collections.map((item) => item.baseName)} models={models} backdrops={backdrops} symbols={symbols}
+            collections={filterCollections} models={models} backdrops={backdrops} symbols={symbols}
           />
         </>
       ) : (

@@ -44,11 +44,12 @@ function secretLeaks() {
   return hits;
 }
 
-console.log("MXM v0.45 release gate\n");
+console.log("MXM v0.46 release gate\n");
 const migration017 = read("supabase/migrations/017_v030_market_foundation.sql");
 const migration018 = read("supabase/migrations/018_v040_games_speed_compact.sql");
 const migration019 = read("supabase/migrations/019_v041_remove_games_interface.sql");
 const migration020 = read("supabase/migrations/020_v045_economy_rewarded_ads.sql");
+const migration021 = read("supabase/migrations/021_v046_stars_referrals_market_polish.sql");
 const packageJson = read("package.json");
 const packageLock = read("package-lock.json");
 const marketPage = read("app/market/page.tsx");
@@ -69,8 +70,9 @@ check("Migration 017 present", Boolean(migration017));
 check("Migration 018 present", Boolean(migration018));
 check("Migration 019 present", Boolean(migration019));
 check("Migration 020 v0.45 present", Boolean(migration020));
-check("v0.45 package version", packageJson.includes('"version": "0.45.0"'));
-check("package-lock version synced", packageLock.includes('"version": "0.45.0"'));
+check("Migration 021 v0.46 present", Boolean(migration021));
+check("v0.46 package version", packageJson.includes('"version": "0.46.0"'));
+check("package-lock version synced", packageLock.includes('"version": "0.46.0"'));
 check("Environment template present", Boolean(envTemplate));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
@@ -86,7 +88,7 @@ check("Current launch economics", economy.includes("COIN_LAUNCH_FEE_TON = 150") 
 check("Coin launch waits for economy migration", coinRoute.includes("schema_version") && coinRoute.includes("экономика обновляется") && createPage.includes("economyReady"));
 check("Coin create has no post-RPC visibility mutation", !coinRoute.includes('from("coins").update({ status: "active"'));
 
-check("Rewarded ad economics", economy.includes("REWARDED_AD_REWARD_TON = 50") && economy.includes("REWARDED_AD_DAILY_LIMIT = 2") && economy.includes("REWARDED_AD_COOLDOWN_MINUTES = 30"));
+check("Rewarded ad economics", economy.includes("REWARDED_AD_REWARD_TON = 50") && economy.includes("REWARDED_AD_DAILY_LIMIT = 5") && economy.includes("REWARDED_AD_COOLDOWN_MINUTES = 30"));
 check("AdsGram SDK integration", tasks.includes("https://sad.adsgram.ai/js/sad.min.js") && tasks.includes("Adsgram.init") && tasks.includes("shown.done"));
 check("Server reward callback", exists("app/api/rewards/ads/adsgram/route.ts") && adCallback.includes("claim_rewarded_ad_by_telegram_v045"));
 check("Reward callback secret uses timing-safe comparison", adConfig.includes("timingSafeEqual") && adCallback.includes("safeSecretEquals"));
@@ -97,6 +99,12 @@ check("Old forgeable v0.44 ad RPCs removed", migration020.includes("drop functio
 check("Reward session concurrency guard", migration020.includes("rewarded_ad_sessions_one_open_v045_idx") && migration020.includes("row_number() over(partition by profile_id"));
 check("Ad secret is server-only", envTemplate.includes("ADSGRAM_REWARD_SECRET") && !/NEXT_PUBLIC_ADSGRAM_REWARD_SECRET/.test(envTemplate));
 check("Client fallback is off by default", envTemplate.includes("ADSGRAM_ALLOW_CLIENT_FALLBACK=false"));
+check("Telegram Stars invoice endpoint", exists("app/api/stars/invoice/route.ts") && read("app/api/stars/invoice/route.ts").includes('currency: "XTR"'));
+check("Telegram Stars webhook verifier", exists("app/api/telegram/webhook/route.ts") && read("app/api/telegram/webhook/route.ts").includes("x-telegram-bot-api-secret-token") && read("app/api/telegram/webhook/route.ts").includes("finalize_star_purchase_v046"));
+check("Referral graph + idempotent rewards", migration021.includes("referrer_profile_id") && migration021.includes("referral_rewards_once_v046_uidx") && migration021.includes("credit_referral_bonus_v046"));
+check("Rewarded ads capped at five/day", migration021.includes("rewarded_ad_daily_limit=5") && economy.includes("REWARDED_AD_DAILY_LIMIT = 5"));
+check("Full-market filter dictionary", migration021.includes("gift_market_filter_options_v046") && read("app/api/market/route.ts").includes("gift_market_filter_options_v046"));
+check("Referral link auth binding", read("app/api/auth/telegram/route.ts").includes("attach_referrer_v046"));
 
 check("PnL uses realized trading PnL", auth.includes("pnl: finance.realizedPnl") && !auth.includes("netWorth - 100"));
 check("Economy audit ledger", migration020.includes("create table if not exists public.economy_events") && read("app/api/admin/overview/route.ts").includes("economyEmissionToday"));

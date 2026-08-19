@@ -145,20 +145,15 @@ export default function TasksPage() {
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} XP</span></div> : null}
 
       <section className="mxm-reward-ad mb-6">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <div className="mxm-reward-ad-icon"><Eye size={17} /></div>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="mxm-reward-ad-icon"><Eye size={16} /></div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1"><h2 className="text-[13px] font-semibold">Реклама за виртуальные TON</h2><span className="text-[9px] text-[var(--muted-2)]">добровольно</span></div>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--muted)]">Посмотри рекламу до конца и получи награду после подтверждения рекламной сетью. Это виртуальный баланс MXM, не реальный TON.</p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] text-[var(--muted)]">
-              <span className="font-semibold text-[var(--accent)]">+{money(Number(adStatus?.reward || 50))}</span>
-              <span>{adStatus ? `${adStatus.remainingToday}/${adStatus.dailyLimit} осталось сегодня` : "проверяем лимит"}</span>
-              {cooldownText ? <span>через {cooldownText}</span> : null}
-            </div>
+            <h2 className="text-[12px] font-semibold">Реклама за виртуальные TON</h2>
+            <p className="mt-1 text-[9px] text-[var(--muted)]">+{money(Number(adStatus?.reward || 50))} · {adStatus ? `${adStatus.remainingToday}/${adStatus.dailyLimit} сегодня` : "до 5 раз в день"}{cooldownText ? ` · через ${cooldownText}` : ""}</p>
           </div>
         </div>
         <button type="button" disabled={!adCanStart} onClick={() => void watchRewardedAd()} className="mxm-reward-ad-button">
-          {adBusy ? <span className="animate-pulse">Проверяем…</span> : !adStatus?.configured ? (adStatus?.verificationMode === "disabled" ? "Нужна настройка" : "Не подключено") : adStatus.migrationRequired ? "Нужна миграция" : adStatus.remainingToday <= 0 ? "На сегодня всё" : cooldownText ? `Через ${cooldownText}` : !adReady ? "Загрузка…" : <><Play size={12} fill="currentColor" />Смотреть</>}
+          {adBusy ? <span className="animate-pulse">…</span> : !adStatus?.configured ? (adStatus?.verificationMode === "disabled" ? "Не подключено" : "Не подключено") : adStatus.migrationRequired ? "Миграция" : adStatus.remainingToday <= 0 ? "Готово" : cooldownText ? cooldownText : !adReady ? "…" : <><Play size={12} fill="currentColor" />Смотреть</>}
         </button>
       </section>
       {adNotice ? <div className="mb-4 border-l-2 border-[var(--accent)] pl-3 text-[10px] leading-4 text-[var(--muted)]">{adNotice}</div> : null}

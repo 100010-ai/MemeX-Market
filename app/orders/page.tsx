@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Gem, Inbox, Tag } from "lucide-react";
+import { Gem, Inbox, Tag, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { GiftAsset, GiftOffer } from "@/lib/types";
 import { ago, money } from "@/lib/format";
@@ -30,6 +30,14 @@ export default function OrdersPage() {
     finally { setBusy(null); }
   }
 
+
+  async function unlist(id: string) {
+    setBusy(id + "unlist"); setError(null); haptic("medium");
+    try { await apiFetch(`/api/gifts/${id}/list`, { method: "POST", body: JSON.stringify({ price: null }) }); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Не удалось снять лот"); }
+    finally { setBusy(null); }
+  }
+
   const current = tab === "incoming" ? data.incoming : data.outgoing;
   return (
     <div className="mx-auto max-w-3xl">
@@ -45,9 +53,9 @@ export default function OrdersPage() {
       {error ? <div className="mb-3 mxm-alert mxm-alert-error">{error}</div> : null}
 
       {tab === "listings" ? (
-        data.listings.length ? <div className="mxm-card overflow-hidden px-3">{data.listings.map((gift) => <Link key={gift.virtualGiftId} href={`/gifts/${gift.virtualGiftId}`} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[var(--border-soft)] py-2.5"><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-2xl" /><div className="min-w-0"><p className="truncate text-xs font-medium">{gift.baseName}</p><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice)}</div></Link>)}</div> : <Empty text="Нет активных лотов" icon={<Tag />} />
+        data.listings.length ? <div className="divide-y divide-[var(--border-soft)] border-y border-[var(--border-soft)]">{data.listings.map((gift) => <div key={gift.virtualGiftId} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><Link href={`/gifts/${gift.virtualGiftId}`}><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-[14px]" /></Link><div className="min-w-0"><Link href={`/gifts/${gift.virtualGiftId}`} className="truncate text-xs font-medium">{gift.baseName}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-2"><span className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice)}</span><button disabled={busy !== null} onClick={() => void unlist(gift.virtualGiftId)} aria-label="Снять с продажи" className="mxm-icon-action"><X size={14}/></button></div></div>)}</div> : <Empty text="Нет активных лотов" icon={<Tag />} />
       ) : current.length ? (
-        <div className="mxm-card overflow-hidden px-3">{current.map((offer) => <div key={offer.id} className="border-b border-[var(--border-soft)] py-2.5"><div className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5"><Link href={`/gifts/${offer.virtualGiftId}`}><GiftMedia gift={offer.gift} compact className="h-[46px] w-[46px] rounded-2xl" /></Link><div className="min-w-0"><Link href={`/gifts/${offer.virtualGiftId}`} className="block truncate text-xs font-medium">{offer.baseName} #{offer.number}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">{tab === "incoming" ? `от ${offer.buyerName}` : `владелец ${offer.ownerName}`} · {ago(offer.createdAt)}</p></div><p className="flex items-center gap-1 text-xs font-semibold"><Gem size={11} fill="currentColor" />{money(offer.amount)}</p></div><div className="mt-2 flex gap-2">{tab === "incoming" ? <><button disabled={busy !== null} onClick={() => act(offer.id, "reject")} className="flex-1 rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отклонить</button><button disabled={busy !== null} onClick={() => act(offer.id, "accept")} className="flex-1 rounded-[13px] bg-[var(--accent)] py-2.5 text-[10px] font-semibold text-[#0b0d10]">Принять</button></> : <button disabled={busy !== null} onClick={() => act(offer.id, "cancel")} className="w-full rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отменить оффер</button>}</div></div>)}</div>
+        <div className="mxm-card overflow-hidden px-3">{current.map((offer) => <div key={offer.id} className="border-b border-[var(--border-soft)] py-2.5"><div className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5"><Link href={`/gifts/${offer.virtualGiftId}`}><GiftMedia gift={offer.gift} compact className="h-[46px] w-[46px] rounded-2xl" /></Link><div className="min-w-0"><Link href={`/gifts/${offer.virtualGiftId}`} className="block truncate text-xs font-medium">{offer.baseName} #{offer.number}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">{tab === "incoming" ? `от ${offer.buyerName}` : `владелец ${offer.ownerName}`} · {ago(offer.createdAt)}{offer.expiresAt ? ` · до ${new Date(offer.expiresAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}` : ""}</p></div><p className="flex items-center gap-1 text-xs font-semibold"><Gem size={11} fill="currentColor" />{money(offer.amount)}</p></div><div className="mt-2 flex gap-2">{tab === "incoming" ? <><button disabled={busy !== null} onClick={() => act(offer.id, "reject")} className="flex-1 rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отклонить</button><button disabled={busy !== null} onClick={() => act(offer.id, "accept")} className="flex-1 rounded-[13px] bg-[var(--accent)] py-2.5 text-[10px] font-semibold text-[#0b0d10]">Принять</button></> : <button disabled={busy !== null} onClick={() => act(offer.id, "cancel")} className="w-full rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отменить оффер</button>}</div></div>)}</div>
       ) : <Empty text={tab === "incoming" ? "Входящих офферов нет" : "Активных офферов нет"} icon={<Inbox />} />}
     </div>
   );

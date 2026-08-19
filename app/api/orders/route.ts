@@ -10,7 +10,7 @@ export async function GET() {
   const supabase = getSupabaseAdmin();
   try {
     const [outgoingResult, ownedResult, listingsResult] = await Promise.all([
-      supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at").eq("buyer_profile_id", profile.id).eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").eq("buyer_profile_id", profile.id).eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("virtual_gifts").select("id").eq("owner_profile_id", profile.id),
       supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }),
     ]);
@@ -18,7 +18,7 @@ export async function GET() {
     if (firstError) throw firstError;
     const ownedIds = (ownedResult.data || []).map((row: any) => row.id);
     const incomingResult = ownedIds.length
-      ? await supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at").in("virtual_gift_id", ownedIds).eq("status", "pending").order("amount", { ascending: false })
+      ? await supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").in("virtual_gift_id", ownedIds).eq("status", "pending").order("amount", { ascending: false })
       : { data: [] as any[], error: null };
     if (incomingResult.error) throw incomingResult.error;
 
@@ -38,14 +38,16 @@ export async function GET() {
     }));
     const mapOffer = (offer: any) => {
       const gift = gifts.get(String(offer.virtual_gift_id));
-      if (!gift) throw new Error(`Gift for offer ${offer.id} is missing`);
+      if (!gift) return null;
       return {
         id: String(offer.id), virtualGiftId: String(offer.virtual_gift_id), baseName: gift.baseName, number: gift.number,
-        amount: Number(offer.amount), status: offer.status, createdAt: String(offer.created_at), buyerId: String(offer.buyer_profile_id),
-        buyerName: (() => { const name = names.get(String(offer.buyer_profile_id)); if (!name) throw new Error(`Buyer profile ${offer.buyer_profile_id} is missing`); return name; })(), ownerId: gift.ownerId, ownerName: gift.ownerName, gift,
+        amount: Number(offer.amount), status: offer.status, createdAt: String(offer.created_at), expiresAt: offer.expires_at ? String(offer.expires_at) : null, buyerId: String(offer.buyer_profile_id),
+        buyerName: names.get(String(offer.buyer_profile_id)) || "Игрок", ownerId: gift.ownerId, ownerName: gift.ownerName, gift,
       };
     };
-    return NextResponse.json({ outgoing: (outgoingResult.data || []).map(mapOffer), incoming: (incomingResult.data || []).map(mapOffer), listings: (listingsResult.data || []).map(mapGift) });
+    const outgoing = (outgoingResult.data || []).map(mapOffer).filter(Boolean);
+    const incoming = (incomingResult.data || []).map(mapOffer).filter(Boolean);
+    return NextResponse.json({ outgoing, incoming, listings: (listingsResult.data || []).map(mapGift) });
   } catch (error) {
     console.error("orders", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить ордера" }, { status: 500 });

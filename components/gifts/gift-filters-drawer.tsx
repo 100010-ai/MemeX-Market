@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Check, ChevronRight, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
 
@@ -47,6 +47,7 @@ const sortOptions: Choice[] = [
 export function GiftFiltersDrawer({ open, onClose, values, onChange, onReset, collections, models, backdrops, symbols }: Props) {
   const [active, setActive] = useState<FilterKey | null>(null);
   const [query, setQuery] = useState("");
+  const touchStartY = useRef<number | null>(null);
 
   function closeDrawer() {
     setActive(null);
@@ -85,7 +86,7 @@ export function GiftFiltersDrawer({ open, onClose, values, onChange, onReset, co
 
   return createPortal(
     <div className="mxm-filter-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}>
-      <section className="mxm-filter-drawer" role="dialog" aria-modal="true" aria-label="Фильтры подарков">
+      <section className="mxm-filter-drawer" role="dialog" aria-modal="true" aria-label="Фильтры подарков" onTouchStart={(event) => { touchStartY.current = event.touches[0]?.clientY ?? null; }} onTouchEnd={(event) => { const start = touchStartY.current; touchStartY.current = null; if (start == null) return; const end = event.changedTouches[0]?.clientY ?? start; if (end - start > 68 && !active) closeDrawer(); }}>
         <div className="mxm-filter-drawer-handle" />
         <header className="mxm-filter-drawer-head">
           {active ? <button type="button" className="mxm-filter-icon-button" onClick={() => { setActive(null); setQuery(""); }} aria-label="Назад"><ArrowLeft size={18} /></button> : <span className="mxm-filter-title-icon"><SlidersHorizontal size={15} /></span>}

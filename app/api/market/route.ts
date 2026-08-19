@@ -93,15 +93,17 @@ export async function GET(request: NextRequest) {
     const profile = await requireProfile();
     if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const [giftsResult, countResult, collectionsResult, watchlistResult, cartResult, genesisResult] = await Promise.all([
+    const [giftsResult, countResult, collectionsResult, watchlistResult, cartResult, genesisResult, filterOptionsResult] = await Promise.all([
       supabase.rpc("gift_market_random_page", { p_seed: marketSeed, p_offset: 0, p_limit: limit }),
       supabase.rpc("gift_market_listed_count"),
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").order("volume_24h", { ascending: false }).limit(80),
       supabase.from("user_watchlist").select("kind,coin_id,gift_collection").eq("profile_id", profile.id),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       supabase.rpc("gift_genesis_public_state"),
+      supabase.rpc("gift_market_filter_options_v046"),
     ]);
-    const firstError = giftsResult.error || countResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error;
+    const filterMissing = filterOptionsResult.error && (filterOptionsResult.error.code === "42883" || /gift_market_filter_options_v046|schema cache|could not find the function/i.test(filterOptionsResult.error.message || ""));
+    const firstError = giftsResult.error || countResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || (filterMissing ? null : filterOptionsResult.error);
     if (firstError) throw firstError;
 
     const rawGifts = (giftsResult.data || []) as Array<Record<string, unknown>>;
@@ -117,6 +119,7 @@ export async function GET(request: NextRequest) {
       marketSeed,
       bootstrapRecommended: totalGifts === 0,
       genesis: genesisResult.data || null,
+      filterOptions: filterOptionsResult.data || { collections: [], models: [], backdrops: [], symbols: [] },
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
         giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),

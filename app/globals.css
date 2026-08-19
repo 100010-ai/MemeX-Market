@@ -1293,3 +1293,37 @@ body {
   .mxm-market-filter-trigger { height:30px; padding-inline:9px; }
   .market-grid { gap-x:8px; gap-y:19px; }
 }
+
+/* v0.46 — slightly larger touch-first UI, fewer panels and lighter motion. */
+html { font-size:15.5px; }
+@media (max-width:420px) { html { font-size:15px; } }
+.mxm-topbar { min-height:58px; }
+.mxm-balance-pill { min-height:34px; padding-inline:9px; font-size:10px; }
+.mxm-top-plus,.mxm-icon-action {
+  display:grid; height:34px; width:34px; place-items:center; border-radius:50%; color:#c6ccd4;
+  background:rgba(255,255,255,.025); transition:transform .14s ease,background .14s ease,color .14s ease;
+}
+.mxm-top-plus:active,.mxm-icon-action:active { transform:scale(.94); background:rgba(255,255,255,.07); color:white; }
+.mxm-bottom-nav { min-height:66px; }
+.mxm-bottom-link { min-height:58px; font-size:9px; }
+.mxm-bottom-icon { height:28px; width:38px; }
+.mxm-side-link { min-height:42px; }
+.mxm-page-enter { animation-duration:.14s; }
+.mxm-profile-action {
+  display:flex; min-height:54px; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--border-soft); color:#cfd5dc;
+}
+.mxm-profile-action>svg { color:var(--accent); }
+.mxm-profile-action span { min-width:0; display:flex; flex-direction:column; }
+.mxm-profile-action b { font-size:11px; font-weight:650; }
+.mxm-profile-action small { margin-top:2px; color:var(--muted); font-size:8px; }
+.mxm-reward-ad { gap:12px; padding:11px 0; }
+.mxm-reward-ad-icon { height:31px; width:31px; background:transparent; box-shadow:none; border:1px solid rgba(166,181,255,.16); }
+.mxm-reward-ad-button { min-height:32px; border-bottom:0; border-radius:10px; padding:0 10px; background:rgba(166,181,255,.10); color:#e4e9ff; }
+.mxm-reward-ad-button:disabled { background:rgba(255,255,255,.025); }
+.mxm-task-row { min-height:72px; }
+.mxm-filter-drawer { touch-action:pan-y; }
+.mxm-sheet-panel { touch-action:pan-y; overscroll-behavior-y:contain; }
+@media (prefers-reduced-motion:reduce) {
+  .mxm-page-enter,.mxm-sheet-panel,.mxm-sheet-backdrop,.mxm-filter-overlay,.mxm-filter-drawer { animation:none!important; }
+  * { scroll-behavior:auto!important; }
+}

@@ -204,6 +204,8 @@ declare global {
         setHeaderColor?: (color: string) => void;
         setBackgroundColor?: (color: string) => void;
         HapticFeedback?: { impactOccurred: (style: "light" | "medium" | "heavy") => void };
+        openInvoice?: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending") => void) => void;
+        openTelegramLink?: (url: string) => void;
       };
     };
   }

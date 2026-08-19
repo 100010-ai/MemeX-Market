@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
   try {
     const before = await listedCount();
-    if (before > 0) return NextResponse.json({ ok: true, skipped: true, listed: before });
+    if (before >= 600) return NextResponse.json({ ok: true, skipped: true, listed: before });
 
     const recentFailure = await recentTonApiFailure();
     if (recentFailure) {
@@ -75,10 +75,12 @@ export async function POST(request: Request) {
 
     // Keep network work out of GET /api/market. Import a few real Telegram Gift
     // collections in one bounded mutation, then release a finite Genesis batch.
+    const hasTonApiKey = Boolean(process.env.TONAPI_KEY?.trim());
     const catalog = await syncTonApiGiftCatalog({
-      bootstrapOnly: true,
-      maxCollections: 3,
-      itemsPerCollection: process.env.TONAPI_KEY?.trim() ? 240 : 160,
+      bootstrapOnly: false,
+      discoverPages: hasTonApiKey ? 3 : 1,
+      maxCollections: hasTonApiKey ? 18 : 8,
+      itemsPerCollection: hasTonApiKey ? 500 : 180,
     });
 
     // Another request may already own the global TonAPI lock. Do not race it
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Каталог Gifts уже загружается. Повторите через несколько секунд." }, { status: 409 });
     }
 
-    const genesis = await ensureGenesisGiftMarket({ batchSize: 120, force: true });
+    const genesis = await ensureGenesisGiftMarket({ batchSize: 700, force: true });
     const listed = await listedCount();
 
     if (listed <= 0) {

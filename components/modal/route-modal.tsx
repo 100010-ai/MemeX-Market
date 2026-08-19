@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Bottom-sheet shell for intercepted routes (the `@modal` parallel slot).
@@ -13,6 +13,7 @@ import { useCallback, useEffect } from "react";
 export function RouteModal({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const close = useCallback(() => router.back(), [router]);
+  const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -36,6 +37,8 @@ export function RouteModal({ children }: { children: React.ReactNode }) {
       <div
         role="dialog"
         aria-modal="true"
+        onTouchStart={(event) => { touchStartY.current = event.touches[0]?.clientY ?? null; }}
+        onTouchEnd={(event) => { const start = touchStartY.current; touchStartY.current = null; if (start == null) return; const end = event.changedTouches[0]?.clientY ?? start; if (end - start > 72) close(); }}
         className="mxm-sheet-panel relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-t-[28px] border border-[var(--border)] bg-[var(--bg)] p-3 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-16px_48px_rgba(0,0,0,.5)] md:rounded-[28px] md:pb-3"
       >
         <div className="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-[var(--border)] md:hidden" />

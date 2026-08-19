@@ -199,7 +199,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h1 className="truncate text-base font-semibold">{gift.baseName}</h1>
-                <p className="mt-0.5 text-xs text-[var(--muted)]">#{gift.number} · {gift.telegramName}</p>
+                <p className="mt-0.5 truncate text-xs text-[var(--muted)]">#{gift.number} · {gift.modelName}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {gift.chainVerified ? <span title="TON NFT подтверждён" className="grid h-6 w-6 place-items-center rounded-full bg-[rgba(76,189,126,.12)] text-[var(--positive)]"><ShieldCheck size={13} /></span> : null}

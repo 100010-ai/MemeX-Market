@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LockKeyhole, Sparkles, UserRound } from "lucide-react";
+import { LockKeyhole, Sparkles, Star, UserRound, UsersRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 
@@ -22,6 +22,12 @@ export default function ProfilePage() {
         <div className="mt-2 rounded-[16px] border border-[var(--border-soft)] bg-[var(--surface)] p-3"><div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[15px] bg-[var(--panel-2)] text-[var(--accent)]"><Sparkles size={14} /></span><div className="min-w-0"><p className="text-xs font-medium">Уровень {profile.level}</p><p className="truncate text-[9px] text-[var(--muted)]">{profile.xp} XP · {profile.xpForNextLevel} до следующего</p></div></div><span className="shrink-0 text-[9px] text-[var(--muted)]">Активность</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--panel-2)]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div></div>
 
         {profile.reservedBalance > 0 ? <div className="mt-2 flex items-center justify-between rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />Открытые офферы</span><span>{money(profile.reservedBalance)} в резерве</span></div> : null}
+
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Link href="/support" className="mxm-profile-action"><Star size={15} fill="currentColor"/><span><b>Stars</b><small>Пополнить баланс</small></span></Link>
+          <Link href="/referrals" className="mxm-profile-action"><UsersRound size={15}/><span><b>Рефералы</b><small>Получать 5% бонусом</small></span></Link>
+        </div>
 
         <Link href={`/u/${profile.id}`} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px] hover:bg-[var(--panel-3)]"><UserRound size={14} />Профиль</Link>
       </section>

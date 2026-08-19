@@ -20,7 +20,8 @@ let lottieModulePromise: Promise<typeof import("lottie-web")> | null = null;
 
 function loadLottieModule() {
   lottieModulePromise ??= import("lottie-web").then((module) => {
-    module.default.setQuality("medium");
+    const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+    module.default.setQuality(coarse ? "low" : "medium");
     return module;
   });
   return lottieModulePromise;
@@ -81,7 +82,7 @@ function getNearObserver() {
   if (nearObserver || typeof window === "undefined" || !("IntersectionObserver" in window)) return nearObserver;
   nearObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) nearCallbacks.get(entry.target)?.(entry.isIntersecting);
-  }, { rootMargin: "160px 0px", threshold: 0 });
+  }, { rootMargin: "120px 0px", threshold: 0 });
   return nearObserver;
 }
 
@@ -178,7 +179,7 @@ function animationLimit() {
   const cores = navigator.hardwareConcurrency || 4;
   const memory = (navigator as DeviceMemoryNavigator).deviceMemory || 4;
   const coarsePointer = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
-  permitLimit = coarsePointer ? 2 : cores <= 4 || memory <= 4 ? 2 : cores <= 6 || memory <= 6 ? 3 : 4;
+  permitLimit = coarsePointer ? (cores <= 6 || memory <= 6 ? 1 : 2) : cores <= 4 || memory <= 4 ? 2 : cores <= 6 || memory <= 6 ? 3 : 4;
   return permitLimit;
 }
 

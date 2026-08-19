@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Star, Users } from "lucide-react";
+import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Share2, Star, Users } from "lucide-react";
 import { CoinChart } from "@/components/coin-chart";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -160,6 +160,15 @@ export default function CoinPage() {
     }
   }
 
+  function shareCoin() {
+    if (!data) return;
+    const target = typeof window !== "undefined" ? `${window.location.origin}/coin/${id}` : "";
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(target)}&text=${encodeURIComponent(`${data.coin.name} ($${data.coin.symbol}) на MXM`)}`;
+    if (window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(shareUrl);
+    else window.open(shareUrl, "_blank", "noopener,noreferrer");
+    haptic("light");
+  }
+
   async function toggleWatch() {
     if (!data || watchBusy) return;
     const enabled = !data.watched;
@@ -185,7 +194,7 @@ export default function CoinPage() {
       <RealtimeRefresh channelName={`mxm-coin-${id}`} tables={realtimeTables} onChange={realtimeReload} />
       <div className="mb-3 flex items-center justify-between gap-3">
         <Link href="/market" className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-white"><ArrowLeft size={15} />Маркет</Link>
-        <button onClick={toggleWatch} disabled={watchBusy} aria-label={data.watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white ${data.watched ? "text-[var(--accent)]" : ""}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button>
+        <div className="flex items-center gap-1"><button onClick={shareCoin} aria-label="Поделиться мемкоином" className="grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white"><Share2 size={15} /></button><button onClick={toggleWatch} disabled={watchBusy} aria-label={data.watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white ${data.watched ? "text-[var(--accent)]" : ""}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button></div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
