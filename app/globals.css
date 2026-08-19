@@ -888,3 +888,114 @@ body {
   .market-grid { gap-x:8px; gap-y:18px; }
   .mxm-gift-cover { border-radius:16px; }
 }
+
+/* v0.43 — production admin console. Dense, Russian-first and operational. */
+.admin-sidebar {
+  width: 224px;
+  background: #07090b;
+  border-right-color: rgba(255,255,255,.065);
+  padding: 18px 12px;
+}
+.admin-main {
+  margin-left: 224px;
+  max-width: 1680px;
+  padding: 22px 28px 48px;
+}
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  margin: -22px -28px 22px;
+  padding: 16px 28px 13px;
+  background: rgba(6,7,8,.9);
+  border-bottom: 1px solid rgba(255,255,255,.055);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.admin-main .control-panel {
+  background: transparent;
+  border-color: rgba(255,255,255,.07);
+  border-radius: 15px;
+  box-shadow: none;
+}
+.admin-main .control-section-title {
+  padding: 13px 14px;
+  border-bottom-color: rgba(255,255,255,.06);
+  letter-spacing: -.01em;
+}
+.admin-main .control-small,
+.admin-main .control-icon {
+  background: transparent;
+  border-color: rgba(255,255,255,.10);
+}
+.admin-main .control-small:hover,
+.admin-main .control-icon:hover { background: rgba(255,255,255,.045); }
+.admin-main .control-input,
+.admin-main .control-search {
+  background: #080a0c;
+  border-color: rgba(255,255,255,.09);
+}
+.admin-main .control-primary {
+  background: #f2f3f5;
+  color: #090a0b;
+  border-radius: 10px;
+}
+.admin-main .control-primary:hover { background: white; }
+.admin-sidebar .control-nav {
+  border-radius: 9px;
+  padding: 9px 10px;
+  color: #7d858e;
+}
+.admin-sidebar .control-nav-active {
+  background: rgba(255,255,255,.07);
+  color: #f3f5f7;
+}
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6,minmax(0,1fr));
+  border-top: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.admin-kpi {
+  min-width: 0;
+  padding: 16px 15px 17px;
+  border-right: 1px solid rgba(255,255,255,.06);
+}
+.admin-kpi:last-child { border-right: 0; }
+.admin-kpi-icon { color: #7e8790; margin-bottom: 14px; }
+.admin-kpi p { color: #777f87; font-size: 9px; }
+.admin-kpi strong { display:block; margin-top:5px; font-size:17px; line-height:1.1; letter-spacing:-.035em; font-weight:650; color:#f2f4f6; overflow:hidden; text-overflow:ellipsis; }
+.admin-kpi span { display:block; margin-top:7px; color:#565d64; font-size:8.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.admin-section {
+  border-top: 1px solid rgba(255,255,255,.085);
+  padding-top: 15px;
+}
+.admin-section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; color:#6e767e; }
+.admin-section-head h2 { color:#e8ebee; font-size:12px; font-weight:650; letter-spacing:-.01em; }
+.admin-section-head p { margin-top:3px; color:#626a72; font-size:9px; }
+.admin-health-grid { display:grid; gap:1px; background:rgba(255,255,255,.055); grid-template-columns:repeat(3,minmax(0,1fr)); }
+.admin-health { display:flex; gap:10px; min-width:0; align-items:flex-start; padding:13px; background:#07090b; }
+.admin-health p { color:#d9dde1; font-size:10px; font-weight:600; }
+.admin-health span:not(.admin-dot) { display:block; margin-top:3px; color:#626a72; font-size:8.5px; line-height:1.45; }
+.admin-dot { width:6px; height:6px; margin-top:4px; border-radius:999px; flex:none; }
+.admin-dot.is-ok { background:#69c99b; box-shadow:0 0 0 3px rgba(105,201,155,.08); }
+.admin-dot.is-bad { background:#f37f8a; box-shadow:0 0 0 3px rgba(243,127,138,.08); }
+.admin-issue { padding:10px 0; border-bottom:1px solid rgba(255,255,255,.055); color:#d4d8dc; font-size:10px; line-height:1.5; }
+.admin-empty { padding:18px 0; color:#657078; font-size:10px; }
+
+@media (max-width: 1180px) {
+  .admin-kpi-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .admin-kpi:nth-child(3) { border-right:0; }
+  .admin-kpi:nth-child(-n+3) { border-bottom:1px solid rgba(255,255,255,.06); }
+}
+@media (max-width: 820px) {
+  .admin-sidebar { width:auto; padding:8px 10px; }
+  .admin-main { margin-left:0; padding:14px 12px 36px; }
+  .admin-topbar { margin:-14px -12px 16px; padding:12px; }
+  .admin-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .admin-kpi { border-bottom:1px solid rgba(255,255,255,.06); }
+  .admin-kpi:nth-child(odd) { border-right:1px solid rgba(255,255,255,.06); }
+  .admin-kpi:nth-child(even) { border-right:0; }
+  .admin-health-grid { grid-template-columns:1fr; }
+  .admin-main .control-search { width:min(160px,45vw); }
+}

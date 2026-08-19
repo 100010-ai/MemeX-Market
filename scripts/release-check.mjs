@@ -65,10 +65,13 @@ const giftCandles = read("app/api/gifts/[id]/candles/route.ts");
 const clientApi = read("lib/api.ts");
 check("Migration 017 present", Boolean(migration));
 check("Migration 018 present", Boolean(migration040));
-check("v0.42 package version", read("package.json").includes('"version": "0.42.0"'));
+check("v0.43 package version", read("package.json").includes('"version": "0.43.0"'));
 check("Environment template present", exists(".env.example"));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
+check("Russian production admin present", exists("app/api/admin/overview/route.ts") && exists("app/api/admin/action/route.ts") && read("app/admin/page.tsx").includes("АДМИН-ПАНЕЛЬ"));
+check("Admin mutations protected", read("app/api/admin/action/route.ts").includes("requireAdminProfile") && read("app/api/admin/action/route.ts").includes("sameOriginMutation") && read("app/api/admin/action/route.ts").includes("enforceRateLimit"));
+
 check("Gift resolver present", exists("lib/gifts/resolver.ts"));
 check("TonAPI resilient client present", exists("lib/providers/tonapi-client.ts"));
 check("Market health endpoint present", exists("app/api/system/market-health/route.ts"));
