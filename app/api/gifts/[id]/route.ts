@@ -29,13 +29,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const baseName = String(giftRow.base_name);
     const nowIso = new Date().toISOString();
 
-    const [tradesResult, offersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, snapshot] = await Promise.all([
+    const [tradesResult, offersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(40),
       supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(30),
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_item_market_stats", { p_virtual_gift_id: virtualGiftId }).single(),
       supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(60),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).eq("virtual_gift_id", virtualGiftId).maybeSingle(),
+      supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift").eq("virtual_gift_id", virtualGiftId).maybeSingle(),
       getProfileSnapshot(profile),
     ]);
 
@@ -43,7 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // an optional v0.30 table is not migrated during a rolling deployment.
     for (const [label, result] of [
       ["trades", tradesResult], ["offers", offersResult],
-      ["collection", collectionResult], ["item stats", itemStatsResult], ["listing events", listingEventsResult], ["cart", cartResult],
+      ["collection", collectionResult], ["item stats", itemStatsResult], ["listing events", listingEventsResult], ["cart", cartResult], ["watchlist", watchedResult],
     ] as const) {
       if (result.error) console.warn(`gift detail ${label}`, result.error);
     }
@@ -104,6 +105,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       resolvedVirtualGiftId: virtualGiftId,
       isOwner: gift.ownerId === String(profile.id),
       inCart: Boolean(cartResult.data),
+      watched: Boolean(watchedResult.data),
       balance: snapshot.balance,
       availableBalance: snapshot.availableBalance,
       reservedBalance: snapshot.reservedBalance,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Boxes, Gem, ListChecks, Plus, ReceiptText, Store, Trophy, UserRound } from "lucide-react";
+import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { PerfOverlay } from "@/components/dev/perf-overlay";
@@ -24,6 +24,8 @@ const routeTitles: Array<[string, string]> = [
   ["/portfolio", "Портфель"],
   ["/leaderboard", "Рейтинг"],
   ["/profile", "Профиль"],
+  ["/watchlist", "Избранное"],
+  ["/notifications", "Уведомления"],
   ["/support", "Пополнить"],
   ["/referrals", "Рефералы"],
   ["/cart", "Корзина"],
@@ -72,6 +74,8 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
             return <Link key={item.href} href={item.href} className={`mxm-side-link ${active ? "is-active" : ""}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.8} /><span>{item.label}</span></Link>;
           })}
           <Link href="/leaderboard" className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
+          <Link href="/watchlist" className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
+          <Link href="/notifications" className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
         </nav>
 
         <Link href="/profile" className="mt-auto border-t border-[var(--border-soft)] px-1 pt-4">
@@ -86,7 +90,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
-            <div className="ml-auto flex items-center gap-1.5"><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/support" aria-label="Пополнить Stars" className="mxm-top-plus"><Plus size={14}/></Link></div>
+            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/support" aria-label="Пополнить Stars" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
         <main key={pathname} className="mxm-page-enter min-h-0 px-3 py-4 md:px-5 md:py-5">{children}</main>

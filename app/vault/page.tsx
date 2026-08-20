@@ -4,15 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LockKeyhole, WalletCards } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { GiftAsset, Holding, Profile } from "@/lib/types";
+import type { GiftAsset, Holding, PortfolioPoint, Profile } from "@/lib/types";
 import { ago, compact, money, percent, price } from "@/lib/format";
 import { CoinAvatar } from "@/components/ui";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { PortfolioChart } from "@/components/portfolio-chart";
 
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type HistoryItem = { id: string; kind: "coin" | "gift"; label: string; amount: number; pnl: number; createdAt: string; href: string };
-type Payload = { holdings: Holding[]; gifts: GiftAsset[]; profile: Profile; history: HistoryItem[] };
+type Payload = { holdings: Holding[]; gifts: GiftAsset[]; profile: Profile; history: HistoryItem[]; portfolioSeries: PortfolioPoint[] };
 type TabKey = "gifts" | "coins" | "listed" | "history";
 
 export default function VaultPage() {
@@ -43,6 +44,8 @@ export default function VaultPage() {
         <div className="mt-3 grid grid-cols-3 gap-4"><Allocation label="Баланс" value={data.profile.balance} pct={cashPct} /><Allocation label="Подарки" value={data.profile.giftValue} pct={giftPct} /><Allocation label="Мемкоины" value={data.profile.coinValue} pct={coinPct} /></div>
         {data.profile.reservedBalance > 0 ? <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />В офферах</span><span>{money(data.profile.reservedBalance)} · {money(data.profile.availableBalance)} доступно</span></div> : null}
       </section>
+
+      <section className="mb-4"><PortfolioChart points={data.portfolioSeries || []} /></section>
 
       {message ? <div className="mb-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">{message}</div> : null}
 

@@ -1,8 +1,25 @@
-# MXM Market v0.47.0
+# MXM Market v0.48.0
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+## v0.48 — Watchlist, alerts, reputation and portfolio analytics
+
+- Watchlist 2.0 now tracks individual Gifts alongside collections and memecoins.
+- Added price alerts for Gifts, collections and memecoins with re-arm logic after the price leaves the trigger zone.
+- Added an in-app notification center with per-event preferences and optional Telegram Bot push delivery.
+- Added public reputation and achievement metadata to player profiles.
+- Added hourly portfolio snapshots and Today / 7d / 30d / All chart ranges.
+- Gift details now expose watch controls, price-alert creation, trait rarity score, premium-number detection and internal-market smart pricing presets.
+
+**Required DB migration when upgrading from v0.47:**
+
+```text
+supabase/migrations/023_v048_watchlist_notifications_profiles.sql
+```
+
+For server-side price-alert evaluation and Telegram delivery, configure `CRON_SECRET` and call `/api/system/notifications-dispatch` from a trusted scheduler. `NEXT_PUBLIC_APP_URL` is optional and enables the “Open in MXM” button in bot notifications.
 
 
 ## v0.47 — Партнёрские задания и маркетинг

@@ -12,6 +12,8 @@ import {
   History,
   MessageSquareMore,
   RefreshCw,
+  Star,
+  BellRing,
   ShieldCheck,
   ShoppingCart,
   Tag,
@@ -38,6 +40,7 @@ type Payload = {
   resolvedVirtualGiftId?: string;
   isOwner: boolean;
   inCart: boolean;
+  watched: boolean;
   itemStats: { tradeCount: number; volume: number; highSale: number | null; lowSale: number | null };
   balance: number;
   availableBalance: number;
@@ -80,6 +83,30 @@ function priceBasisLabel(gift: GiftAsset) {
   }
 }
 
+function giftRarity(gift: GiftAsset) {
+  const frequencies = [gift.modelRarityPerMille, gift.backdropRarityPerMille, gift.symbolRarityPerMille]
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((value) => Math.min(1, Math.max(0.0001, value / 1000)));
+  if (!frequencies.length) return { score: null as number | null, percentile: null as number | null };
+  const geometricMean = Math.pow(frequencies.reduce((product, value) => product * value, 1), 1 / frequencies.length);
+  return {
+    score: Math.round((100 - geometricMean * 100) * 10) / 10,
+    percentile: Math.max(0.01, Math.round(geometricMean * 10000) / 100),
+  };
+}
+
+function premiumNumberLabel(number: number) {
+  const digits = String(Math.max(0, Math.trunc(number)));
+  if (number >= 1 && number <= 100) return "#1–100";
+  if (/^(\d)\1{2,}$/.test(digits)) return "Одинаковые цифры";
+  if (/^\d0{2,}$/.test(digits)) return "Круглый номер";
+  if (digits.length >= 3 && digits === [...digits].reverse().join("")) return "Зеркальный номер";
+  const ascending = "01234567890123456789".includes(digits);
+  const descending = "98765432109876543210".includes(digits);
+  if (digits.length >= 3 && (ascending || descending)) return "Последовательность";
+  return null;
+}
+
 export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }) {
   const [data, setData] = useState<Payload | null>(null);
   const [tab, setTab] = useState<DetailTab>("activity");
@@ -87,6 +114,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   const [listingDays, setListingDays] = useState(7);
   const [offerAmount, setOfferAmount] = useState("");
   const [offerHours, setOfferHours] = useState(72);
+  const [alertPrice, setAlertPrice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +180,26 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     }
   }
 
+
+  async function toggleWatch() {
+    if (!data || busy) return;
+    const enabled = !data.watched;
+    await run("watch", async () => {
+      await apiFetch("/api/watchlist", { method: "POST", body: JSON.stringify({ kind: "gift", giftId: data.resolvedVirtualGiftId || data.gift.virtualGiftId, enabled }) });
+      setData((current) => current ? { ...current, watched: enabled } : current);
+    });
+  }
+
+  async function createAlert() {
+    if (!data || busy) return;
+    const targetPrice = Number(alertPrice);
+    if (!Number.isFinite(targetPrice) || targetPrice <= 0) { setError("Укажите корректную цену алерта"); return; }
+    await run("alert", async () => {
+      await apiFetch("/api/alerts", { method: "POST", body: JSON.stringify({ kind: "gift", giftId: data.resolvedVirtualGiftId || data.gift.virtualGiftId, direction: "below", targetPrice }) });
+      setAlertPrice("");
+    });
+  }
+
   if (!data && error) return (
     <div>
       <div className="mb-3 flex items-center">
@@ -178,6 +226,8 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   const premiumToFloor = gift.listingPrice != null && data.traitStats.collectionFloor && data.traitStats.collectionFloor > 0
     ? ((gift.listingPrice / data.traitStats.collectionFloor) - 1) * 100
     : null;
+  const rarity = giftRarity(gift);
+  const premiumNumber = premiumNumberLabel(gift.number);
 
   return (
     <div>
@@ -189,7 +239,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
         ) : (
           <Link href="/market" className="grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"><ArrowLeft size={17} /></Link>
         )}
-        <a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "TON" : "Telegram"} <ExternalLink size={12} /></a>
+        <div className="flex items-center gap-1.5"><button onClick={() => void toggleWatch()} disabled={busy !== null} aria-label={data.watched ? "Убрать из избранного" : "В избранное"} className={`grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] ${data.watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={data.watched ? "currentColor" : "none"} /></button><a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "TON" : "Telegram"} <ExternalLink size={12} /></a></div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
@@ -200,6 +250,10 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
               <div className="min-w-0">
                 <h1 className="truncate text-base font-semibold">{gift.baseName}</h1>
                 <p className="mt-0.5 truncate text-xs text-[var(--muted)]">#{gift.number} · {gift.modelName}</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {rarity.score != null ? <span className="rounded-[12px] bg-[rgba(198,170,88,.10)] px-2 py-1 text-[9px] text-[var(--accent)]">Rarity {rarity.score.toFixed(1)} / 100</span> : null}
+                  {premiumNumber ? <span className="rounded-[12px] bg-[var(--panel-2)] px-2 py-1 text-[9px] text-white">Premium Number · {premiumNumber}</span> : null}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {gift.chainVerified ? <span title="TON NFT подтверждён" className="grid h-6 w-6 place-items-center rounded-full bg-[rgba(76,189,126,.12)] text-[var(--positive)]"><ShieldCheck size={13} /></span> : null}
@@ -226,6 +280,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
               <SmallMetric label="Volume 7d" value={money(data.collection.volume7d)} />
               <SmallMetric label="Sales 7d" value={String(data.collection.tradeCount7d)} />
               <SmallMetric label="В листинге" value={`${data.collection.listedPct.toFixed(1)}%`} />
+              {rarity.percentile != null ? <SmallMetric label="Rarity percentile" value={`≈ топ ${rarity.percentile.toFixed(rarity.percentile < 1 ? 2 : 1)}%`} /> : null}
             </div>
           </div>
 
@@ -295,6 +350,11 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <p className="mt-2 text-[10px] text-[var(--muted-2)]">Только MXM: Telegram Gift не переводится.</p>
           </div>
 
+          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
+            <div className="flex items-center gap-2"><BellRing size={14} className="text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">Price alert</p><p className="text-[9px] text-[var(--muted)]">Уведомить, когда цена станет ниже заданной</p></div></div>
+            <div className="mt-2 flex gap-2"><input value={alertPrice} onChange={(event) => setAlertPrice(event.target.value)} inputMode="decimal" placeholder={String(gift.listingPrice || gift.referencePrice || gift.collectionFloor || "Цена TON")} className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs outline-none" /><button onClick={() => void createAlert()} disabled={busy !== null} className="rounded-[14px] bg-[var(--panel-3)] px-3 text-[10px]">Создать</button></div>
+          </div>
+
           <div className="mxm-hscroll gap-1 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-1">
             <TabButton active={tab === "activity"} onClick={() => void openTab("activity")} icon={<History size={12} />} label="История" />
             <TabButton active={tab === "offers"} onClick={() => void openTab("offers")} icon={<MessageSquareMore size={12} />} label={`Офферы · ${data.offers.length}`} />
@@ -314,8 +374,17 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
 
 function OwnerTradePanel({ gift, listingPrice, setListingPrice, listingDays, setListingDays, busy, onList, onUnlist }: { gift: GiftAsset; listingPrice: string; setListingPrice: (value: string) => void; listingDays: number; setListingDays: (value: number) => void; busy: string | null; onList: (price: number) => void; onUnlist: () => void }) {
   const parsed = Number(listingPrice);
+  const marketPrice = gift.modelFloor ?? gift.referencePrice ?? gift.collectionFloor ?? gift.lastSalePrice;
+  const quickPrice = gift.collectionFloor != null ? gift.collectionFloor * 0.97 : marketPrice != null ? marketPrice * 0.95 : null;
+  const premiumPrice = marketPrice != null ? marketPrice * 1.1 : null;
+  const setSuggested = (value: number | null) => { if (value != null && Number.isFinite(value) && value > 0) setListingPrice(value.toFixed(2)); };
   return <>
     <div className="mb-2 flex items-center justify-between"><p className="text-xs font-medium">Ваш лот</p>{gift.listingPrice != null ? <span className="flex items-center gap-1 text-xs"><Gem size={12} fill="currentColor" />{money(gift.listingPrice)}</span> : <span className="text-[11px] text-[var(--muted)]">Не выставлен</span>}</div>
+    {marketPrice != null ? <div className="mb-2 grid grid-cols-3 gap-1.5">
+      <button type="button" onClick={() => setSuggested(quickPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">Быстро продать</span><span className="mt-0.5 block text-[10px] font-medium">{quickPrice == null ? "—" : money(quickPrice)}</span></button>
+      <button type="button" onClick={() => setSuggested(marketPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">Рыночная</span><span className="mt-0.5 block text-[10px] font-medium">{money(marketPrice)}</span></button>
+      <button type="button" onClick={() => setSuggested(premiumPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">+10%</span><span className="mt-0.5 block text-[10px] font-medium">{premiumPrice == null ? "—" : money(premiumPrice)}</span></button>
+    </div> : null}
     <div className="grid grid-cols-[minmax(0,1fr)_84px] gap-2">
       <input value={listingPrice} onChange={(event) => setListingPrice(event.target.value)} inputMode="decimal" placeholder={gift.listingPrice == null ? "Цена" : String(gift.listingPrice)} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[#555960]" />
       <select value={listingDays} onChange={(event) => setListingDays(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={3}>3 дн</option><option value={7}>7 дн</option><option value={14}>14 дн</option><option value={30}>30 дн</option></select>

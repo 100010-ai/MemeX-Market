@@ -21,7 +21,7 @@ type CoinSort = "trending" | "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
 const GIFT_PAGE_SIZE = 24;

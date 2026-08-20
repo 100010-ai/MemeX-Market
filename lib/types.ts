@@ -252,6 +252,24 @@ export type LeaderboardPlayer = {
   createdCoinMarketCap: number;
 };
 
+export type Achievement = {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+  xpReward: number;
+  unlockedAt: string;
+};
+
+export type Reputation = {
+  score: number;
+  tradeScore: number;
+  ageScore: number;
+  activityScore: number;
+  trustScore: number;
+  updatedAt: string;
+};
+
 export type PublicProfile = {
   id: string;
   name: string;
@@ -271,8 +289,18 @@ export type PublicProfile = {
   giftCount: number;
   createdCoins: Coin[];
   showcase: GiftAsset[];
+  reputation: Reputation | null;
+  achievements: Achievement[];
 };
 
+export type PortfolioPoint = {
+  time: string;
+  balance: number;
+  coinValue: number;
+  giftValue: number;
+  netWorth: number;
+  realizedPnl: number;
+};
 
 export type CoinQuote = {
   side: "buy" | "sell";
@@ -288,6 +316,7 @@ export type CoinQuote = {
 export type Watchlist = {
   coinIds: string[];
   giftCollections: string[];
+  giftIds: string[];
 };
 
 export type GiftTraitGroup = {
