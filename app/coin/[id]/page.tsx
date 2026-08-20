@@ -37,6 +37,7 @@ export default function CoinPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<Payload | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [marketTab, setMarketTab] = useState<"overview" | "orders" | "holders" | "activity">("overview");
   const [amount, setAmount] = useState("");
   const [sellAll, setSellAll] = useState(false);
   const [slippage, setSlippage] = useState(2);
@@ -205,9 +206,9 @@ export default function CoinPage() {
             {coin.description ? <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{coin.description}</p> : null}
           </section>
 
-          <section className="border-b border-[var(--border-soft)] pb-4"><CoinChart candles={data.candles} height={350} /></section>
+          <section className="border-b border-[var(--border-soft)] pb-4"><CoinChart candles={data.candles} height={260} /></section>
 
-          <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-[var(--border-soft)] pb-4 sm:grid-cols-3 lg:grid-cols-6"><Stat label="Капитализация" value={money(coin.marketCap)} /><Stat label="Объём 24ч" value={money(coin.volume24h)} /><Stat label="Ликвидность" value={money(coin.liquidity)} /><Stat label="ATH" value={price(coin.athPrice)} /><Stat label="Холдеры" value={String(coin.holderCount)} /><Stat label="Сделки" value={String(coin.tradeCount24h)} /></div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-[var(--border-soft)] pb-4 sm:grid-cols-3 lg:grid-cols-6"><Stat label="MCAP" value={money(coin.marketCap)} /><Stat label="Объём 24ч" value={money(coin.volume24h)} /><Stat label="Ликвидность" value={money(coin.liquidity)} /><Stat label="ATH" value={price(coin.athPrice)} /><Stat label="Холдеры" value={String(coin.holderCount)} /><Stat label="Сделки" value={String(coin.tradeCount24h)} /></div>
 
           <section className="border-b border-[var(--border-soft)] pb-4">
             <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Поток сделок 24ч</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">Только завершённые сделки MXM</p></div><span className="text-[10px] text-[var(--muted)]">{flow > 0 ? `${buyShare.toFixed(0)}% покупок` : "Нет объёма"}</span></div>
@@ -215,7 +216,7 @@ export default function CoinPage() {
             <div className="mt-2 flex justify-between text-[10px]"><span className="text-[var(--positive)]">Покупки {money(coin.buyVolume24h)}</span><span className="text-[var(--negative)]">Продажи {money(coin.sellVolume24h)}</span></div>
           </section>
 
-          <section><div className="border-b border-[var(--border-soft)] pb-2 text-xs font-medium">Последние сделки</div>{data.trades.length ? <div className="divide-y divide-[var(--border-soft)]">{data.trades.map((trade) => <div key={trade.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-2.5"><div className="flex min-w-0 items-center gap-2">{trade.side === "buy" ? <ArrowDownLeft size={14} className="text-[var(--positive)]" /> : <ArrowUpRight size={14} className="text-[var(--negative)]" />}<Link href={`/u/${trade.traderId}`} className="truncate text-xs hover:underline">{trade.traderName}</Link></div><div className="text-right"><p className="text-xs">{money(trade.quoteAmount)}</p><p className="text-[10px] text-[var(--muted)]">{ago(trade.createdAt)}</p></div></div>)}</div> : <Empty text="Сделок пока нет" />}</section>
+          <section><div className="mb-3 flex gap-2 overflow-x-auto border-b border-[var(--border-soft)] pb-2">{[["overview","Обзор"],["orders","Ордера"],["holders","Холдеры"],["activity","Активность"]].map(([key,label])=><button key={key} onClick={()=>setMarketTab(key as typeof marketTab)} className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] ${marketTab===key?"bg-[var(--panel-3)] text-white":"text-[var(--muted)]"}`}>{label}</button>)}</div>{marketTab==="overview" ? <div className="text-xs text-[var(--muted)]">Покупки {money(coin.buyVolume24h)} · Продажи {money(coin.sellVolume24h)}</div> : null}{marketTab==="activity" ? (data.trades.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.trades.map((trade) => <div key={trade.id} className="flex justify-between py-2 text-xs"><span>{trade.side === "buy" ? "BUY" : "SELL"} {trade.traderName}</span><span>{money(trade.quoteAmount)}</span></div>)}</div> : <Empty text="Сделок пока нет" />) : null}{marketTab==="holders" ? (data.topHolders.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder)=><div key={holder.id} className="flex justify-between py-2 text-xs"><span>{holder.name}</span><span>{compact(holder.quantity)}</span></div>)}</div> : <Empty text="Холдеров нет" />) : null}{marketTab==="orders" ? <div className="text-xs text-[var(--muted)]">Ордера управления доступны в торговом блоке.</div> : null}</section>
         </div>
 
         <aside className="space-y-4">
