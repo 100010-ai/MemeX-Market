@@ -16,7 +16,7 @@ export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
-    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-3xl border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition duration-150 hover:border-white/[.12] active:scale-[.992]">
+    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[22px] border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition duration-150 will-change-transform hover:border-white/[.12] active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block min-w-0">
         <div className="mxm-gift-cover relative overflow-hidden rounded-2xl bg-black/20">
           <GiftMedia gift={gift} compact priority={priority} className="aspect-square w-full" />
