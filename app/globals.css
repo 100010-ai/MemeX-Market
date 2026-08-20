@@ -1366,3 +1366,9 @@ body { min-height: var(--mxm-viewport-height); overscroll-behavior-y: none; touc
 @supports (-webkit-touch-callout: none) {
   input, textarea, select { font-size: max(16px, 1em); }
 }
+
+
+/* Telegram WebView stability */
+.mxm-webview-fix { overscroll-behavior: none; }
+html, body { min-height: 100%; overflow-x: hidden; }
+img { content-visibility: auto; }

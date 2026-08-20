@@ -10,6 +10,9 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const revalidate = 10;
+
+const marketHeaders = { "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30" };
 
 function intParam(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number(value);
