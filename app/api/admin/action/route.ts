@@ -5,6 +5,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { syncGiftCatalog } from "@/lib/gift-catalog";
 import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
 import { ensureBotCanVerifyChat, normalizeSponsoredUrl, telegramChatIdFrom } from "@/lib/sponsored-tasks";
+import { adsgramModerationMode } from "@/lib/feature-flags";
 
 export const runtime = "nodejs";
 
@@ -235,6 +236,7 @@ export async function POST(request: Request) {
       const maxCompletions = Math.floor(number(body.maxCompletions) ?? 0);
       const priority = Math.max(0, Math.min(10000, Math.floor(number(body.priority) ?? 100)));
       const status = ["draft", "active", "paused", "ended"].includes(String(body.status)) ? String(body.status) : "draft";
+      if (adsgramModerationMode() && status === "active") return NextResponse.json({ error: "AdsGram moderation mode: партнёрские incentivized-кампании нельзя активировать" }, { status: 409 });
       const startsAt = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
       const endsAt = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
       const featured = Boolean(body.featured);
@@ -277,6 +279,7 @@ export async function POST(request: Request) {
       const nextUrl = String(patch.target_url ?? current.data.target_url);
       const nextChat = telegramChatIdFrom(patch.telegram_chat_id ?? current.data.telegram_chat_id, nextUrl);
       const nextStatus = String(patch.status ?? current.data.status);
+      if (adsgramModerationMode() && nextStatus === "active") return NextResponse.json({ error: "AdsGram moderation mode: партнёрские incentivized-кампании нельзя активировать" }, { status: 409 });
       if (nextType === "telegram_membership" && nextStatus === "active") {
         if (!nextChat) return NextResponse.json({ error: "Укажите Telegram-канал" }, { status: 400 });
         await ensureBotCanVerifyChat(nextChat);
@@ -379,6 +382,9 @@ export async function POST(request: Request) {
       const giftFeeBps = Math.floor(number(body.giftFeeBps) ?? -1);
       if (reward == null || reward < 1 || reward > 500 || dailyLimit < 0 || dailyLimit > 20 || cooldownMinutes < 0 || cooldownMinutes > 1440 || launchFee == null || launchFee < 0 || launchFee > 100000 || launchCooldown < 1 || launchCooldown > 168 || maxActive < 1 || maxActive > 20 || giftFeeBps < 0 || giftFeeBps > 1000) {
         return NextResponse.json({ error: "Некорректные параметры экономики" }, { status: 400 });
+      }
+      if (adsgramModerationMode() && (reward > 1 || dailyLimit > 3)) {
+        return NextResponse.json({ error: "AdsGram moderation mode: reward не больше 1 игрового TON и не больше 3 rewarded-показов в сутки" }, { status: 409 });
       }
       const patch = {
         rewarded_ad_reward: reward,

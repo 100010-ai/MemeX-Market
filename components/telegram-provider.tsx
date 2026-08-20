@@ -86,6 +86,7 @@ function warmCurrentRoute(pathname: string) {
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isControl = pathname.startsWith("/control");
+  const isPublic = pathname === "/about" || pathname === "/moderation" || pathname === "/reward-confirmations";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,9 +121,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     prepareWebApp();
-    if (isControl) {
-      setLoading(false);
-      setError(null);
+    if (isControl || isPublic) {
       return () => { cancelled = true; };
     }
 
@@ -175,13 +174,13 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     // profile is intentionally not a dependency: normal page navigation and
     // profile patches must never restart Telegram authentication.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isControl, authNonce]);
+  }, [isControl, isPublic, authNonce]);
 
 
   const profileId = profile?.id ?? null;
   useEffect(() => {
-    if (profileId && !isControl) warmCurrentRoute(pathname);
-  }, [profileId, isControl, pathname]);
+    if (profileId && !isControl && !isPublic) warmCurrentRoute(pathname);
+  }, [profileId, isControl, isPublic, pathname]);
 
   const value = useMemo(() => ({ profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;

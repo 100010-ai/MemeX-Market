@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { REWARDED_AD_COOLDOWN_MINUTES, REWARDED_AD_DAILY_LIMIT, REWARDED_AD_REWARD_TON } from "@/lib/economy";
 import { rewardedAdsConfig } from "@/lib/rewarded-ads";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { adsgramModerationMode } from "@/lib/feature-flags";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,13 @@ export async function GET() {
     return NextResponse.json({ error: "Не удалось проверить рекламную награду" }, { status: 500 });
   }
 
-  return NextResponse.json({ configured: config.configured, verificationMode: config.verificationMode, migrationRequired: false, ...(data as Record<string, unknown>) }, {
-    headers: { "cache-control": "private, no-store" },
-  });
+  const payload = (data || {}) as Record<string, unknown>;
+  const moderationMismatch = adsgramModerationMode() && (Number(payload.reward || 0) > 1 || Number(payload.dailyLimit || 0) > 3);
+  return NextResponse.json({
+    configured: config.configured,
+    verificationMode: config.verificationMode,
+    migrationRequired: moderationMismatch,
+    ...payload,
+    ...(moderationMismatch ? { canStart: false } : {}),
+  }, { headers: { "cache-control": "private, no-store" } });
 }

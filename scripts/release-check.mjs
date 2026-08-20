@@ -44,13 +44,16 @@ function secretLeaks() {
   return hits;
 }
 
-console.log("MXM v0.47 release gate\n");
+console.log("MXM v0.50 release gate\n");
 const migration017 = read("supabase/migrations/017_v030_market_foundation.sql");
 const migration018 = read("supabase/migrations/018_v040_games_speed_compact.sql");
 const migration019 = read("supabase/migrations/019_v041_remove_games_interface.sql");
 const migration020 = read("supabase/migrations/020_v045_economy_rewarded_ads.sql");
 const migration021 = read("supabase/migrations/021_v046_stars_referrals_market_polish.sql");
 const migration022 = read("supabase/migrations/022_v047_sponsored_tasks_admin_marketing.sql");
+const migration023 = read("supabase/migrations/023_v048_watchlist_notifications_profiles.sql");
+const migration024 = read("supabase/migrations/024_v049_sweep_bulk_quality.sql");
+const migration025 = read("supabase/migrations/025_v050_adsgram_moderation.sql");
 const packageJson = read("package.json");
 const packageLock = read("package-lock.json");
 const marketPage = read("app/market/page.tsx");
@@ -66,6 +69,13 @@ const auth = read("lib/auth.ts");
 const gifts = read("lib/gifts.ts");
 const adminAction = read("app/api/admin/action/route.ts");
 const envTemplate = read(".env.example");
+const featureFlags = read("lib/feature-flags.ts");
+const aboutPage = read("app/about/page.tsx");
+const sponsoredRoute = read("app/api/sponsored-tasks/route.ts");
+const adCheckScript = read("scripts/adsgram-check.mjs");
+const rewardProofPage = read("app/reward-confirmations/page.tsx");
+const rewardProofApi = read("app/api/public/reward-confirmations/route.ts");
+const moderationPage = read("app/moderation/page.tsx");
 
 check("Migration 017 present", Boolean(migration017));
 check("Migration 018 present", Boolean(migration018));
@@ -73,8 +83,11 @@ check("Migration 019 present", Boolean(migration019));
 check("Migration 020 v0.45 present", Boolean(migration020));
 check("Migration 021 v0.46 present", Boolean(migration021));
 check("Migration 022 v0.47 present", Boolean(migration022));
-check("v0.47 package version", packageJson.includes('"version": "0.47.0"'));
-check("package-lock version synced", packageLock.includes('"version": "0.47.0"'));
+check("Migration 023 v0.48 present", Boolean(migration023));
+check("Migration 024 v0.49 present", Boolean(migration024));
+check("Migration 025 v0.50 present", Boolean(migration025));
+check("v0.50 package version", packageJson.includes('"version": "0.50.0"'));
+check("package-lock version synced", packageLock.includes('"version": "0.50.0"'));
 check("Environment template present", Boolean(envTemplate));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));
@@ -90,7 +103,7 @@ check("Current launch economics", economy.includes("COIN_LAUNCH_FEE_TON = 150") 
 check("Coin launch waits for economy migration", coinRoute.includes("schema_version") && coinRoute.includes("экономика обновляется") && createPage.includes("economyReady"));
 check("Coin create has no post-RPC visibility mutation", !coinRoute.includes('from("coins").update({ status: "active"'));
 
-check("Rewarded ad economics", economy.includes("REWARDED_AD_REWARD_TON = 50") && economy.includes("REWARDED_AD_DAILY_LIMIT = 5") && economy.includes("REWARDED_AD_COOLDOWN_MINUTES = 30"));
+check("Rewarded ad moderation economics", economy.includes("REWARDED_AD_REWARD_TON = 1") && economy.includes("REWARDED_AD_DAILY_LIMIT = 3") && economy.includes("REWARDED_AD_COOLDOWN_MINUTES = 30") && migration025.includes("rewarded_ad_reward=1") && migration025.includes("rewarded_ad_daily_limit=3"));
 check("AdsGram SDK integration", tasks.includes("https://sad.adsgram.ai/js/sad.min.js") && tasks.includes("Adsgram.init") && tasks.includes("shown.done"));
 check("Server reward callback", exists("app/api/rewards/ads/adsgram/route.ts") && adCallback.includes("claim_rewarded_ad_by_telegram_v045"));
 check("Reward callback secret uses timing-safe comparison", adConfig.includes("timingSafeEqual") && adCallback.includes("safeSecretEquals"));
@@ -101,10 +114,21 @@ check("Old forgeable v0.44 ad RPCs removed", migration020.includes("drop functio
 check("Reward session concurrency guard", migration020.includes("rewarded_ad_sessions_one_open_v045_idx") && migration020.includes("row_number() over(partition by profile_id"));
 check("Ad secret is server-only", envTemplate.includes("ADSGRAM_REWARD_SECRET") && !/NEXT_PUBLIC_ADSGRAM_REWARD_SECRET/.test(envTemplate));
 check("Client fallback is off by default", envTemplate.includes("ADSGRAM_ALLOW_CLIENT_FALLBACK=false"));
+check("Rewarded placement is explicitly optional", tasks.includes("Реклама полностью добровольна") && tasks.includes("клик по объявлению не требуется"));
+check("Virtual TON disclosure is visible", tasks.includes("не является Toncoin") && aboutPage.includes("не выводится") && aboutPage.includes("денежной стоимости"));
+check("AdsGram moderation lock defaults on", envTemplate.includes("ADSGRAM_MODERATION_MODE=true") && featureFlags.includes("adsgramModerationMode"));
+check("Third-party incentivized tasks default off", envTemplate.includes("ENABLE_SPONSORED_TASKS=false") && featureFlags.includes("ENABLE_SPONSORED_TASKS") && sponsoredRoute.includes("sponsoredTasksEnabled"));
+check("Moderation lock blocks unsafe admin changes", adminAction.includes("adsgramModerationMode") && adminAction.includes("reward > 1 || dailyLimit > 3") && adminAction.includes("incentivized-кампании нельзя активировать"));
+check("Active sponsored campaigns paused by moderation migration", migration025.includes("update public.sponsored_campaigns") && migration025.includes("status='paused'"));
+check("AdsGram Reward URL helper/check present", adCheckScript.includes("userid=[userId]") && packageJson.includes("adsgram:check"));
+check("No AdsGram debug mode in rewarded placement", !tasks.includes("debug: true") && !tasks.includes("debug:true"));
+check("Public server-verified reward confirmations", rewardProofPage.includes("Подтверждения рекламных наград") && rewardProofApi.includes("adsgram_server") && rewardProofApi.includes("createHmac"));
+check("Public moderation information page", moderationPage.includes("Информация для модерации") && moderationPage.includes("Добровольный показ") && moderationPage.includes("Без требования клика"));
+check("Public moderation pages bypass Telegram auth", read("components/app-shell.tsx").includes('pathname === "/moderation"') && read("components/telegram-provider.tsx").includes('pathname === "/reward-confirmations"'));
 check("Telegram Stars invoice endpoint", exists("app/api/stars/invoice/route.ts") && read("app/api/stars/invoice/route.ts").includes('currency: "XTR"'));
 check("Telegram Stars webhook verifier", exists("app/api/telegram/webhook/route.ts") && read("app/api/telegram/webhook/route.ts").includes("x-telegram-bot-api-secret-token") && read("app/api/telegram/webhook/route.ts").includes("finalize_star_purchase_v046"));
 check("Referral graph + idempotent rewards", migration021.includes("referrer_profile_id") && migration021.includes("referral_rewards_once_v046_uidx") && migration021.includes("credit_referral_bonus_v046"));
-check("Rewarded ads capped at five/day", migration021.includes("rewarded_ad_daily_limit=5") && economy.includes("REWARDED_AD_DAILY_LIMIT = 5"));
+check("Rewarded ads capped at three/day for moderation", migration025.includes("rewarded_ad_daily_limit=3") && economy.includes("REWARDED_AD_DAILY_LIMIT = 3"));
 check("Full-market filter dictionary", migration021.includes("gift_market_filter_options_v046") && read("app/api/market/route.ts").includes("gift_market_filter_options_v046"));
 check("Referral link auth binding", read("app/api/auth/telegram/route.ts").includes("attach_referrer_v046"));
 check("Sponsored campaign schema", migration022.includes("create table if not exists public.sponsored_campaigns") && migration022.includes("sponsored_task_claims"));

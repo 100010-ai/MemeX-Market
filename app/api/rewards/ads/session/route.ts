@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { rewardedAdsConfig } from "@/lib/rewarded-ads";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
+import { adsgramModerationMode } from "@/lib/feature-flags";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,13 @@ export async function POST(request: Request) {
           : "Не удалось запустить рекламу";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-  return NextResponse.json({ ...(data as Record<string, unknown>), blockId: config.blockId, verificationMode: config.verificationMode }, { headers: { "cache-control": "no-store" } });
+  const payload = (data || {}) as Record<string, unknown>;
+  if (adsgramModerationMode() && Number(payload.reward || 0) > 1) {
+    const createdSessionId = String(payload.sessionId || "");
+    if (validUuidLike(createdSessionId)) await supabase.from("rewarded_ad_sessions").update({ status: "expired" }).eq("id", createdSessionId).eq("profile_id", profile.id).eq("status", "created");
+    return NextResponse.json({ error: "Примените миграцию 025: рекламная награда превышает moderation-safe лимит" }, { status: 503 });
+  }
+  return NextResponse.json({ ...payload, blockId: config.blockId, verificationMode: config.verificationMode }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function DELETE(request: Request) {

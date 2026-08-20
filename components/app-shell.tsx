@@ -50,7 +50,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   const { profile, loading, error, retryAuth } = useTelegramProfile();
   const title = currentTitle(pathname);
 
-  if (pathname.startsWith("/control") || pathname.startsWith("/admin")) return <>{children}</>;
+  if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/moderation" || pathname === "/reward-confirmations") return <>{children}</>;
 
   if (loading) {
     return <div className="mx-auto min-h-[100dvh] max-w-md px-3 pt-3"><div className="mxm-skeleton h-12 rounded-[18px]" /><div className="mxm-skeleton mt-3 h-40 rounded-[22px]" /><div className="mt-3 grid grid-cols-2 gap-2.5"><div className="mxm-skeleton aspect-square rounded-[20px]" /><div className="mxm-skeleton aspect-square rounded-[20px]" /></div></div>;

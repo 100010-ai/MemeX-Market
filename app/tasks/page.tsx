@@ -209,15 +209,16 @@ export default function TasksPage() {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="mxm-reward-ad-icon"><Eye size={16} /></div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[12px] font-semibold">Реклама за виртуальные TON</h2>
-            <p className="mt-1 text-[9px] text-[var(--muted)]">+{money(Number(adStatus?.reward || 50))} · {adStatus ? `${adStatus.remainingToday}/${adStatus.dailyLimit} сегодня` : "до 5 раз в день"}{cooldownText ? ` · через ${cooldownText}` : ""}</p>
+            <h2 className="text-[12px] font-semibold">Добровольная реклама</h2>
+            <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">+{money(Number(adStatus?.reward || 1))} игровой TON · {adStatus ? `${adStatus.remainingToday}/${adStatus.dailyLimit} сегодня` : "до 3 раз в день"}{cooldownText ? ` · через ${cooldownText}` : ""}</p>
           </div>
         </div>
         <button type="button" disabled={!adCanStart} onClick={() => void watchRewardedAd()} className="mxm-reward-ad-button">
-          {adBusy ? <span className="animate-pulse">…</span> : !adStatus?.configured ? (adStatus?.verificationMode === "disabled" ? "Не подключено" : "Не подключено") : adStatus.migrationRequired ? "Миграция" : adStatus.remainingToday <= 0 ? "Готово" : cooldownText ? cooldownText : !adReady ? "…" : <><Play size={12} fill="currentColor" />Смотреть</>}
+          {adBusy ? <span className="animate-pulse">…</span> : !adStatus?.configured ? (adStatus?.verificationMode === "disabled" ? "Не подключено" : "Не подключено") : adStatus.migrationRequired ? "Миграция" : adStatus.remainingToday <= 0 ? "Готово" : cooldownText ? cooldownText : !adReady ? "…" : <><Play size={12} fill="currentColor" />Смотреть рекламу</>}
         </button>
       </section>
       {adNotice ? <div className="mb-4 border-l-2 border-[var(--accent)] pl-3 text-[10px] leading-4 text-[var(--muted)]">{adNotice}</div> : null}
+      <p className="-mt-3 mb-4 text-[9px] leading-4 text-[var(--muted-2)]">Реклама полностью добровольна и не блокирует функции MXM. Для награды достаточно полного просмотра — клик по объявлению не требуется. Игровой TON внутри MXM не является Toncoin, не выводится и не имеет денежной стоимости.</p>
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
 
       {sponsored.length ? <section className="mb-7">

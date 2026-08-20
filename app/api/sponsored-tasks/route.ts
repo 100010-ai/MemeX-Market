@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { sponsoredTasksEnabled } from "@/lib/feature-flags";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { normalizeSponsoredUrl, telegramChatIdFrom, verifyTelegramMembership } from "@/lib/sponsored-tasks";
 
@@ -11,6 +12,7 @@ function missingSponsoredSchema(error: { code?: string; message?: string } | nul
 }
 
 export async function POST(request: Request) {
+  if (!sponsoredTasksEnabled()) return NextResponse.json({ error: "Партнёрские задания отключены" }, { status: 404 });
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });

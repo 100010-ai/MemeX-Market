@@ -2,8 +2,8 @@ export const COIN_LAUNCH_FEE_TON = 150;
 export const COIN_LAUNCH_COOLDOWN_HOURS = 12;
 export const COIN_MAX_ACTIVE_PER_CREATOR = 2;
 
-export const REWARDED_AD_REWARD_TON = 50;
-export const REWARDED_AD_DAILY_LIMIT = 5;
+export const REWARDED_AD_REWARD_TON = 1;
+export const REWARDED_AD_DAILY_LIMIT = 3;
 export const REWARDED_AD_COOLDOWN_MINUTES = 30;
 
 export const INITIAL_COIN_MARKET_CAP_TON = 100;

@@ -1,9 +1,21 @@
-# MXM Market v0.49.0
+# MXM Market v0.50.0
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
+
+## v0.50 — AdsGram moderation + rewarded ads hardening
+
+- Rewarded-реклама полностью добровольна и не блокирует функции продукта.
+- Награда: 1 игровой TON, максимум 3 просмотра в сутки, cooldown 30 минут.
+- Клик по рекламе не требуется; production-награда подтверждается только серверным Reward URL.
+- Партнёрские incentivized subscription/click задания отключены по умолчанию и активные кампании ставятся на паузу миграцией 025.
+- Добавлен `/about` с явным пояснением виртуального баланса и рекламных правил.
+- Добавлен `npm run adsgram:check`, который проверяет production-конфиг и печатает Reward URL.
+
+Перед подачей AdsGram прочитайте `ADSGRAM_MODERATION.md` и примените миграцию `025_v050_adsgram_moderation.sql`.
+Публичные `/moderation` и `/reward-confirmations` позволяют модератору проверить добровольность рекламы и реальные server-verified начисления без Telegram-сессии.
 
 ## v0.49 — Sweep, bulk listing, activity and market fixes
 
