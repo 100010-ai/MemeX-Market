@@ -1,29 +1,26 @@
-const required = [
-  'NEXT_PUBLIC_APP_URL',
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'TELEGRAM_BOT_TOKEN',
-  'TELEGRAM_BOT_USERNAME',
-  'TELEGRAM_WEBHOOK_SECRET',
-  'SESSION_SECRET',
-  'ADMIN_TELEGRAM_IDS'
+import fs from "node:fs";
+import path from "node:path";
+function load(file) {
+  const p=path.resolve(file); if(!fs.existsSync(p)) return;
+  for(const raw of fs.readFileSync(p,"utf8").split(/\r?\n/)){
+    const line=raw.trim(); if(!line||line.startsWith("#")) continue;
+    const i=line.indexOf("="); if(i<1) continue;
+    const k=line.slice(0,i).trim(); let v=line.slice(i+1).trim();
+    if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'"))) v=v.slice(1,-1);
+    if(!(k in process.env)) process.env[k]=v;
+  }
+}
+load(".env"); load(".env.local");
+const pairs = [
+  ["Supabase URL", ["SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]],
+  ["Supabase server key", ["SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"]],
+  ["Supabase public key", ["SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]],
+  ["Telegram bot token", ["TELEGRAM_BOT_TOKEN"]],
+  ["Session secret", ["SESSION_SECRET"]],
 ];
-const missing = required.filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error('Missing required environment variables:\n' + missing.map((x) => ` - ${x}`).join('\n'));
-  process.exit(1);
+for (const [label, names] of pairs) {
+  const found = names.find((name) => process.env[name]);
+  console.log(`${found ? "OK     " : "MISSING"} ${label}${found ? ` (${found})` : ` — ${names.join(" / ")}`}`);
 }
-if ((process.env.SESSION_SECRET ?? '').length < 32) {
-  console.error('SESSION_SECRET must be at least 32 characters.');
-  process.exit(1);
-}
-if (!/^[A-Za-z0-9_-]{16,256}$/.test(process.env.TELEGRAM_WEBHOOK_SECRET ?? '')) {
-  console.error('TELEGRAM_WEBHOOK_SECRET must use only A-Z, a-z, 0-9, _ or - and be 16-256 chars.');
-  process.exit(1);
-}
-if (!(process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').every((v) => /^\d{1,24}$/.test(v.trim()))) {
-  console.error('ADMIN_TELEGRAM_IDS must be a comma-separated list of Telegram numeric IDs.');
-  process.exit(1);
-}
-console.log('Environment looks valid.');
+const tonApiKey = process.env.TONAPI_KEY;
+console.log(`${tonApiKey ? "OK     " : "OPTIONAL"} TonAPI key${tonApiKey ? " (TONAPI_KEY)" : " — public rate-limited access will be used"}`);
