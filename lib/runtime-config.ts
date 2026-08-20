@@ -4,8 +4,6 @@ export type RuntimeFeatureFlags = {
   gifts: boolean;
   memecoins: boolean;
   referrals: boolean;
-  rewardedAds: boolean;
-  sponsoredTasks: boolean;
   stars: boolean;
 };
 
@@ -29,8 +27,6 @@ const defaultFlags: RuntimeFeatureFlags = {
   gifts: true,
   memecoins: true,
   referrals: true,
-  rewardedAds: true,
-  sponsoredTasks: false,
   stars: true,
 };
 
@@ -63,8 +59,6 @@ export function normalizeRuntimeConfig(row: Record<string, unknown>): RuntimeCon
       gifts: typeof flags.gifts === "boolean" ? flags.gifts : defaultFlags.gifts,
       memecoins: typeof flags.memecoins === "boolean" ? flags.memecoins : defaultFlags.memecoins,
       referrals: typeof flags.referrals === "boolean" ? flags.referrals : defaultFlags.referrals,
-      rewardedAds: typeof flags.rewardedAds === "boolean" ? flags.rewardedAds : defaultFlags.rewardedAds,
-      sponsoredTasks: typeof flags.sponsoredTasks === "boolean" ? flags.sponsoredTasks : defaultFlags.sponsoredTasks,
       stars: typeof flags.stars === "boolean" ? flags.stars : defaultFlags.stars,
     },
     remoteConfig: {
@@ -100,8 +94,6 @@ export function validateRuntimeConfigInput(value: unknown) {
     gifts: currentFlags.gifts === true,
     memecoins: currentFlags.memecoins === true,
     referrals: currentFlags.referrals === true,
-    rewardedAds: currentFlags.rewardedAds === true,
-    sponsoredTasks: currentFlags.sponsoredTasks === true,
     stars: currentFlags.stars === true,
   };
   const remoteConfig: RuntimeRemoteConfig = {

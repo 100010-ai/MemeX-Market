@@ -27,7 +27,12 @@ export default function VaultPage() {
   const [floorOffset, setFloorOffset] = useState("-3");
   const [bulkBusy, setBulkBusy] = useState(false);
   const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/portfolio")); }, []);
-  useEffect(() => { load().catch((e) => setMessage(e instanceof Error ? e.message : "Не удалось загрузить хранилище")); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load().catch((cause) => setMessage(cause instanceof Error ? cause.message : "Не удалось загрузить хранилище"));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
   function toggleSelected(id: string) {

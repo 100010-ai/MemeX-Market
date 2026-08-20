@@ -21,6 +21,11 @@ function rarest(gift: GiftAsset) {
   return Math.min(gift.modelRarityPerMille, gift.backdropRarityPerMille, gift.symbolRarityPerMille);
 }
 
+function makeSweepRequestKey(count: 2 | 5 | 10) {
+  const nonce = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `sweep-${nonce}-${count}`;
+}
+
 export default function GiftCollectionPage() {
   const { name } = useParams<{ name: string }>();
   const decodedName = decodeURIComponent(name);
@@ -49,7 +54,10 @@ export default function GiftCollectionPage() {
     }
   }, [decodedName]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const reload = useCallback(() => { void load(true); }, [load]);
 
   const loadMore = useCallback(async () => {
@@ -110,7 +118,7 @@ export default function GiftCollectionPage() {
     try {
       const result = await apiFetch<{ sweep?: { total?: number; itemCount?: number } }>(`/api/collections/${encodeURIComponent(decodedName)}/sweep`, {
         method: "POST",
-        headers: { "x-idempotency-key": `sweep-${Date.now()}-${count}` },
+        headers: { "x-idempotency-key": makeSweepRequestKey(count) },
         body: JSON.stringify({ count }),
       });
       const total = Number(result.sweep?.total || 0);

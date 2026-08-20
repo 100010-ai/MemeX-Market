@@ -21,7 +21,7 @@ export async function GET() {
   if (!ids.length) return NextResponse.json({ items: [], total: 0, count: 0 });
   const gifts = await supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", ids).eq("status", "listed").eq("is_burned", false).or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`);
   if (gifts.error) return NextResponse.json({ error: gifts.error.message }, { status: 500 });
-  const byId = new Map((gifts.data || []).map((row: any) => [String(row.virtual_gift_id), mapGift(row)]));
+  const byId = new Map(((gifts.data || []) as Record<string, unknown>[]).map((row) => [String(row.virtual_gift_id), mapGift(row)]));
   const items = ids.map((id) => byId.get(id)).filter((gift): gift is GiftAsset => Boolean(gift));
   const stale = ids.filter((id) => !byId.has(id));
   if (stale.length) await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).in("virtual_gift_id", stale);

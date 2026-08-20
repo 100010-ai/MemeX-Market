@@ -4,23 +4,28 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-type PageResult<T> = { data: T[] | null; error: unknown };
+const LIST_LIMITS = {
+  profiles: 750,
+  missions: 500,
+  coins: 750,
+  gifts: 1_000,
+  audit: 500,
+  catalogSources: 100,
+  promoCodes: 500,
+  refundReconciliation: 100,
+} as const;
 
 function missingOptionalTable(error: { code?: string; message?: string } | null | undefined, names: string[]) {
   return Boolean(error && (error.code === "42P01" || names.some((name) => new RegExp(`${name}|schema cache`, "i").test(error.message || ""))));
 }
 
-async function fetchAll<T>(makePage: (from: number, to: number) => PromiseLike<PageResult<T>>) {
-  const pageSize = 750;
-  const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const result = await makePage(from, from + pageSize - 1);
-    if (result.error) throw result.error;
-    const batch = result.data || [];
-    rows.push(...batch);
-    if (batch.length < pageSize) break;
-  }
-  return rows;
+function objectMetrics(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function relationRecord(value: unknown): Record<string, unknown> {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : {};
 }
 
 export async function GET() {
@@ -28,154 +33,98 @@ export async function GET() {
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   const supabase = getSupabaseAdmin();
   try {
-    const [profileRows, missionRows, coinRows, giftRows, auditRows, sourceRows, npcStateRows, npcLogRows] = await Promise.all([
-      fetchAll((from, to) =>
-        supabase
-          .from("profiles")
-          .select("id,telegram_id,username,first_name,balance,xp,is_banned,ban_reason,banned_until,hidden_from_leaderboard,is_system,created_at")
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("missions")
-          .select("id,key,period,title,description,reward,target,action_type,sort_order,active,updated_at")
-          .order("period")
-          .order("sort_order")
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("coins")
-          .select("id,creator_profile_id,name,symbol,description,image_url,current_price,market_cap,status,hidden_from_market,created_at")
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("gift_market_overview")
-          .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at,catalog_source,source_reference")
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("admin_audit_log")
-          .select("id,actor,action,target_type,target_id,payload,created_at")
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("gift_catalog_sources")
-          .select("id,telegram_id,label,active,last_synced_at,last_error,created_at,updated_at")
-          .order("created_at", { ascending: true })
-          .range(from, to),
-      ),
-      fetchAll((from, to) =>
-        supabase
-          .from("npc_market_state")
-          .select("key,locked_until,last_tick_at,last_success_at,last_error,cycle,updated_at")
-          .range(from, to),
-      ),
-      supabase
-        .from("npc_market_log")
+    const [profiles, missions, coins, gifts, audit, catalogSources, npcState, npcLog, promoCodes, refundReconciliation] = await Promise.all([
+      supabase.from("profiles")
+        .select("id,telegram_id,username,first_name,balance,xp,is_banned,ban_reason,banned_until,hidden_from_leaderboard,is_system,created_at")
+        .order("created_at", { ascending: false }).limit(LIST_LIMITS.profiles),
+      supabase.from("missions")
+        .select("id,key,period,title,description,reward,target,action_type,sort_order,active,updated_at")
+        .order("period").order("sort_order").limit(LIST_LIMITS.missions),
+      supabase.from("coins")
+        .select("id,creator_profile_id,name,symbol,description,image_url,current_price,market_cap,status,hidden_from_market,created_at")
+        .order("created_at", { ascending: false }).limit(LIST_LIMITS.coins),
+      supabase.from("gift_market_overview")
+        .select("virtual_gift_id,asset_id,telegram_name,base_name,gift_number,owner_profile_id,owner_name,status,listing_price,estimated_value,is_burned,created_at,catalog_source,source_reference")
+        .order("created_at", { ascending: false }).limit(LIST_LIMITS.gifts),
+      supabase.from("admin_audit_log")
+        .select("id,actor,action,target_type,target_id,payload,created_at")
+        .order("created_at", { ascending: false }).limit(LIST_LIMITS.audit),
+      supabase.from("gift_catalog_sources")
+        .select("id,telegram_id,label,active,last_synced_at,last_error,created_at,updated_at")
+        .order("created_at", { ascending: true }).limit(LIST_LIMITS.catalogSources),
+      supabase.from("npc_market_state")
+        .select("key,locked_until,last_tick_at,last_success_at,last_error,cycle,updated_at")
+        .limit(1),
+      supabase.from("npc_market_log")
         .select("id,virtual_gift_id,asset_id,npc_profile_id,fair_price,listing_price,pricing_mode,rarity_score,created_at")
-        .order("created_at", { ascending: false })
-        .limit(60),
+        .order("created_at", { ascending: false }).limit(60),
+      supabase.from("promo_codes")
+        .select("id,code,reward,max_uses,uses_count,active,starts_at,ends_at,note,created_by,created_at,updated_at")
+        .order("created_at", { ascending: false }).limit(LIST_LIMITS.promoCodes),
+      supabase.from("star_purchases")
+        .select("id,profile_id,product_sku,stars,telegram_payment_charge_id,refunded_at,refund_reason,profiles!star_purchases_profile_id_fkey(telegram_id,username,first_name),store_products!star_purchases_product_sku_fkey(title,reward_label)")
+        .eq("status", "refunded")
+        .filter("refund_metadata->>virtualReversal", "eq", "manual_review_required")
+        .order("refunded_at", { ascending: true })
+        .limit(LIST_LIMITS.refundReconciliation),
     ]);
 
-    const [sponsorCampaignResult, sponsorClaimsResult, promoCodesResult] = await Promise.all([
-      supabase.from("sponsored_campaigns").select("id,advertiser_name,title,description,instructions,verification_type,target_url,telegram_chat_id,button_label,reward,max_completions,completed_count,status,starts_at,ends_at,priority,featured,internal_note,created_by,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
-      supabase.from("sponsored_task_claims").select("id,campaign_id,profile_id,status,opened_at,submitted_at,verified_at,claimed_at,verification_source,reviewed_by,metadata,created_at,updated_at").order("created_at", { ascending: false }).limit(5000),
-      supabase.from("promo_codes").select("id,code,reward,max_uses,uses_count,active,starts_at,ends_at,note,created_by,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
-    ]);
-    if (sponsorCampaignResult.error && !missingOptionalTable(sponsorCampaignResult.error, ["sponsored_campaigns"])) throw sponsorCampaignResult.error;
-    if (sponsorClaimsResult.error && !missingOptionalTable(sponsorClaimsResult.error, ["sponsored_task_claims"])) throw sponsorClaimsResult.error;
-    if (promoCodesResult.error && !missingOptionalTable(promoCodesResult.error, ["promo_codes"])) throw promoCodesResult.error;
-    const sponsoredCampaigns = sponsorCampaignResult.data || [];
-    const sponsoredClaims = sponsorClaimsResult.data || [];
-    const promoCodes = promoCodesResult.data || [];
+    const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error;
+    if (primaryError) throw primaryError;
+    if (promoCodes.error && !missingOptionalTable(promoCodes.error, ["promo_codes"])) throw promoCodes.error;
 
-    const dayStart = new Date(); dayStart.setUTCHours(0,0,0,0);
-    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult, economyResult, rewardedTodayResult, economyEventsTodayResult] = await Promise.all([
+    const [dashboard, tonapiCount, tonapiVerified, tonapiState, activeSourceCount, economy] = await Promise.all([
+      supabase.rpc("admin_dashboard_metrics_v028"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi").eq("chain_verified", true),
       supabase.from("tonapi_catalog_state").select("last_discovery_at,last_sync_at,last_error,lock_until,updated_at").eq("singleton", true).maybeSingle(),
-      supabase.from("economy_settings").select("rewarded_ad_reward,rewarded_ad_daily_limit,rewarded_ad_cooldown_minutes,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,gift_fee_bps,updated_at").eq("singleton", true).maybeSingle(),
-      supabase.from("rewarded_ad_sessions").select("id", { head: true, count: "exact" }).eq("status", "claimed").gte("claimed_at", dayStart.toISOString()),
-      supabase.from("economy_events").select("kind,amount").gte("created_at", dayStart.toISOString()).limit(5000),
+      supabase.from("gift_catalog_sources").select("id", { head: true, count: "exact" }).eq("active", true),
+      supabase.from("economy_settings")
+        .select("coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,gift_fee_bps,updated_at")
+        .eq("singleton", true).maybeSingle(),
     ]);
-    if (tonapiCountResult.error) throw tonapiCountResult.error;
-    if (tonapiVerifiedResult.error) throw tonapiVerifiedResult.error;
-    if (tonapiStateResult.error) throw tonapiStateResult.error;
-    const economyMissing = economyResult.error && (economyResult.error.code === "42P01" || /economy_settings|schema cache/i.test(economyResult.error.message || ""));
-    if (economyResult.error && !economyMissing) throw economyResult.error;
-    const rewardedMissing = rewardedTodayResult.error && (rewardedTodayResult.error.code === "42P01" || /rewarded_ad_sessions|schema cache/i.test(rewardedTodayResult.error.message || ""));
-    if (rewardedTodayResult.error && !rewardedMissing) throw rewardedTodayResult.error;
-    const economyEventsMissing = economyEventsTodayResult.error && (economyEventsTodayResult.error.code === "42P01" || /economy_events|schema cache/i.test(economyEventsTodayResult.error.message || ""));
-    if (economyEventsTodayResult.error && !economyEventsMissing) throw economyEventsTodayResult.error;
-    const economyEvents = (economyEventsTodayResult.data || []) as Array<{ kind: string; amount: number | string }>;
-    const emissionToday = economyEvents.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
-    const sinksToday = economyEvents.reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
-    const adsEmissionToday = economyEvents.filter((row) => row.kind === "rewarded_ad").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
-    const missionEmissionToday = economyEvents.filter((row) => row.kind === "mission").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
-    const launchSinkToday = economyEvents.filter((row) => row.kind === "coin_launch").reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
-    const tradeFeeSinkToday = economyEvents.filter((row) => row.kind === "coin_trade_fee").reduce((sum, row) => sum + Math.max(0, -Number(row.amount || 0)), 0);
-    const sponsoredEmissionToday = economyEvents.filter((row) => row.kind === "sponsored_task").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
-    const promoEmissionToday = economyEvents.filter((row) => row.kind === "promo_code").reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+    const aggregateError = dashboard.error || tonapiCount.error || tonapiVerified.error || tonapiState.error || activeSourceCount.error || economy.error;
+    if (aggregateError) throw aggregateError;
 
-    const systemIds = new Set(profileRows.filter((row) => row.is_system).map((row) => String(row.id)));
+    const metrics = {
+      ...objectMetrics(dashboard.data),
+      catalogSources: activeSourceCount.count || 0,
+      tonapiAssets: tonapiCount.count || 0,
+      tonapiVerified: tonapiVerified.count || 0,
+    };
+
     return NextResponse.json({
-      metrics: {
-        players: profileRows.filter((row) => !row.is_system).length,
-        banned: profileRows.filter((row) => !row.is_system && row.is_banned).length,
-        hidden: profileRows.filter((row) => !row.is_system && row.hidden_from_leaderboard).length,
-        coins: coinRows.length,
-        activeCoins: coinRows.filter((row) => row.status === "active" && !row.hidden_from_market).length,
-        gifts: giftRows.length,
-        listedGifts: giftRows.filter((row) => row.status === "listed").length,
-        npcListings: giftRows.filter((row) => row.status === "listed" && systemIds.has(String(row.owner_profile_id))).length,
-        catalogSources: sourceRows.filter((row) => row.active).length,
-        tonapiAssets: tonapiCountResult.count || 0,
-        tonapiVerified: tonapiVerifiedResult.count || 0,
-        totalPlayerBalance: profileRows.filter((row) => !row.is_system).reduce((sum, row) => sum + Number(row.balance || 0), 0),
-        totalXp: profileRows.filter((row) => !row.is_system).reduce((sum, row) => sum + Number(row.xp || 0), 0),
-        systemAccounts: profileRows.filter((row) => row.is_system).length,
-        newPlayers24h: profileRows.filter((row) => !row.is_system && Date.now() - new Date(row.created_at).getTime() < 86400000).length,
-        newCoins24h: coinRows.filter((row) => Date.now() - new Date(row.created_at).getTime() < 86400000).length,
-        newGifts24h: giftRows.filter((row) => Date.now() - new Date(row.created_at).getTime() < 86400000).length,
-        listedValue: giftRows.filter((row) => row.status === "listed").reduce((sum, row) => sum + Number(row.listing_price || 0), 0),
-        activeSponsoredCampaigns: sponsoredCampaigns.filter((row) => row.status === "active").length,
-        pendingSponsoredChecks: sponsoredClaims.filter((row) => row.status === "pending").length,
-        sponsoredClaimsToday: sponsoredClaims.filter((row) => row.status === "claimed" && row.claimed_at && Date.now() - new Date(row.claimed_at).getTime() < 86400000).length,
-        promoUsesTotal: promoCodes.reduce((sum, row) => sum + Number(row.uses_count || 0), 0),
-        rewardedAdsToday: rewardedTodayResult.count || 0,
-        economyEmissionToday: emissionToday,
-        economySinksToday: sinksToday,
-        economyNetToday: emissionToday - sinksToday,
-        adsEmissionToday,
-        missionEmissionToday,
-        launchSinkToday,
-        tradeFeeSinkToday,
-        sponsoredEmissionToday,
-        promoEmissionToday,
-      },
-      economy: economyResult.data || null,
-      profiles: profileRows,
-      missions: missionRows,
-      coins: coinRows,
-      gifts: giftRows,
-      audit: auditRows,
-      catalogSources: sourceRows,
-      npcState: npcStateRows[0] || null,
-      npcLog: npcLogRows.data || [],
-      tonapiState: tonapiStateResult.data || null,
-      sponsoredCampaigns,
-      sponsoredClaims,
-      promoCodes,
+      metrics,
+      economy: economy.data || null,
+      profiles: profiles.data || [],
+      missions: missions.data || [],
+      coins: coins.data || [],
+      gifts: gifts.data || [],
+      audit: audit.data || [],
+      catalogSources: catalogSources.data || [],
+      npcState: npcState.data?.[0] || null,
+      npcLog: npcLog.data || [],
+      tonapiState: tonapiState.data || null,
+      promoCodes: promoCodes.data || [],
+      refundReconciliation: (refundReconciliation.data || []).map((row) => {
+        const profile = relationRecord(row.profiles);
+        const product = relationRecord(row.store_products);
+        return {
+          purchaseId: row.id,
+          profileId: row.profile_id,
+          profileName: profile.username ? `@${String(profile.username)}` : String(profile.first_name || "Профиль"),
+          profileTelegramId: Number(profile.telegram_id || 0),
+          productSku: row.product_sku || null,
+          productTitle: product.title || product.reward_label || row.product_sku || "Legacy Stars reward",
+          stars: Number(row.stars || 0),
+          telegramPaymentChargeId: row.telegram_payment_charge_id || null,
+          refundedAt: row.refunded_at,
+          reason: row.refund_reason || "Причина не записана",
+        };
+      }),
+      listLimits: LIST_LIMITS,
       checkedAt: new Date().toISOString(),
-    });
+    }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("admin overview", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить админ-панель" }, { status: 500 });

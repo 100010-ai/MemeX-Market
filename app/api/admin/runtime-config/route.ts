@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getRuntimeConfig, validateRuntimeConfigInput } from "@/lib/runtime-config";
-import { sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 export async function GET() {
   const admin = await requireAdminProfile();
@@ -19,6 +19,9 @@ export async function POST(request: Request) {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
+  if (!(await enforceRateLimit(request, "admin-runtime-config", String(admin.id), 12, 60))) {
+    return NextResponse.json({ error: "Слишком много изменений Runtime Config." }, { status: 429 });
+  }
   try {
     const input = validateRuntimeConfigInput(await request.json());
     const supabase = getSupabaseAdmin();

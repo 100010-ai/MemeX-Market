@@ -2,10 +2,32 @@ import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-async function countRows(table: string, configure?: (query: any) => any) {
+type CountFilter =
+  | { kind: "eq"; column: string; value: string | number | boolean }
+  | { kind: "or"; expression: string };
+
+type SyncRunRow = {
+  id: unknown;
+  profile_id: unknown;
+  telegram_id: unknown;
+  status: unknown;
+  pages_fetched: unknown;
+  telegram_total_count: unknown;
+  unique_received: unknown;
+  unique_imported: unknown;
+  assets_updated: unknown;
+  virtual_created: unknown;
+  error_message: unknown;
+  started_at: unknown;
+  finished_at: unknown;
+  profiles: { username?: unknown; first_name?: unknown } | Array<{ username?: unknown; first_name?: unknown }> | null;
+};
+
+async function countRows(table: string, filter?: CountFilter) {
   const supabase = getSupabaseAdmin();
   let query = supabase.from(table).select("id", { count: "exact", head: true });
-  if (configure) query = configure(query);
+  if (filter?.kind === "eq") query = query.eq(filter.column, filter.value);
+  if (filter?.kind === "or") query = query.or(filter.expression);
   const { count, error } = await query;
   if (error) throw error;
   return Number(count || 0);
@@ -32,14 +54,14 @@ export async function GET() {
     ] = await Promise.all([
       countRows("profiles"),
       countRows("gift_assets"),
-      countRows("gift_assets", (q) => q.eq("is_burned", false)),
-      countRows("gift_assets", (q) => q.or("telegram_name.is.null,model_file_id.is.null,symbol_file_id.is.null")),
-      countRows("gift_assets", (q) => q.eq("is_burned", true)),
-      countRows("virtual_gifts", (q) => q.eq("status", "listed")),
-      countRows("gift_offers", (q) => q.eq("status", "pending")),
+      countRows("gift_assets", { kind: "eq", column: "is_burned", value: false }),
+      countRows("gift_assets", { kind: "or", expression: "telegram_name.is.null,model_file_id.is.null,symbol_file_id.is.null" }),
+      countRows("gift_assets", { kind: "eq", column: "is_burned", value: true }),
+      countRows("virtual_gifts", { kind: "eq", column: "status", value: "listed" }),
+      countRows("gift_offers", { kind: "eq", column: "status", value: "pending" }),
       countRows("gift_trades"),
       countRows("trades"),
-      countRows("coins", (q) => q.eq("status", "active")),
+      countRows("coins", { kind: "eq", column: "status", value: "active" }),
       supabase
         .from("gift_sync_runs")
         .select("id,profile_id,telegram_id,status,pages_fetched,telegram_total_count,unique_received,unique_imported,assets_updated,virtual_created,error_message,started_at,finished_at,profiles(username,first_name)")
@@ -48,7 +70,8 @@ export async function GET() {
     ]);
 
     if (syncRunsResult.error) throw syncRunsResult.error;
-    const syncRuns = (syncRunsResult.data || []).map((row: any) => {
+    const syncRuns = (syncRunsResult.data || []).map((raw) => {
+      const row = raw as unknown as SyncRunRow;
       const person = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       return {
         id: String(row.id),

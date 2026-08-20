@@ -8,8 +8,8 @@ npm run release:check
 
 ## Database
 
-- Apply every migration through `019_v041_remove_games_interface.sql` in order.
-- Confirm `gift_market_overview`, `gift_collection_overview`, `gift_market_random_page`, `buy_virtual_gift_v2`, `list_virtual_gift_v2`, `create_gift_offer_v2`, and `resolve_gift_offer_v2` exist.
+- Apply every migration through `029_market_scalability.sql` in numeric order.
+- Confirm `gift_market_overview`, `gift_collection_overview`, `gift_market_random_page`, `gift_market_filtered_page_v200`, `buy_virtual_gift_v2`, `list_virtual_gift_v2`, `create_gift_offer_v2`, and `resolve_gift_offer_v2` exist.
 - Confirm service-role-only execution on trading RPCs.
 - Check `/api/system/market-health` from an authenticated MXM session: database errors must be empty.
 
@@ -38,6 +38,30 @@ npm run release:check
 - `daily_game_3` must be inactive after migration 019.
 - Historical `game_rounds` data may remain in Postgres for audit/rollback compatibility.
 
+## Removed advertising
+
+- Advertising, reward callback and sponsored-task API routes must return 404.
+- `/moderation` and `/reward-confirmations` must not exist.
+- No advertising SDK, environment variable, runtime flag, admin panel or notification preference may ship.
+- Migration 028 must remove live advertising sessions/campaigns and their claim functions while leaving generic ledger history intact.
+
+## Telegram Stars refunds
+
+- Refund a paid test purchase and confirm the Telegram Bot API succeeds before the local status becomes `refunded`.
+- Confirm the refund appears in the mandatory queue on both Admin → Overview and Admin → Economy with purchase, product, profile, charge, time and reason.
+- Complete the queue item with meaningful review notes. A second submission must be idempotent, and the audit metadata must state that no automatic virtual-benefit reversal was claimed.
+- In Admin → Overview and Economy, verify DAU/MAU, rolling M1 retention, 24-hour turnover/trade count, and the top Gift collection, memecoin and Store SKU lists. Empty periods must render as empty states, not errors.
+
+## MXM Store and Stars checkout
+
+- Open every Store category and confirm the Stars price/reward comes from `store_products`; prices below 5 Stars must be rejected.
+- Confirm `/terms` and `/paysupport` open without an authenticated Mini App session and `/paysupport` reaches the configured human support account.
+- Try paying a forwarded invoice from a different Telegram account; pre-checkout must reject it.
+- Start two checkouts for the same one-time item and two buyers for the final limited case. Only one authorization may reserve each grant/stock unit.
+- Abandon an authorized checkout, wait through the configured expiry + grace period, reopen Store and verify stock/eligibility is restored.
+- Re-send the same `successful_payment`; fulfilment must be idempotent only for the identical payer, amount and Telegram charge ID.
+- Confirm MXM packs have usable sinks, case odds are visible before purchase, and a full-Energy/refunded/already-owned purchase is disabled or rejected.
+
 ## Memecoins
 
 - Create a coin and confirm it appears immediately.
@@ -60,7 +84,7 @@ Disable with `?perf=0`.
 ## Security
 
 - No `.env`, `.env.local`, `.mxm-control-secret`, service-role key, bot token or session secret in the ZIP/repository.
-- Mutating API routes require authenticated session + same-origin validation + rate limits.
+- Mutating API routes require authenticated session + same-origin validation + rate limits, including expensive admin synchronization actions.
 - Balance/ownership/price changes happen in server-side Postgres RPCs, never from client state.
 - Admin/control routes remain inaccessible without their dedicated authorization.
 

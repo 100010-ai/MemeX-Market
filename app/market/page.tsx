@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Flame, Gift, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
@@ -14,8 +15,8 @@ import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
 type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
-type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; filterOptions?: GiftFilterOptions };
-type GiftPageChunk = { gifts: GiftAsset[]; nextOffset: number | null; marketSeed: string };
+type MarketPayload = { coins: Coin[]; newCoins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; filterOptions?: GiftFilterOptions };
+type GiftPageChunk = { gifts: GiftAsset[]; totalGifts: number; nextOffset: number | null; marketSeed: string };
 type UnifiedSearch = {
   gifts: GiftAsset[];
   coins: Coin[];
@@ -27,26 +28,24 @@ type CoinSort = "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], newCoins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
 
 function weightedCoinScore(coin: Coin) {
   const volume = Math.log1p(Math.max(0, coin.volume24h));
   const trades = Math.log1p(Math.max(0, coin.tradeCount24h));
   const holders = Math.log1p(Math.max(0, coin.holderCount));
-  const liquidity = Math.log1p(Math.max(0, coin.liquidity));
-  const momentum = Math.max(-60, Math.min(180, coin.change24h)) / 100;
-  return volume * .34 + trades * .28 + holders * .18 + liquidity * .16 + momentum * .04;
+  const momentum = Math.max(-1, Math.min(3, coin.change24h / 100));
+  return volume * .36 + trades * .30 + holders * .20 + momentum * .14;
 }
 
 function weightedCollectionScore(collection: GiftCollection) {
   const volume = Math.log1p(Math.max(0, collection.volume24h));
   const trades = Math.log1p(Math.max(0, collection.tradeCount24h));
   const holders = Math.log1p(Math.max(0, collection.holderCount));
-  const momentum = Math.max(-60, Math.min(180, collection.change24h)) / 100;
-  const listingHealth = collection.itemCount > 0 ? Math.min(.35, collection.listedCount / collection.itemCount) : 0;
-  return volume * .38 + trades * .30 + holders * .20 + momentum * .07 + listingHealth * .05;
+  const momentum = Math.max(-1, Math.min(3, collection.change24h / 100));
+  return volume * .36 + trades * .30 + holders * .20 + momentum * .14;
 }
-const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
+const marketCache = new Map<string, { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
 const GIFT_PAGE_SIZE = 24;
 
@@ -69,18 +68,39 @@ export default function MarketPage() {
   const [watchBusy, setWatchBusy] = useState<string | null>(null);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [remoteSearch, setRemoteSearch] = useState<UnifiedSearch | null>(null);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [remoteSearchState, setRemoteSearchState] = useState<{ query: string; result: UnifiedSearch } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const giftCatalogQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (collection !== "all") params.set("collection", collection);
+    if (model !== "all") params.set("model", model);
+    if (backdrop !== "all") params.set("backdrop", backdrop);
+    if (symbol !== "all") params.set("symbol", symbol);
+    if (priceBand !== "all") params.set("priceBand", priceBand);
+    if (giftView !== "all") params.set("view", giftView);
+    if (giftSort !== "random") params.set("sort", giftSort);
+    return params.toString();
+  }, [collection, model, backdrop, symbol, priceBand, giftView, giftSort]);
+  const activeScopeKey = tab === "gifts" ? `gifts:${giftCatalogQuery}` : "coins";
+  const giftScopeKey = `gifts:${giftCatalogQuery}`;
+  const normalizedQuery = query.trim();
+  const remoteSearch = normalizedQuery.length >= 2 && remoteSearchState?.query === normalizedQuery ? remoteSearchState.result : null;
+  const searchLoading = normalizedQuery.length >= 2 && remoteSearchState?.query !== normalizedQuery;
   const bootstrapInFlight = useRef(false);
+  const watchInFlight = useRef(false);
+  const cartInFlight = useRef(false);
   const activeTabRef = useRef(tab);
   useEffect(() => { activeTabRef.current = tab; }, [tab]);
+  const activeScopeKeyRef = useRef(activeScopeKey);
+  useEffect(() => { activeScopeKeyRef.current = activeScopeKey; }, [activeScopeKey]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const loadSeq = useRef(0);
-  const scopeDataRef = useRef<Partial<Record<"gifts" | "coins", MarketPayload>>>({});
+  const scopeDataRef = useRef<Record<string, MarketPayload>>({});
 
   const load = useCallback(async (silent = false) => {
     const seq = ++loadSeq.current;
@@ -89,40 +109,49 @@ export default function MarketPage() {
       marketCache.clear();
       scopeDataRef.current = {};
     }
-    const cached = forced ? undefined : marketCache.get(tab);
-    const remembered = forced ? undefined : scopeDataRef.current[tab];
+    const cached = forced ? undefined : marketCache.get(activeScopeKey);
+    const remembered = forced ? undefined : scopeDataRef.current[activeScopeKey];
     const warmPayload = cached?.payload || remembered;
     const cacheFresh = cached && Date.now() - cached.at < MARKET_CACHE_MS;
     if (warmPayload && !silent) { setData(warmPayload); setLoading(false); }
     else if (!silent) { setData(emptyMarketPayload()); setLoading(true); }
-    if (!silent) setError(null);
+    if (!silent) { setError(null); setLoadError(null); }
     if (cacheFresh && !silent) silent = true;
     try {
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced ? Date.now() : 0}`);
+      const catalogParams = tab === "gifts" && giftCatalogQuery ? `&${giftCatalogQuery}` : "";
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced ? Date.now() : 0}${catalogParams}`);
       if (seq !== loadSeq.current) return;
-      marketCache.set(tab, { at: Date.now(), payload });
-      scopeDataRef.current[tab] = payload;
+      marketCache.set(activeScopeKey, { at: Date.now(), payload });
+      scopeDataRef.current[activeScopeKey] = payload;
       setData(payload);
       setError(null);
+      setLoadError(null);
       if (forced) sessionStorage.removeItem("mxm-market-dirty");
     } catch (cause) {
       if (seq !== loadSeq.current) return;
-      if (!warmPayload) setError(cause instanceof Error ? cause.message : "Не удалось загрузить рынок");
+      if (!warmPayload) {
+        const message = cause instanceof Error ? cause.message : "Не удалось загрузить рынок";
+        setError(message);
+        setLoadError(message);
+      }
       else console.error("market revalidate", cause);
     } finally { if (seq === loadSeq.current) setLoading(false); }
-  }, [tab]);
+  }, [tab, activeScopeKey, giftCatalogQuery]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) { setRemoteSearch(null); setSearchLoading(false); return; }
+    if (q.length < 2) return;
     let cancelled = false;
-    setSearchLoading(true);
     const timer = window.setTimeout(() => {
       void apiFetch<UnifiedSearch>(`/api/market/search?q=${encodeURIComponent(q)}`)
-        .then((result) => { if (!cancelled) setRemoteSearch(result); })
-        .catch((cause) => { if (!cancelled) console.error("market search", cause); })
-        .finally(() => { if (!cancelled) setSearchLoading(false); });
+        .then((result) => { if (!cancelled) setRemoteSearchState({ query: q, result }); })
+        .catch((cause) => {
+          if (!cancelled) {
+            console.error("market search", cause);
+            setRemoteSearchState({ query: q, result: { gifts: [], coins: [], collections: [], users: [] } });
+          }
+        });
     }, 240);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [query]);
@@ -130,8 +159,10 @@ export default function MarketPage() {
   const loadMoreGifts = useCallback(async () => {
     if (tab !== "gifts" || loadingMore || data.nextOffset == null || !data.marketSeed || query.trim().length >= 2) return;
     setLoadingMore(true);
+    setLoadMoreError(null);
     try {
-      const payload = await apiFetch<GiftPageChunk>(`/api/market?scope=gifts&lean=1&offset=${data.nextOffset}&limit=${GIFT_PAGE_SIZE}&seed=${encodeURIComponent(data.marketSeed)}`, { cacheMs: 0 });
+      const catalogParams = giftCatalogQuery ? `&${giftCatalogQuery}` : "";
+      const payload = await apiFetch<GiftPageChunk>(`/api/market?scope=gifts&lean=1&offset=${data.nextOffset}&limit=${GIFT_PAGE_SIZE}&seed=${encodeURIComponent(data.marketSeed)}${catalogParams}`, { cacheMs: 0 });
       if (activeTabRef.current !== "gifts") return;
       setData((current) => {
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
@@ -141,31 +172,33 @@ export default function MarketPage() {
           ...current,
           gifts: mergedGifts,
           collections: [...collectionMap.values()],
+          totalGifts: payload.totalGifts,
           nextOffset: payload.nextOffset,
           marketSeed: current.marketSeed || payload.marketSeed,
           bootstrapRecommended: false,
           genesis: current.genesis,
         };
-        scopeDataRef.current.gifts = next;
-        marketCache.set("gifts", { at: Date.now(), payload: next });
+        scopeDataRef.current[giftScopeKey] = next;
+        marketCache.set(giftScopeKey, { at: Date.now(), payload: next });
         return next;
       });
     } catch (cause) {
       console.error("gift market pagination", cause);
+      setLoadMoreError(cause instanceof Error ? cause.message : "Не удалось загрузить следующую страницу Gifts");
     } finally {
       setLoadingMore(false);
     }
-  }, [tab, loadingMore, data.nextOffset, data.marketSeed, query]);
+  }, [tab, loadingMore, data.nextOffset, data.marketSeed, query, giftCatalogQuery, giftScopeKey]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
-    if (!node || tab !== "gifts" || data.nextOffset == null || query.trim().length >= 2) return;
+    if (!node || tab !== "gifts" || data.nextOffset == null || query.trim().length >= 2 || loadMoreError) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreGifts();
     }, { rootMargin: "280px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [tab, data.nextOffset, query, loadMoreGifts]);
+  }, [tab, data.nextOffset, query, loadMoreError, loadMoreGifts]);
 
   const realtimeReload = useCallback(() => { void load(true); }, [load]);
 
@@ -176,8 +209,8 @@ export default function MarketPage() {
     setBootstrapError(null);
     try {
       await apiFetch<{ ok: boolean; listed: number }>("/api/gifts/bootstrap", { method: "POST", timeoutMs: 55_000 });
-      marketCache.delete("gifts");
-      delete scopeDataRef.current.gifts;
+      for (const key of marketCache.keys()) if (key.startsWith("gifts:")) marketCache.delete(key);
+      for (const key of Object.keys(scopeDataRef.current)) if (key.startsWith("gifts:")) delete scopeDataRef.current[key];
       if (activeTabRef.current === "gifts") await load(false);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Не удалось загрузить Telegram Gifts";
@@ -191,7 +224,8 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (tab !== "gifts" || loading || !data.bootstrapRecommended || data.totalGifts > 0 || bootstrapLoading || bootstrapError) return;
-    void bootstrapGifts();
+    const timer = window.setTimeout(() => void bootstrapGifts(), 0);
+    return () => window.clearTimeout(timer);
   }, [tab, loading, data.bootstrapRecommended, data.totalGifts, bootstrapLoading, bootstrapError, bootstrapGifts]);
 
   const filterOptions = data.filterOptions || { collections: [], models: [], backdrops: [], symbols: [] };
@@ -202,6 +236,16 @@ export default function MarketPage() {
   const watchedCoins = useMemo(() => new Set(data.watchlist.coinIds), [data.watchlist.coinIds]);
   const watchedCollections = useMemo(() => new Set(data.watchlist.giftCollections), [data.watchlist.giftCollections]);
   const cartIds = useMemo(() => new Set(data.cartIds), [data.cartIds]);
+  const hotCoins = useMemo(() => data.coins
+    .filter((coin) => coin.volume24h > 0 || coin.tradeCount24h > 0 || coin.change24h !== 0)
+    .slice()
+    .sort((a, b) => weightedCoinScore(b) - weightedCoinScore(a))
+    .slice(0, 5), [data.coins]);
+  const hotCollections = useMemo(() => data.collections
+    .filter((item) => item.volume24h > 0 || item.tradeCount24h > 0 || item.change24h !== 0)
+    .slice()
+    .sort((a, b) => weightedCollectionScore(b) - weightedCollectionScore(a))
+    .slice(0, 5), [data.collections]);
   const hasGiftFilters = collection !== "all" || model !== "all" || backdrop !== "all" || symbol !== "all" || priceBand !== "all" || giftSort !== "random" || giftView !== "all" || watchOnly;
   const advancedFilterCount = [collection !== "all", model !== "all", backdrop !== "all", symbol !== "all", priceBand !== "all", giftSort !== "random"].filter(Boolean).length;
 
@@ -239,13 +283,16 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (tab !== "gifts" || loading || loadingMore || query.trim().length >= 2) return;
-    if (!hasGiftFilters || gifts.length >= 12 || data.nextOffset == null) return;
-    void loadMoreGifts();
-  }, [tab, loading, loadingMore, query, hasGiftFilters, gifts.length, data.nextOffset, loadMoreGifts]);
+    if (!hasGiftFilters || gifts.length >= 12 || data.nextOffset == null || loadMoreError) return;
+    const timer = window.setTimeout(() => void loadMoreGifts(), 0);
+    return () => window.clearTimeout(timer);
+  }, [tab, loading, loadingMore, query, hasGiftFilters, gifts.length, data.nextOffset, loadMoreError, loadMoreGifts]);
 
   const coins = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    const source = deferredQuery.trim().length >= 2 && remoteSearch ? remoteSearch.coins : data.coins;
+    const source = deferredQuery.trim().length >= 2 && remoteSearch
+      ? remoteSearch.coins
+      : coinSort === "newest" ? data.newCoins : data.coins;
     return source.filter((coin) => {
       if (watchOnly && !watchedCoins.has(coin.id)) return false;
       return !q || `${coin.name} ${coin.symbol}`.toLowerCase().includes(q);
@@ -253,20 +300,24 @@ export default function MarketPage() {
       if (coinSort === "gainers") return b.change24h - a.change24h;
       if (coinSort === "volume") return b.volume24h - a.volume24h;
       if (coinSort === "marketcap") return b.marketCap - a.marketCap;
-      if (coinSort === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return weightedCoinScore(b) - weightedCoinScore(a);
+      const aBoost = a.boostedUntil && new Date(a.boostedUntil).getTime() > marketNow ? new Date(a.boostedUntil).getTime() : 0;
+      const bBoost = b.boostedUntil && new Date(b.boostedUntil).getTime() > marketNow ? new Date(b.boostedUntil).getTime() : 0;
+      if (aBoost !== bBoost) return bBoost - aBoost;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [data.coins, remoteSearch, deferredQuery, watchOnly, watchedCoins, coinSort]);
+  }, [data.coins, data.newCoins, remoteSearch, deferredQuery, watchOnly, watchedCoins, coinSort, marketNow]);
 
 
   function switchTab(next: "gifts" | "coins") {
     if (next === tab) return;
-    const remembered = scopeDataRef.current[next] || marketCache.get(next)?.payload;
+    const nextKey = next === "gifts" ? giftScopeKey : "coins";
+    const remembered = scopeDataRef.current[nextKey] || marketCache.get(nextKey)?.payload;
     setData(remembered || emptyMarketPayload());
     setLoading(!remembered);
     setQuery("");
-    setRemoteSearch(null);
-    setSearchLoading(false);
+    setRemoteSearchState(null);
+    setLoadError(null);
+    setLoadMoreError(null);
     setTab(next);
   }
 
@@ -274,9 +325,10 @@ export default function MarketPage() {
     setCollection("all"); setModel("all"); setBackdrop("all"); setSymbol("all"); setPriceBand("all"); setGiftSort("random"); setGiftView("all"); setWatchOnly(false);
   }
 
-  async function toggleWatch(kind: "coin" | "gift_collection", id: string, enabled: boolean) {
+  const toggleWatch = useCallback(async (kind: "coin" | "gift_collection", id: string, enabled: boolean) => {
     const key = `${kind}:${id}`;
-    if (watchBusy) return;
+    if (watchInFlight.current) return;
+    watchInFlight.current = true;
     setWatchBusy(key);
     try {
       await apiFetch("/api/watchlist", {
@@ -290,34 +342,40 @@ export default function MarketPage() {
             ? { ...current.watchlist, coinIds: enabled ? [...new Set([...current.watchlist.coinIds, id])] : current.watchlist.coinIds.filter((value) => value !== id) }
             : { ...current.watchlist, giftCollections: enabled ? [...new Set([...current.watchlist.giftCollections, id])] : current.watchlist.giftCollections.filter((value) => value !== id) },
         };
-        scopeDataRef.current[tab] = next;
-        marketCache.set(tab, { at: Date.now(), payload: next });
+        const activeKey = activeScopeKeyRef.current;
+        scopeDataRef.current[activeKey] = next;
+        marketCache.set(activeKey, { at: Date.now(), payload: next });
         return next;
       });
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось обновить избранное");
     } finally {
+      watchInFlight.current = false;
       setWatchBusy(null);
     }
-  }
+  }, []);
 
-  async function toggleCart(gift: GiftAsset, enabled: boolean) {
-    if (cartBusy) return;
+  const toggleCart = useCallback(async (gift: GiftAsset, enabled: boolean) => {
+    if (cartInFlight.current) return;
+    cartInFlight.current = true;
     setCartBusy(gift.virtualGiftId);
     try {
       await apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: enabled ? "add" : "remove", virtualGiftId: gift.virtualGiftId }) });
       setData((current) => {
         const next = { ...current, cartIds: enabled ? [...new Set([...current.cartIds, gift.virtualGiftId])] : current.cartIds.filter((id) => id !== gift.virtualGiftId) };
-        scopeDataRef.current[tab] = next;
+        scopeDataRef.current[activeScopeKeyRef.current] = next;
         return next;
       });
       marketCache.clear();
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось обновить корзину");
-    } finally { setCartBusy(null); }
-  }
+    } finally {
+      cartInFlight.current = false;
+      setCartBusy(null);
+    }
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -343,10 +401,12 @@ export default function MarketPage() {
       {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">
         <div className="mxm-hscroll gap-2">
           {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">floor {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
-          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{user.photoUrl ? <img src={user.photoUrl} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
+          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{user.photoUrl ? <Image unoptimized src={user.photoUrl} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
           {tab === "gifts" ? remoteSearch.coins.slice(0, 4).map((coin) => <Link key={`coin:${coin.id}`} href={`/coin/${coin.id}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">${coin.symbol}</span><span className="ml-2 text-[var(--muted)]">{percent(coin.change24h)}</span></Link>) : null}
         </div>
       </div> : null}
+
+      <HotNowStrip tab={tab} coins={hotCoins} collections={hotCollections} loading={loading} />
 
       {tab === "gifts" ? (
         <>
@@ -359,7 +419,7 @@ export default function MarketPage() {
             <button type="button" onClick={() => setFiltersOpen(true)} className={`mxm-market-filter-trigger ${advancedFilterCount ? "is-active" : ""}`}>
               <SlidersHorizontal size={14} /><span>Фильтры</span>{advancedFilterCount ? <b>{advancedFilterCount}</b> : null}
             </button>
-            <span className="mxm-market-result-count">{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация…" : searchLoading ? "Поиск…" : `${gifts.length} ${gifts.length === 1 ? "лот" : "лотов"}${watchOnly ? " · избранное" : ""}`}</span>
+            <span className="mxm-market-result-count">{loading ? "Загрузка…" : bootstrapLoading ? "Синхронизация…" : searchLoading ? "Поиск…" : `${gifts.length}${query.trim().length < 2 && !watchOnly ? ` из ${data.totalGifts}` : ""} лотов${watchOnly ? " · избранное" : ""}`}</span>
             {hasGiftFilters ? <button onClick={resetGiftFilters} className="mxm-market-clear">Сбросить</button> : null}
           </div>
           <GiftFiltersDrawer
@@ -380,19 +440,23 @@ export default function MarketPage() {
         </>
       ) : (
         <div className="mxm-view-tabs mxm-hscroll mb-4 gap-5">
-          {(["gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`mxm-tab-chip capitalize ${coinSort === value ? "is-active" : ""}`}>{value === "marketcap" ? "Капитализация" : value === "trending" ? "В тренде" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
+          {(["gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`mxm-tab-chip capitalize ${coinSort === value ? "is-active" : ""}`}>{value === "marketcap" ? "Капитализация" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
           <Link href="/create" className="mxm-filter-chip is-active"><Plus size={14} />Создать</Link>
         </div>
       )}
 
-      {error ? <div className="mb-3 flex items-center justify-between gap-3 mxm-alert mxm-alert-error"><span>{error}</span>{tab === "gifts" && data.totalGifts === 0 ? <button disabled={bootstrapLoading} onClick={() => { setError(null); setBootstrapError(null); void bootstrapGifts(); }} className="shrink-0 rounded-xl border border-[#704149] px-2.5 py-1.5 text-[10px] font-medium text-[#ffc2c8] disabled:opacity-50">Повторить</button> : null}</div> : null}
+      {error ? <div className="mb-3 flex items-center justify-between gap-3 mxm-alert mxm-alert-error">
+        <span>{error}</span>
+        {loadError ? <button disabled={loading} onClick={() => void load(false)} className="shrink-0 rounded-xl border border-[#704149] px-2.5 py-1.5 text-[10px] font-medium text-[#ffc2c8] disabled:opacity-50">{loading ? "Загрузка…" : "Повторить"}</button>
+          : tab === "gifts" && data.totalGifts === 0 ? <button disabled={bootstrapLoading} onClick={() => { setError(null); setBootstrapError(null); void bootstrapGifts(); }} className="shrink-0 rounded-xl border border-[#704149] px-2.5 py-1.5 text-[10px] font-medium text-[#ffc2c8] disabled:opacity-50">Повторить</button> : null}
+      </div> : null}
 
       {tab === "gifts" ? (
-        <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="h-12 text-center text-[9px] text-[var(--muted)]">{loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
+        <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-center text-[9px] text-[var(--muted)]">{loadMoreError ? <div className="flex items-center gap-2"><span>{loadMoreError}</span><button type="button" onClick={() => void loadMoreGifts()} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px] text-white">Повторить</button></div> : loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
       ) : (
         <div>
           <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{loading ? "Загрузка…" : `${coins.length} активов`}</span></div>
-          {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={(enabled) => toggleWatch("coin", coin.id, enabled)} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное." : "Коинов пока нет."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
+          {loading ? <RowsSkeleton /> : coins.length ? <div className="divide-y divide-[var(--border-soft)]">{coins.map((coin, index) => <CoinRow key={coin.id} coin={coin} index={index + 1} watched={watchedCoins.has(coin.id)} busy={watchBusy === `coin:${coin.id}`} onWatch={toggleWatch} />)}</div> : <EmptyMarket icon={<BarChart3 />} title={watchOnly ? "В избранном нет коинов" : "Коинов пока нет"} text={watchOnly ? "Добавь коин в избранное." : "Коинов пока нет."} action={<Link href={watchOnly ? "/market" : "/create"} onClick={watchOnly ? () => setWatchOnly(false) : undefined} className={`inline-flex rounded-2xl px-4 py-2.5 text-sm font-semibold ${watchOnly ? "bg-[var(--panel-3)]" : "bg-[var(--accent)] text-black"}`}>{watchOnly ? "Показать всё" : "Создать коин"}</Link>} />}
         </div>
       )}
 
@@ -401,17 +465,38 @@ export default function MarketPage() {
   );
 }
 
-function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (enabled: boolean) => void }) {
+const CoinRow = memo(function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (kind: "coin" | "gift_collection", id: string, enabled: boolean) => void }) {
   const flowTotal = coin.buyVolume24h + coin.sellVolume24h;
   const buyShare = flowTotal > 0 ? Math.round((coin.buyVolume24h / flowTotal) * 100) : 0;
-  return <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto]">
-    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% buy</p></div></Link>
+  const boosted = Boolean(coin.boostedUntil);
+  return <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto] ${boosted ? "rounded-[16px] border border-[rgba(198,170,88,.24)] bg-[linear-gradient(90deg,rgba(198,170,88,.11),rgba(198,170,88,.025))] px-2" : ""}`}>
+    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}{boosted ? <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[rgba(198,170,88,.16)] px-1.5 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-[var(--accent)]"><Sparkles size={8} />Boost</span> : null}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% buy</p></div></Link>
     <Link href={`/coin/${coin.id}`} className="text-right md:text-left"><p className="text-xs font-medium">{price(coin.currentPrice)}</p><p className={`text-[10px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Капитализация</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Объём 24ч</p><p className="mt-0.5 text-xs">{money(coin.volume24h)}</p></Link>
-    <button disabled={busy} onClick={() => onWatch(!watched)} aria-label={watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center rounded-2xl ${watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={watched ? "currentColor" : "none"} /></button>
+    <button disabled={busy} onClick={() => onWatch("coin", coin.id, !watched)} aria-label={watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center rounded-2xl ${watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={watched ? "currentColor" : "none"} /></button>
   </div>;
-}
+});
+
+const HotNowStrip = memo(function HotNowStrip({ tab, coins, collections, loading }: { tab: "gifts" | "coins"; coins: Coin[]; collections: GiftCollection[]; loading: boolean }) {
+  const hasItems = tab === "gifts" ? collections.length > 0 : coins.length > 0;
+  return <section className="mb-4 border-y border-[var(--border-soft)] py-2.5" aria-label="Hot now">
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[.12em]"><Flame size={14} className="text-[var(--accent)]" />HOT NOW</span>
+      <span className="truncate text-[9px] text-[var(--muted)]">объём · сделки · участники · импульс</span>
+    </div>
+    {loading ? <div className="mxm-skeleton h-[62px] rounded-[15px]" /> : hasItems ? <div className="mxm-hscroll gap-2">
+      {tab === "gifts" ? collections.map((item, index) => <Link key={item.baseName} href={`/collections/${encodeURIComponent(item.baseName)}`} className="flex min-w-[220px] shrink-0 items-center justify-between gap-3 rounded-[15px] bg-[var(--panel-2)] px-3 py-2.5">
+        <div className="min-w-0"><p className="truncate text-[11px] font-medium"><span className="mr-1.5 text-[9px] text-[var(--muted)]">#{index + 1}</span>{item.baseName}</p><p className="mt-1 text-[9px] text-[var(--muted)]">{item.tradeCount24h} сделок · {item.holderCount} держателей</p></div>
+        <div className="shrink-0 text-right"><p className="text-[10px] font-medium">{money(item.volume24h)}</p><p className={`mt-1 text-[9px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</p></div>
+      </Link>) : coins.map((coin, index) => <Link key={coin.id} href={`/coin/${coin.id}`} className="flex min-w-[220px] shrink-0 items-center gap-2.5 rounded-[15px] bg-[var(--panel-2)] px-3 py-2.5">
+        <span className="text-[9px] text-[var(--muted)]">#{index + 1}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} />
+        <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><p className="mt-1 text-[9px] text-[var(--muted)]">{coin.tradeCount24h} сделок · {coin.holderCount} держателей</p></div>
+        <div className="shrink-0 text-right"><p className="text-[10px] font-medium">{money(coin.volume24h)}</p><p className={`mt-1 text-[9px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></div>
+      </Link>)}
+    </div> : <p className="py-2 text-[10px] text-[var(--muted)]">Недостаточно рыночной активности для рейтинга.</p>}
+  </section>;
+});
 
 function EmptyMarket({ icon, title, text, action }: { icon: React.ReactNode; title: string; text: string; action: React.ReactNode }) { return <div className="p-7 text-center"><div className="mx-auto grid h-8 w-8 place-items-center text-[var(--muted)]">{icon}</div><p className="mt-3 text-xs font-medium">{title}</p><p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-[var(--muted)]">{text}</p><div className="mt-4">{action}</div></div>; }
 function GridSkeleton() { return <div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{Array.from({ length: 8 }, (_, index) => <div key={index}><div className="mxm-skeleton aspect-square rounded-[18px]" /><div className="mt-2.5 px-0.5"><div className="mxm-skeleton h-3.5 w-2/3 rounded" /><div className="mxm-skeleton mt-2 h-3 w-1/2 rounded" /></div></div>)}</div>; }

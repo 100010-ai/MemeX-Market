@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, BadgeCheck, CircleDollarSign, Eye, ShieldCheck } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CircleDollarSign, Scale, ShieldCheck } from "lucide-react";
 
 const items = [
   {
@@ -8,19 +8,19 @@ const items = [
     text: "TON внутри MXM — игровая единица учёта. Это не Toncoin, она не выводится в блокчейн, не обменивается на деньги и не имеет гарантированной денежной стоимости.",
   },
   {
-    icon: Eye,
-    title: "Реклама только по желанию",
-    text: "Показ rewarded-рекламы запускается только после явного нажатия пользователя. Отказ от просмотра не блокирует рынок, портфель, торговлю, профиль или другие основные функции MXM.",
+    icon: Scale,
+    title: "Рыночная симуляция",
+    text: "Цены, сделки, мемкоины и коллекционные предметы существуют внутри приложения. Они не являются инвестиционным продуктом и не обещают доход в реальной валюте.",
   },
   {
     icon: BadgeCheck,
-    title: "Награда за просмотр, не за клик",
-    text: "Награда начисляется только после завершённого показа и серверного подтверждения рекламной сети. Переход по рекламному объявлению не является условием получения награды.",
+    title: "Честная торговля",
+    text: "Манипуляции объёмом, круговые сделки, автоматизированный фарм и использование нескольких аккаунтов для обхода лимитов могут привести к ограничению аккаунта.",
   },
   {
     icon: ShieldCheck,
-    title: "Прозрачные начисления",
-    text: "Денежных выплат в MXM нет. Серверно подтверждённые рекламные начисления публикуются в отдельной обезличенной истории; рекламные бонусы используются только внутри продукта.",
+    title: "Защита аккаунта",
+    text: "Вход подтверждается данными Telegram Mini App. Никому не передавайте коды, токены бота или данные своей Telegram-сессии; команда MXM не запрашивает их в личных сообщениях.",
   },
 ];
 
@@ -33,14 +33,14 @@ export default function AboutPage() {
         </Link>
         <div>
           <h1 className="text-[17px] font-semibold tracking-[-.025em]">О MXM</h1>
-          <p className="mt-0.5 text-[10px] text-[var(--muted)]">Правила продукта и рекламных наград</p>
+          <p className="mt-0.5 text-[10px] text-[var(--muted)]">Виртуальная экономика и правила продукта</p>
         </div>
       </div>
 
       <section className="mxm-card p-4">
         <p className="text-[12px] font-semibold">MXM — симулятор рынка цифровых коллекционных предметов</p>
         <p className="mt-2 text-[10px] leading-5 text-[var(--muted)]">
-          Пользователь может изучать коллекции, собирать виртуальный портфель, совершать внутриигровые сделки и использовать дополнительные необязательные механики. Реклама не является условием доступа к основному функционалу.
+          Пользователь может изучать коллекции, собирать виртуальный портфель и совершать внутриигровые сделки. Все активы и расчётные показатели MXM относятся только к игровой экономике приложения.
         </p>
       </section>
 
@@ -57,14 +57,6 @@ export default function AboutPage() {
           </section>
         ))}
       </div>
-
-      <section className="mxm-card mt-3 p-4">
-        <p className="text-[11px] font-semibold">Публичная проверка</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link href="/reward-confirmations" className="rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[9px] font-medium">Подтверждения наград</Link>
-          <Link href="/moderation" className="rounded-[12px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[9px] font-medium">Информация для модерации</Link>
-        </div>
-      </section>
     </div>
   );
 }

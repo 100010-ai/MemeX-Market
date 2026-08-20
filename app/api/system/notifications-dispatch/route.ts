@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
+import { safeSecretEquals } from "@/lib/security";
+
+type DbRow = Record<string, unknown>;
 
 function authorized(request: Request) {
   const secret = String(process.env.CRON_SECRET || "").trim();
   if (!secret) return false;
   const auth = request.headers.get("authorization") || "";
-  return auth === `Bearer ${secret}` || request.headers.get("x-mxm-cron-secret") === secret;
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  return safeSecretEquals(bearer, secret) || safeSecretEquals(request.headers.get("x-mxm-cron-secret") || "", secret);
 }
 
 function currentPrice(kind: string, id: string | null, collection: string | null, maps: { coins: Map<string, number>; gifts: Map<string, number>; collections: Map<string, number> }) {
@@ -32,10 +36,13 @@ async function evaluatePriceAlerts() {
   ]);
   const error = coinResult.error || giftResult.error || collectionResult.error;
   if (error) throw error;
+  const coinRows = (coinResult.data || []) as DbRow[];
+  const giftRows = (giftResult.data || []) as DbRow[];
+  const collectionRows = (collectionResult.data || []) as DbRow[];
   const maps = {
-    coins: new Map((coinResult.data || []).map((r: any) => [String(r.id), Number(r.current_price)])),
-    gifts: new Map((giftResult.data || []).flatMap((r: any) => { const raw = r.listing_price ?? r.reference_price ?? r.collection_floor; return raw == null ? [] : [[String(r.virtual_gift_id), Number(raw)] as [string, number]]; })),
-    collections: new Map((collectionResult.data || []).filter((r: any) => r.floor_price != null).map((r: any) => [String(r.base_name), Number(r.floor_price)])),
+    coins: new Map(coinRows.map((row) => [String(row.id), Number(row.current_price)])),
+    gifts: new Map(giftRows.flatMap((row) => { const raw = row.listing_price ?? row.reference_price ?? row.collection_floor; return raw == null ? [] : [[String(row.virtual_gift_id), Number(raw)] as [string, number]]; })),
+    collections: new Map(collectionRows.filter((row) => row.floor_price != null).map((row) => [String(row.base_name), Number(row.floor_price)])),
   };
   let triggered = 0;
   for (const row of rows) {

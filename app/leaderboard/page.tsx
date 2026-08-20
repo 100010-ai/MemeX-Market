@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Coins, Crown, Gift, LineChart, Trophy, TrendingUp } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -43,12 +44,28 @@ export default function LeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    apiFetch<{ players: LeaderboardPlayer[]; meRank: number }>(`/api/leaderboard?board=${board}`)
-      .then((result) => { setPlayers(result.players); setMeRank(result.meRank); })
-      .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить рейтинг"))
-      .finally(() => setLoading(false));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      void apiFetch<{ players: LeaderboardPlayer[]; meRank: number }>(`/api/leaderboard?board=${board}`, { signal: controller.signal })
+        .then((result) => {
+          if (!controller.signal.aborted) {
+            setPlayers(result.players);
+            setMeRank(result.meRank);
+          }
+        })
+        .catch((cause) => {
+          if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Не удалось загрузить рейтинг");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [board]);
 
   return (
@@ -76,7 +93,7 @@ export default function LeaderboardPage() {
               return <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 py-3 ${player.isMe ? "border-l-2 border-[var(--accent)] pl-2" : ""}`}>
                 <div className={`text-center text-xs font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>{player.rank}</div>
                 <div className="flex min-w-0 items-center gap-2.5">
-                  {player.photoUrl ? <img src={player.photoUrl} alt="" className="h-9 w-9 rounded-2xl object-cover" /> : <span className="inline-flex h-9 w-7 items-center justify-center text-xs font-semibold text-[#c8cdd3]">{player.name.replace("@", "").slice(0, 1).toUpperCase()}</span>}
+                  {player.photoUrl ? <Image src={player.photoUrl} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-2xl object-cover" /> : <span className="inline-flex h-9 w-7 items-center justify-center text-xs font-semibold text-[#c8cdd3]">{player.name.replace("@", "").slice(0, 1).toUpperCase()}</span>}
                   <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}{player.isMe ? <span className="ml-1.5 text-[9px] text-[var(--accent)]">ВЫ</span> : null}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} подарков · {player.coinTrades + player.giftTrades} сделок</p></div>
                 </div>
                 <div className="text-right"><p className={`text-xs font-semibold ${pnlBoard ? value >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]" : ""}`}>{value > 0 && pnlBoard ? "+" : ""}{money(value)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{boardCaption(board)}</p></div>

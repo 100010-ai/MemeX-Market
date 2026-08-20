@@ -13,7 +13,6 @@ type Payload = {
   daily: Daily[];
   risks: {
     washPairs: Array<{ a: string; b: string; aName: string; bName: string; count: number; volume: number }>;
-    repeatedAdClaims: Array<{ profileId: string; name: string; count: number }>;
     topRecipients: Array<{ profileId: string; name: string; amount: number }>;
     errors: Array<{ route: string; error_name: string; message: string; count: number; affected_users: number; first_seen_at: string; last_seen_at: string }>;
   };
@@ -21,14 +20,14 @@ type Payload = {
   checkedAt: string;
 };
 
-const flagLabels: Record<keyof RuntimeFeatureFlags, string> = { gifts: "Gifts trading", memecoins: "Memecoins", referrals: "Referrals", rewardedAds: "Rewarded Ads", sponsoredTasks: "Sponsored Tasks", stars: "Telegram Stars" };
+const flagLabels: Record<keyof RuntimeFeatureFlags, string> = { gifts: "Gifts trading", memecoins: "Memecoins", referrals: "Referrals", stars: "Telegram Stars" };
 const n = (value: unknown) => Number(value || 0);
 const fmt = (value: unknown) => n(value).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
 export default function EconomyRiskPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [draft, setDraft] = useState<RuntimeConfig | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -38,9 +37,16 @@ export default function EconomyRiskPage() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось загрузить Economy & Risk"); }
     finally { setBusy(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch<Payload>("/api/admin/economy-risk", { cacheMs: 0 })
+      .then((result) => { if (!cancelled) { setData(result); setDraft(result.runtime); } })
+      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось загрузить Economy & Risk"); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, []);
 
-  const riskCount = useMemo(() => data ? data.risks.washPairs.length + data.risks.repeatedAdClaims.length + data.risks.errors.filter((row) => Number(row.count) >= 5).length : 0, [data]);
+  const riskCount = useMemo(() => data ? data.risks.washPairs.length + data.risks.errors.filter((row) => Number(row.count) >= 5).length : 0, [data]);
 
   async function saveRuntime() {
     if (!draft || busy) return;
@@ -70,11 +76,10 @@ export default function EconomyRiskPage() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
-          <section className="control-panel overflow-hidden"><div className="control-section-title">Экономика 7 дней <span>ledger, не расчёт из UI</span></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-[10px]"><thead className="text-[var(--muted)]"><tr><th className="p-3">Дата</th><th>Emission</th><th>Burned</th><th>Net</th></tr></thead><tbody className="divide-y divide-[var(--border-soft)]">{data.daily.map((row)=><tr key={row.date}><td className="p-3">{row.date}</td><td className="text-[var(--positive)]">+{fmt(row.emission)}</td><td className="text-[var(--negative)]">-{fmt(row.burned)}</td><td className={row.net>=0?"text-[var(--positive)]":"text-[var(--negative)]"}>{fmt(row.net)}</td></tr>)}</tbody></table></div><div className="grid grid-cols-3 border-t border-[var(--border-soft)]"><Mini label="Ads 24h" value={fmt(m.ads24h)}/><Mini label="Referrals 24h" value={fmt(m.referrals24h)}/><Mini label="Coin fees 24h" value={fmt(m.coinFees24h)}/></div></section>
+          <section className="control-panel overflow-hidden"><div className="control-section-title">Экономика 7 дней <span>агрегация ledger на сервере</span></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-[10px]"><thead className="text-[var(--muted)]"><tr><th className="p-3">Дата</th><th>Emission</th><th>Burned</th><th>Net</th></tr></thead><tbody className="divide-y divide-[var(--border-soft)]">{data.daily.map((row)=><tr key={row.date}><td className="p-3">{row.date}</td><td className="text-[var(--positive)]">+{fmt(row.emission)}</td><td className="text-[var(--negative)]">-{fmt(row.burned)}</td><td className={row.net>=0?"text-[var(--positive)]":"text-[var(--negative)]"}>{fmt(row.net)}</td></tr>)}</tbody></table></div><div className="grid grid-cols-2 border-t border-[var(--border-soft)]"><Mini label="Referrals 24h" value={fmt(m.referrals24h)}/><Mini label="Coin fees 24h" value={fmt(m.coinFees24h)}/></div></section>
 
           <section className="control-panel overflow-hidden"><div className="control-section-title"><span className="!text-[11px] !font-semibold !text-white">Risk signals</span><ShieldAlert size={14}/></div>
             <RiskGroup title="Повторяющиеся Gift-пары" empty="Подозрительных пар за 24ч не найдено.">{data.risks.washPairs.map((row)=><div key={`${row.a}:${row.b}`} className="flex items-center justify-between gap-3 py-2.5 text-[10px]"><span className="min-w-0 truncate">{row.aName} ↔ {row.bName}</span><span className="shrink-0 text-[var(--muted)]">{row.count} сделок · {fmt(row.volume)} TON</span></div>)}</RiskGroup>
-            <RiskGroup title="AdsGram claims выше дневного лимита" empty="Аномалий AdsGram не найдено.">{data.risks.repeatedAdClaims.map((row)=><div key={row.profileId} className="flex items-center justify-between gap-3 py-2.5 text-[10px]"><Link href={`/u/${row.profileId}`} className="truncate">{row.name}</Link><span className="text-[var(--negative)]">{row.count} claims</span></div>)}</RiskGroup>
             <RiskGroup title="Крупнейшие начисления 24ч" empty="Начислений нет.">{data.risks.topRecipients.map((row)=><div key={row.profileId} className="flex items-center justify-between gap-3 py-2.5 text-[10px]"><Link href={`/u/${row.profileId}`} className="truncate">{row.name}</Link><span>+{fmt(row.amount)} TON</span></div>)}</RiskGroup>
             <RiskGroup title="Error Inbox" empty="Ошибок не зарегистрировано.">{data.risks.errors.slice(0,12).map((row)=><div key={`${row.route}:${row.error_name}:${row.message}`} className="py-2.5 text-[10px]"><div className="flex justify-between gap-3"><span className="truncate font-medium">{row.route} · {row.error_name}</span><span className={Number(row.count)>=5?"text-[var(--negative)]":"text-[var(--muted)]"}>×{row.count}</span></div><p className="mt-1 line-clamp-2 text-[9px] text-[var(--muted)]">{row.message}</p></div>)}</RiskGroup>
           </section>

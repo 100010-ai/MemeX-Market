@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy, UserRound } from "lucide-react";
@@ -30,7 +31,8 @@ const routeTitles: Array<[string, string]> = [
   ["/profile", "Профиль"],
   ["/watchlist", "Избранное"],
   ["/notifications", "Уведомления"],
-  ["/support", "Пополнить"],
+  ["/store", "MXM Store"],
+  ["/support", "MXM Store"],
   ["/referrals", "Рефералы"],
   ["/cart", "Корзина"],
   ["/create", "Создать коин"],
@@ -45,7 +47,7 @@ function currentTitle(pathname: string) {
 
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
   const cls = size === "md" ? "h-10 w-10 rounded-full" : "h-8 w-8 rounded-full";
-  if (photoUrl) return <img src={photoUrl} alt="Профиль Telegram" className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
+  if (photoUrl) return <Image unoptimized src={photoUrl} alt="Профиль Telegram" width={size === "md" ? 40 : 32} height={size === "md" ? 40 : 32} className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
   return <span className={`grid ${cls} place-items-center bg-white/[.045] text-[var(--muted)] ring-1 ring-white/[.06]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 
@@ -54,17 +56,18 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   const { profile, loading, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const title = currentTitle(pathname);
+  const profileId = profile?.id;
 
   useEffect(() => {
     let cancelled = false;
-    if (!profile) { setRuntimeConfig(null); return; }
+    if (!profileId) return;
     apiFetch<{ config: RuntimeConfig }>("/api/runtime-config", { cacheMs: 15_000 })
       .then((payload) => { if (!cancelled) setRuntimeConfig(payload.config); })
       .catch((cause) => console.error("runtime config", cause));
     return () => { cancelled = true; };
-  }, [profile?.id]);
+  }, [profileId]);
 
-  if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/moderation" || pathname === "/reward-confirmations") return <>{children}</>;
+  if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/terms" || pathname === "/paysupport") return <>{children}</>;
 
   if (loading) {
     return <div className="mx-auto min-h-[100dvh] max-w-md px-3 pt-3"><div className="mxm-skeleton h-12 rounded-[18px]" /><div className="mxm-skeleton mt-3 h-40 rounded-[22px]" /><div className="mt-3 grid grid-cols-2 gap-2.5"><div className="mxm-skeleton aspect-square rounded-[20px]" /><div className="mxm-skeleton aspect-square rounded-[20px]" /></div></div>;
@@ -102,13 +105,13 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         </Link>
       </aside>
 
-      <div className="min-w-0 pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-0">
-        <header className="mxm-topbar sticky top-0 z-40">
+      <div className="mxm-shell-content min-w-0 lg:pb-0">
+        <header className="mxm-topbar safe-top sticky top-0 z-40">
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-5">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
-            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/support" aria-label="Пополнить Stars" className="mxm-top-plus"><Plus size={14}/></Link></div>
+            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="MXM Store" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
         <main key={pathname} className="mxm-page-enter min-h-0 px-3 py-4 md:px-5 md:py-5">{children}</main>

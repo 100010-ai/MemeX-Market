@@ -1,4 +1,4 @@
-# MXM v0.9 Architecture
+# MXM v0.56 Architecture
 
 ## Product boundary
 
@@ -49,11 +49,11 @@ Supabase Realtime is an invalidation signal only. After a market event, the clie
 
 ### Buy Now
 
-`buy_virtual_gift` is the single-item transactional purchase path.
+`buy_virtual_gift_v2` is the single-item transactional purchase path.
 
 ### Cart
 
-`market_cart_items` stores the server-side cart. `buy_virtual_gift_cart`:
+`market_cart_items` stores the server-side cart. `buy_virtual_gift_cart_v2`:
 
 - accepts 1–20 unique Gift IDs;
 - locks buyer/listings/sellers in deterministic order;

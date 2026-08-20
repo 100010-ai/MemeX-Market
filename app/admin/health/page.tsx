@@ -17,7 +17,6 @@ const labels: Record<string, string> = {
   telegramBot: "Telegram Bot API",
   telegramWebhook: "Telegram webhook",
   tonApi: "TonAPI",
-  adsGram: "AdsGram",
   cron: "Cron / workers",
   giftSync: "Gift sync",
 };
@@ -35,7 +34,14 @@ export default function AdminHealthPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch<HealthPayload>("/api/admin/health")
+      .then((result) => { if (!cancelled) setData(result); })
+      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось получить состояние систем"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   return <main className="control-main admin-main min-h-screen">
     <header className="control-topbar admin-topbar">

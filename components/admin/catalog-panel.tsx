@@ -49,8 +49,13 @@ export function AdminCatalogPanel() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void apiFetch<{ items: InventoryItem[] }>("/api/admin/inventory")
+      .then((data) => { if (!cancelled) setItems(data.items); })
+      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось загрузить инвентарь каталога"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const runSync = useCallback(async () => {
     setSyncing(true);

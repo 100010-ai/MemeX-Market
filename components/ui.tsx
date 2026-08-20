@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -28,7 +29,8 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
 
 export function CoinAvatar({ symbol, imageUrl = null, size = "md" }: { symbol: string; imageUrl?: string | null; size?: "sm" | "md" | "lg" }) {
   const sizes = size === "sm" ? "h-7 w-7 text-[9px]" : size === "lg" ? "h-10 w-10 text-xs" : "h-8 w-8 text-[10px]";
-  if (imageUrl) return <img src={imageUrl} alt={`${symbol} logo`} loading="lazy" decoding="async" className={`shrink-0 rounded-full object-cover ${sizes}`} />;
+  const pixels = size === "sm" ? 28 : size === "lg" ? 40 : 32;
+  if (imageUrl) return <Image src={imageUrl} alt={`${symbol} logo`} width={pixels} height={pixels} unoptimized loading="lazy" decoding="async" className={`shrink-0 rounded-full object-cover ${sizes}`} />;
   return <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-white/[.035] font-semibold tracking-[-.03em] text-[#c8cdd3] ring-1 ring-white/[.06] ${sizes}`}>{symbol.slice(0, 4)}</span>;
 }
 

@@ -3,7 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 
-const preferenceKeys = ["gift_sold", "gift_offer", "offer_resolved", "price_alert", "coin_move", "sponsored_task", "referral_reward", "promo", "telegram_push"] as const;
+const preferenceKeys = ["gift_sold", "gift_offer", "offer_resolved", "price_alert", "coin_move", "referral_reward", "promo", "telegram_push"] as const;
 
 export async function GET() {
   const profile = await requireProfile();

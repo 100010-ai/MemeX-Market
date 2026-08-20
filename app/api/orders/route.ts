@@ -17,27 +17,28 @@ export async function GET() {
     ]);
     const firstError = outgoingResult.error || ownedResult.error || listingsResult.error;
     if (firstError) throw firstError;
-    const ownedIds = (ownedResult.data || []).map((row: any) => row.id);
+    type DbRow = Record<string, unknown>;
+    const ownedIds = ((ownedResult.data || []) as DbRow[]).map((row) => row.id);
     const incomingResult = ownedIds.length
       ? await supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").in("virtual_gift_id", ownedIds).eq("status", "pending").order("amount", { ascending: false })
-      : { data: [] as any[], error: null };
+      : { data: [] as DbRow[], error: null };
     if (incomingResult.error) throw incomingResult.error;
 
-    const allOffers = [...(outgoingResult.data || []), ...(incomingResult.data || [])];
-    const giftIds = [...new Set(allOffers.map((row: any) => String(row.virtual_gift_id)))];
-    const buyerIds = [...new Set(allOffers.map((row: any) => String(row.buyer_profile_id)))];
+    const allOffers = [...((outgoingResult.data || []) as DbRow[]), ...((incomingResult.data || []) as DbRow[])];
+    const giftIds = [...new Set(allOffers.map((row) => String(row.virtual_gift_id)))];
+    const buyerIds = [...new Set(allOffers.map((row) => String(row.buyer_profile_id)))];
     const [giftRowsResult, buyersResult] = await Promise.all([
-      giftIds.length ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null) : Promise.resolve({ data: [] as any[], error: null }),
-      buyerIds.length ? supabase.from("profiles").select("id,username,first_name").in("id", buyerIds) : Promise.resolve({ data: [] as any[], error: null }),
+      giftIds.length ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null) : Promise.resolve({ data: [] as DbRow[], error: null }),
+      buyerIds.length ? supabase.from("profiles").select("id,username,first_name").in("id", buyerIds) : Promise.resolve({ data: [] as DbRow[], error: null }),
     ]);
     if (giftRowsResult.error || buyersResult.error) throw giftRowsResult.error || buyersResult.error;
-    const gifts = new Map<string, GiftAsset>((giftRowsResult.data || []).map((row: any) => [String(row.virtual_gift_id), mapGift(row)] as [string, GiftAsset]));
-    const names = new Map((buyersResult.data || []).map((person: any) => {
+    const gifts = new Map<string, GiftAsset>(((giftRowsResult.data || []) as DbRow[]).map((row) => [String(row.virtual_gift_id), mapGift(row)] as [string, GiftAsset]));
+    const names = new Map(((buyersResult.data || []) as DbRow[]).map((person) => {
       const name = person.username ? `@${person.username}` : person.first_name;
       if (typeof name !== "string" || !name) throw new Error(`Buyer profile ${person.id} has no display name`);
       return [String(person.id), name] as const;
     }));
-    const mapOffer = (offer: any) => {
+    const mapOffer = (offer: DbRow) => {
       const gift = gifts.get(String(offer.virtual_gift_id));
       if (!gift) return null;
       return {
@@ -46,8 +47,8 @@ export async function GET() {
         buyerName: names.get(String(offer.buyer_profile_id)) || "Игрок", ownerId: gift.ownerId, ownerName: gift.ownerName, gift,
       };
     };
-    const outgoing = (outgoingResult.data || []).map(mapOffer).filter(Boolean);
-    const incoming = (incomingResult.data || []).map(mapOffer).filter(Boolean);
+    const outgoing = ((outgoingResult.data || []) as DbRow[]).map(mapOffer).filter(Boolean);
+    const incoming = ((incomingResult.data || []) as DbRow[]).map(mapOffer).filter(Boolean);
     return NextResponse.json({ outgoing, incoming, listings: (listingsResult.data || []).map(mapGift) });
   } catch (error) {
     console.error("orders", error);

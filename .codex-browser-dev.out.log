@@ -1,0 +1,22 @@
+▲ Next.js 16.3.1 (Turbopack)
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+- Environments: .env.local, .env
+✓ Ready in 594ms
+✓ Running next.config.ts took 36ms
+Creating turbopack project { dir: 'D:\\memex-telegram-miniapp-v0.2', testMode: true }
+
+✓ Generated AGENTS.md and CLAUDE.md for AI agents. Set `agentRules: false` in next.config to disable.
+ GET /market 200 in 749ms (next.js: 507ms, application-code: 243ms)
+ GET /api/me 401 in 330ms (next.js: 304ms, application-code: 25ms)
+ POST /api/auth/dev 403 in 165ms (next.js: 158ms, application-code: 7ms)
+ GET /market 200 in 41ms (next.js: 6ms, application-code: 35ms)
+ GET /api/me 401 in 17ms (next.js: 5ms, application-code: 13ms)
+✓ Compiled in 108ms
+ GET /market 200 in 64ms (next.js: 7ms, application-code: 56ms)
+ GET /market 200 in 128ms (next.js: 18ms, application-code: 110ms)
+ GET /api/me 401 in 41ms (next.js: 12ms, application-code: 29ms)
+ GET /api/me 401 in 31ms (next.js: 11ms, application-code: 20ms)
+ GET /market 200 in 34ms (next.js: 6ms, application-code: 28ms)
+ GET /api/me 401 in 17ms (next.js: 3ms, application-code: 13ms)
+ GET /api/me 401 in 11ms (next.js: 2ms, application-code: 9ms)

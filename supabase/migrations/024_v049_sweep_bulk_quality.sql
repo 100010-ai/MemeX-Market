@@ -33,7 +33,7 @@ begin
     raise exception 'Invalid fixed listing price';
   end if;
   if p_mode='floor' and (p_floor_offset_bps is null or p_floor_offset_bps < -9000 or p_floor_offset_bps > 100000) then
-    raise exception 'Floor offset must be between -90% and +1000%';
+    raise exception 'Floor offset must be between -90%% and +1000%%';
   end if;
   if p_duration_days is not null and (p_duration_days<1 or p_duration_days>30) then
     raise exception 'Listing duration must be between 1 and 30 days';

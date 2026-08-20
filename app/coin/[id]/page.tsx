@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Share2, Star, Users } from "lucide-react";
+import { ArrowLeft, Share2, Star, Users } from "lucide-react";
 import { CoinChart } from "@/components/coin-chart";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -11,11 +11,18 @@ import { CoinConditionalOrders } from "@/components/coin-conditional-orders";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
 import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
-import { ago, compact, money, percent, price } from "@/lib/format";
+import { compact, money, percent, price } from "@/lib/format";
 import type { Candle, Coin, Trade } from "@/lib/types";
 
 const realtimeTables = ["coins", "trades"];
-type Payload = { coin: Coin; candles: Candle[]; trades: Trade[]; holding: { quantity: number; costBasis: number }; balance: number; availableBalance: number; reservedBalance: number; watched: boolean; topHolders: { id: string; name: string; quantity: number }[] };
+type CoinEconomy = {
+  startPrice: number; floorPrice: number | null; floorActive: boolean; floorExpiresAt: string | null;
+  initialBuy: number; initialTokens: number; totalFeeBps: number; creatorFeeBps: number; platformFeeBps: number;
+  availableQuantity: number;
+  lock: { total: number; remaining: number; startsAt: string; endsAt: string; availableQuantity: number } | null;
+  genesisBadge: { ordinal: number; label: string } | null;
+};
+type Payload = { coin: Coin; candles: Candle[]; trades: Trade[]; economy: CoinEconomy; holding: { quantity: number; availableQuantity: number; costBasis: number }; balance: number; availableBalance: number; reservedBalance: number; watched: boolean; topHolders: { id: string; name: string; quantity: number; genesisOrdinal: number | null }[] };
 
 function amountText(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "";
@@ -61,15 +68,18 @@ export default function CoinPage() {
     }
   }, [id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const realtimeReload = useCallback(() => { if (!tradeInFlight.current) void load(true); }, [load]);
 
-  const max = useMemo(() => side === "buy" ? data?.availableBalance || 0 : data?.holding.quantity || 0, [data, side]);
+  const max = useMemo(() => side === "buy" ? data?.availableBalance || 0 : data?.holding.availableQuantity || 0, [data, side]);
   const numericAmount = Number(amount);
   const validAmount = Boolean(data && Number.isFinite(numericAmount) && numericAmount > 0 && (sellAll && side === "sell" ? max > 0 : numericAmount <= max));
   const quote = useMemo(() => {
     if (!data || !validAmount) return null;
-    const input = sellAll && side === "sell" ? data.holding.quantity : numericAmount;
+    const input = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
     return calculateCoinQuote({
       side,
       amount: input,
@@ -92,7 +102,7 @@ export default function CoinPage() {
     tradeRequestId.current = null;
     if (side === "sell" && fraction === 1) {
       setSellAll(true);
-      setAmount(amountText(data.holding.quantity));
+      setAmount(amountText(data.holding.availableQuantity));
       return;
     }
     setSellAll(false);
@@ -102,8 +112,9 @@ export default function CoinPage() {
   async function trade() {
     if (!data || busy || !quote || !validAmount) return;
     const previous = data;
-    const inputAmount = sellAll && side === "sell" ? data.holding.quantity : numericAmount;
+    const inputAmount = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
     const oldQuantity = data.holding.quantity;
+    const oldAvailableQuantity = data.holding.availableQuantity;
     const oldCost = data.holding.costBasis;
     const nextTokenReserve = side === "buy" ? data.coin.tokenReserve - quote.outputAmount : data.coin.tokenReserve + inputAmount;
     const nextQuoteReserve = (data.coin.tokenReserve * data.coin.quoteReserve) / nextTokenReserve;
@@ -120,8 +131,8 @@ export default function CoinPage() {
         quoteReserve: nextQuoteReserve,
       },
       holding: side === "buy"
-        ? { quantity: oldQuantity + quote.outputAmount, costBasis: oldCost + inputAmount }
-        : { quantity: sellAll ? 0 : Math.max(0, oldQuantity - inputAmount), costBasis: sellAll ? 0 : Math.max(0, oldCost - costReduction) },
+        ? { quantity: oldQuantity + quote.outputAmount, availableQuantity: oldAvailableQuantity + quote.outputAmount, costBasis: oldCost + inputAmount }
+        : { quantity: Math.max(0, oldQuantity - inputAmount), availableQuantity: Math.max(0, oldAvailableQuantity - inputAmount), costBasis: Math.max(0, oldCost - costReduction) },
       balance: side === "buy" ? data.balance - inputAmount : data.balance + quote.outputAmount,
       availableBalance: side === "buy" ? data.availableBalance - inputAmount : data.availableBalance + quote.outputAmount,
     };
@@ -155,7 +166,7 @@ export default function CoinPage() {
       setData(previous);
       patchProfile({ balance: previous.balance, availableBalance: previous.availableBalance });
       setAmount(amountText(inputAmount));
-      setSellAll(side === "sell" && Math.abs(inputAmount - previous.holding.quantity) <= Math.max(1e-8, previous.holding.quantity * 1e-12));
+      setSellAll(side === "sell" && Math.abs(inputAmount - previous.holding.availableQuantity) <= Math.max(1e-8, previous.holding.availableQuantity * 1e-12));
       const message = e instanceof Error ? e.message : "Сделка не выполнена";
       setError((message.includes("Insufficient token balance") || message.includes("Недостаточно токенов")) ? "Количество токенов изменилось. Нажми МАКС ещё раз." : message);
       void load(true);
@@ -202,13 +213,19 @@ export default function CoinPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-4">
           <section className="border-b border-[var(--border-soft)] pb-4">
-            <div className="flex items-center gap-3"><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h1 className="truncate text-base font-semibold">{coin.name}</h1><span className="text-xs text-[var(--muted)]">${coin.symbol}</span></div><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-sm font-semibold">{price(coin.currentPrice)}</span><span className={`text-xs ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</span>{coin.creatorId ? <Link href={`/u/${coin.creatorId}`} className="text-[11px] text-[var(--muted)] hover:text-white">создатель {coin.creatorName}</Link> : null}</div></div></div>
+            <div className="flex items-center gap-3"><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h1 className="truncate text-base font-semibold">{coin.name}</h1><span className="text-xs text-[var(--muted)]">${coin.symbol}</span>{data.economy.genesisBadge ? <span className="rounded-full border border-[#f5c451]/40 px-2 py-0.5 text-[8px] text-[#f3d789]">{data.economy.genesisBadge.label}</span> : null}</div><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-sm font-semibold">{price(coin.currentPrice)}</span><span className={`text-xs ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</span>{coin.creatorId ? <Link href={`/u/${coin.creatorId}`} className="text-[11px] text-[var(--muted)] hover:text-white">создатель {coin.creatorName}</Link> : null}</div></div></div>
             {coin.description ? <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{coin.description}</p> : null}
           </section>
 
           <section className="border-b border-[var(--border-soft)] pb-4"><CoinChart candles={data.candles} height={260} /></section>
 
           <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-[var(--border-soft)] pb-4 sm:grid-cols-3 lg:grid-cols-6"><Stat label="MCAP" value={money(coin.marketCap)} /><Stat label="Объём 24ч" value={money(coin.volume24h)} /><Stat label="Ликвидность" value={money(coin.liquidity)} /><Stat label="ATH" value={price(coin.athPrice)} /><Stat label="Холдеры" value={String(coin.holderCount)} /><Stat label="Сделки" value={String(coin.tradeCount24h)} /></div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-3 border-b border-[var(--border-soft)] py-3 text-[10px] sm:grid-cols-4">
+            <Stat label="Стартовая цена" value={price(data.economy.startPrice)} />
+            <Stat label="Floor" value={data.economy.floorActive && data.economy.floorPrice ? price(data.economy.floorPrice) : "не активен"} />
+            <Stat label="Доля создателя" value={`${data.economy.creatorFeeBps / 100}% из комиссии`} />
+            <Stat label="Заблокировано" value={data.economy.lock ? `${compact(data.economy.lock.remaining)} ${coin.symbol}` : "—"} />
+          </div>
 
           <section className="border-b border-[var(--border-soft)] pb-4">
             <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-medium">Поток сделок 24ч</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">Только завершённые сделки MXM</p></div><span className="text-[10px] text-[var(--muted)]">{flow > 0 ? `${buyShare.toFixed(0)}% покупок` : "Нет объёма"}</span></div>
@@ -222,7 +239,8 @@ export default function CoinPage() {
         <aside className="space-y-4">
           <section className="lg:sticky lg:top-[68px]">
             <div className="grid grid-cols-2 border-b border-[var(--border-soft)]"><button onClick={() => switchSide("buy")} className={`py-2.5 text-xs font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button><button onClick={() => switchSide("sell")} className={`py-2.5 text-xs font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button></div>
-            <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Доступно</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.quantity)} ${coin.symbol}`}</span></div>
+            <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Доступно</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
+            {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1 text-right text-[9px] text-[#f3d789]">{compact(data.economy.lock.remaining)} заблокировано до {new Date(data.economy.lock.endsAt).toLocaleDateString("ru-RU")}</p> : null}
             {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} в резерве по офферам подарков</p> : null}
             <div className="mt-2 flex items-center border-b border-[var(--border)] px-1"><input value={amount} onChange={(e) => { tradeRequestId.current = null; setAmount(e.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><span className="text-xs text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span></div>
             <div className="mxm-hscroll mt-2 gap-4 border-b border-[var(--border-soft)] pb-2">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} onClick={() => applyFraction(fraction)} className="shrink-0 py-1 text-[10px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
@@ -234,10 +252,10 @@ export default function CoinPage() {
             <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-3 w-full py-3 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
             <p className="mt-2 text-center text-[9px] text-[var(--muted-2)]">Расчёт показывается мгновенно. Сервер подтверждает итоговую сделку атомарно.</p>
             <div className="mt-4 grid grid-cols-2 gap-x-4 border-t border-[var(--border-soft)] pt-3"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Нереализованный PnL" value={money(holdingPnl)} tone={holdingPnl} /></div>
-            <CoinConditionalOrders coin={coin} holdingQuantity={data.holding.quantity} availableBalance={data.availableBalance} onBalanceChange={() => { void refreshProfile(); void load(true); }} />
+            <CoinConditionalOrders coin={coin} holdingQuantity={data.holding.availableQuantity} availableBalance={data.availableBalance} onBalanceChange={() => { void refreshProfile(); void load(true); }} />
           </section>
 
-          <section><div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-2 text-xs font-medium"><Users size={14} />Топ холдеров</div>{data.topHolders.length ? <div className="divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="flex items-center justify-between gap-3 py-2.5 text-xs"><span className="truncate"><span className="mr-2 text-[var(--muted)]">{index + 1}</span>{holder.name}</span><span>{compact(holder.quantity)}</span></Link>)}</div> : <Empty text="Холдеров пока нет" />}</section>
+          <section><div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-2 text-xs font-medium"><Users size={14} />Топ холдеров</div>{data.topHolders.length ? <div className="divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="flex items-center justify-between gap-3 py-2.5 text-xs"><span className="truncate"><span className="mr-2 text-[var(--muted)]">{index + 1}</span>{holder.name}{holder.genesisOrdinal ? <span className="ml-2 text-[8px] text-[#f3d789]">Genesis #{holder.genesisOrdinal}</span> : null}</span><span>{compact(holder.quantity)}</span></Link>)}</div> : <Empty text="Холдеров пока нет" />}</section>
         </aside>
       </div>
     </div>

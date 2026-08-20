@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GiftAsset, GiftMediaKind } from "@/lib/types";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
@@ -280,7 +281,7 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
       ) : kind === "animated" ? (
         <div ref={lottieRef} className="h-full w-full" />
       ) : (
-        <img src={src} alt={alt} loading={lazy ? "lazy" : "eager"} decoding="async" onError={() => { setErrorKey(mediaKey); onError?.("Изображение Telegram недоступно"); }} className="h-full w-full object-contain" />
+        <Image src={src} alt={alt} width={512} height={512} unoptimized loading={lazy ? "lazy" : "eager"} decoding="async" onError={() => { setErrorKey(mediaKey); onError?.("Изображение Telegram недоступно"); }} className="h-full w-full object-contain" />
       )}
     </div>
   );
@@ -356,9 +357,12 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   return (
     <div ref={holderRef} className="mxm-gift-media relative h-full w-full overflow-hidden bg-[#0b0d0f]">
       {!previewFailed ? (
-        <img
+        <Image
           src={previewSource}
           alt={`${gift.baseName} #${gift.number}`}
+          width={768}
+          height={768}
+          unoptimized
           loading={priority ? "eager" : compact ? "lazy" : "eager"}
           decoding="async"
           fetchPriority={priority || !compact ? "high" : "low"}
@@ -366,9 +370,12 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
         />
       ) : storedPreview ? (
-        <img
+        <Image
           src={storedPreview}
           alt={`${gift.baseName} #${gift.number}`}
+          width={768}
+          height={768}
+          unoptimized
           loading={priority ? "eager" : compact ? "lazy" : "eager"}
           decoding="async"
           fetchPriority={priority || !compact ? "high" : "low"}

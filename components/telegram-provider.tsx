@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types";
 import { apiFetch, prefetchApi } from "@/lib/api";
 
@@ -85,13 +85,15 @@ function warmCurrentRoute(pathname: string) {
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isControl = pathname.startsWith("/control");
-  const isPublic = pathname === "/about" || pathname === "/moderation" || pathname === "/reward-confirmations";
+  const isPublic = pathname === "/about" || pathname === "/terms" || pathname === "/paysupport";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authNonce, setAuthNonce] = useState(0);
   const authInFlight = useRef(false);
+  const authRun = useRef(0);
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -120,13 +122,13 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const run = ++authRun.current;
     prepareWebApp();
     if (isControl || isPublic) {
       return () => { cancelled = true; };
     }
 
     async function authenticateOnce() {
-      if (authInFlight.current) return;
       authInFlight.current = true;
       if (!profile) setLoading(true);
       setError(null);
@@ -136,7 +138,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           const sessionProfile = await existingSession();
           if (sessionProfile) {
             warmCurrentRoute(pathname);
-            if (!cancelled) setProfile(sessionProfile);
+            if (!cancelled && run === authRun.current) setProfile(sessionProfile);
             return;
           }
         } catch (cause) {
@@ -160,12 +162,14 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ initData: webApp.initData }),
         });
         warmCurrentRoute(pathname);
-        if (!cancelled) setProfile(result.profile);
+        if (!cancelled && run === authRun.current) setProfile(result.profile);
       } catch (cause) {
-        if (!cancelled && !profile) setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
+        if (!cancelled && run === authRun.current && !profile) setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
       } finally {
-        authInFlight.current = false;
-        if (!cancelled) setLoading(false);
+        if (run === authRun.current) {
+          authInFlight.current = false;
+          if (!cancelled) setLoading(false);
+        }
       }
     }
 
@@ -184,15 +188,23 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     const syncViewport = () => {
       const viewportHeight = Number(webApp?.viewportHeight || window.visualViewport?.height || window.innerHeight);
       const stableHeight = Number(webApp?.viewportStableHeight || viewportHeight);
+      const safeTop = Math.max(Number(webApp?.safeAreaInset?.top || 0), Number(webApp?.contentSafeAreaInset?.top || 0));
+      const safeBottom = Math.max(Number(webApp?.safeAreaInset?.bottom || 0), Number(webApp?.contentSafeAreaInset?.bottom || 0));
       if (Number.isFinite(viewportHeight) && viewportHeight > 0) root.style.setProperty("--mxm-viewport-height", `${Math.round(viewportHeight)}px`);
       if (Number.isFinite(stableHeight) && stableHeight > 0) root.style.setProperty("--mxm-viewport-stable-height", `${Math.round(stableHeight)}px`);
+      if (Number.isFinite(safeTop) && safeTop >= 0) root.style.setProperty("--mxm-safe-area-top", `${Math.round(safeTop)}px`);
+      if (Number.isFinite(safeBottom) && safeBottom >= 0) root.style.setProperty("--mxm-safe-area-bottom", `${Math.round(safeBottom)}px`);
     };
     syncViewport();
     webApp?.onEvent?.("viewportChanged", syncViewport);
+    webApp?.onEvent?.("safeAreaChanged", syncViewport);
+    webApp?.onEvent?.("contentSafeAreaChanged", syncViewport);
     window.visualViewport?.addEventListener("resize", syncViewport);
     window.addEventListener("orientationchange", syncViewport);
     return () => {
       webApp?.offEvent?.("viewportChanged", syncViewport);
+      webApp?.offEvent?.("safeAreaChanged", syncViewport);
+      webApp?.offEvent?.("contentSafeAreaChanged", syncViewport);
       window.visualViewport?.removeEventListener("resize", syncViewport);
       window.removeEventListener("orientationchange", syncViewport);
     };
@@ -204,12 +216,12 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     const rootRoutes = new Set(["/", "/market", "/orders", "/hub", "/tasks", "/vault", "/profile"]);
     const onBack = () => {
       if (window.history.length > 1) window.history.back();
-      else window.location.assign("/market");
+      else router.replace("/market");
     };
     if (rootRoutes.has(pathname) || pathname.startsWith("/control") || pathname.startsWith("/admin")) backButton.hide();
     else { backButton.show(); backButton.onClick(onBack); }
     return () => { backButton.offClick(onBack); };
-  }, [pathname]);
+  }, [pathname, router]);
 
   const profileId = profile?.id ?? null;
   useEffect(() => {
@@ -239,8 +251,10 @@ declare global {
         HapticFeedback?: { impactOccurred: (style: "light" | "medium" | "heavy") => void };
         viewportHeight?: number;
         viewportStableHeight?: number;
-        onEvent?: (event: "viewportChanged", callback: () => void) => void;
-        offEvent?: (event: "viewportChanged", callback: () => void) => void;
+        safeAreaInset?: { top?: number; bottom?: number; left?: number; right?: number };
+        contentSafeAreaInset?: { top?: number; bottom?: number; left?: number; right?: number };
+        onEvent?: (event: "viewportChanged" | "safeAreaChanged" | "contentSafeAreaChanged", callback: () => void) => void;
+        offEvent?: (event: "viewportChanged" | "safeAreaChanged" | "contentSafeAreaChanged", callback: () => void) => void;
         BackButton?: { show: () => void; hide: () => void; onClick: (callback: () => void) => void; offClick: (callback: () => void) => void };
         openInvoice?: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending") => void) => void;
         openTelegramLink?: (url: string) => void;

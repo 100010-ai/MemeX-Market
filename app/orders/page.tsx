@@ -20,7 +20,12 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
   const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/orders", { cacheMs: 2_000 })); }, []);
-  useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить ордера")); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера"));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const realtimeReload = useCallback(() => { void load(); }, [load]);
 
   async function act(id: string, action: "accept" | "reject" | "cancel") {

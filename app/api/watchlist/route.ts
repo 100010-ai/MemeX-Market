@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
 import { getRuntimeConfig } from "@/lib/runtime-config";
-import { validUuidLike } from "@/lib/security";
 
 function mapCollection(row: Record<string, unknown>) {
   return {
@@ -38,6 +37,18 @@ export async function GET() {
   const giftCollections = rows.filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection));
   const giftIds = rows.filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id));
 
+  const [config, premiumResult] = await Promise.all([
+    getRuntimeConfig(),
+    supabase.from("profiles").select("premium_until").eq("id", profile.id).maybeSingle(),
+  ]);
+  const premiumMissing = premiumResult.error && (premiumResult.error.code === "42703" || /premium_until|schema cache|column .* does not exist/i.test(premiumResult.error.message || ""));
+  if (premiumResult.error && !premiumMissing) {
+    console.error("watchlist capacity", premiumResult.error);
+    return NextResponse.json({ error: "Не удалось загрузить лимит избранного" }, { status: 500 });
+  }
+  const premiumActive = Boolean(premiumResult.data?.premium_until && new Date(String(premiumResult.data.premium_until)).getTime() > Date.now());
+  const watchlistLimit = config.remoteConfig.maxWatchlistItems * (premiumActive ? 2 : 1);
+
   const [coinsResult, collectionsResult, giftsResult, alertsResult] = await Promise.all([
     coinIds.length ? supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").in("id", coinIds) : Promise.resolve({ data: [], error: null }),
     giftCollections.length ? supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").in("base_name", giftCollections) : Promise.resolve({ data: [], error: null }),
@@ -57,6 +68,7 @@ export async function GET() {
     collections,
     gifts,
     alerts: (alertsResult.data || []).map((row) => ({ id: String(row.id), kind: row.kind, coinId: row.coin_id || null, giftId: row.virtual_gift_id || null, giftCollection: row.gift_collection || null, direction: row.direction, targetPrice: Number(row.target_price), enabled: Boolean(row.enabled), lastTriggeredAt: row.last_triggered_at || null, createdAt: row.created_at })),
+    watchlistMeta: { used: rows.length, limit: watchlistLimit, premiumActive },
   });
 }
 
@@ -71,76 +83,38 @@ export async function POST(request: Request) {
   const enabled = body.enabled === true;
   if (!kind) return NextResponse.json({ error: "Некорректный тип избранного" }, { status: 400 });
   const supabase = getSupabaseAdmin();
-  const config = enabled ? await getRuntimeConfig() : null;
-  async function watchlistLimitError() {
-    if (!config) return null;
-    const { count, error } = await supabase.from("user_watchlist").select("id", { count: "exact", head: true }).eq("profile_id", profileId);
-    if (error) return { status: 500, message: error.message };
-    if (Number(count || 0) >= config.remoteConfig.maxWatchlistItems) return { status: 409, message: `Лимит избранного: ${config.remoteConfig.maxWatchlistItems}` };
-    return null;
+  const config = await getRuntimeConfig();
+  let watchlistLimit = config.remoteConfig.maxWatchlistItems;
+  const premium = await supabase.from("profiles").select("premium_until").eq("id", profileId).maybeSingle();
+  const missingPremiumColumn = premium.error && (premium.error.code === "42703" || /premium_until|schema cache|column .* does not exist/i.test(premium.error.message || ""));
+  if (premium.error && !missingPremiumColumn) {
+    console.error("watchlist premium", premium.error);
+    return NextResponse.json({ error: "Не удалось проверить лимит избранного" }, { status: 500 });
   }
+  if (premium.data?.premium_until && new Date(String(premium.data.premium_until)).getTime() > Date.now()) watchlistLimit *= 2;
 
-  if (kind === "coin") {
-    const coinId = typeof body.coinId === "string" ? body.coinId : "";
-    if (!validUuidLike(coinId)) return NextResponse.json({ error: "Некорректный ID мемкоина" }, { status: 400 });
-    const { data: coin, error: coinError } = await supabase.from("coins").select("id").eq("id", coinId).eq("status", "active").maybeSingle();
-    if (coinError) return NextResponse.json({ error: coinError.message }, { status: 500 });
-    if (!coin) return NextResponse.json({ error: "Мемкоин не найден" }, { status: 404 });
-    if (enabled) {
-      const { data: existing, error: existingError } = await supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "coin").eq("coin_id", coinId).maybeSingle();
-      if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-      if (!existing) {
-        const limitError = await watchlistLimitError();
-        if (limitError) return NextResponse.json({ error: limitError.message }, { status: limitError.status });
-        const { error } = await supabase.from("user_watchlist").insert({ profile_id: profile.id, kind: "coin", coin_id: coinId, gift_collection: null, virtual_gift_id: null });
-        if (error && error.code !== "23505") return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-    } else {
-      const { error } = await supabase.from("user_watchlist").delete().eq("profile_id", profile.id).eq("kind", "coin").eq("coin_id", coinId);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ enabled });
-  }
+  const coinId = kind === "coin" && typeof body.coinId === "string" ? body.coinId : null;
+  const giftId = kind === "gift" && typeof body.giftId === "string" ? body.giftId : null;
+  const baseName = kind === "gift_collection" && typeof body.baseName === "string" ? body.baseName.trim() : null;
+  if (kind === "coin" && !validUuidLike(coinId || "")) return NextResponse.json({ error: "Некорректный ID мемкоина" }, { status: 400 });
+  if (kind === "gift" && !validUuidLike(giftId || "")) return NextResponse.json({ error: "Некорректный ID Gift" }, { status: 400 });
+  if (kind === "gift_collection" && (!baseName || baseName.length > 160)) return NextResponse.json({ error: "Некорректная коллекция Gifts" }, { status: 400 });
 
-  if (kind === "gift") {
-    const giftId = typeof body.giftId === "string" ? body.giftId : "";
-    if (!validUuidLike(giftId)) return NextResponse.json({ error: "Некорректный ID Gift" }, { status: 400 });
-    const { data: gift, error: giftError } = await supabase.from("virtual_gifts").select("id").eq("id", giftId).maybeSingle();
-    if (giftError) return NextResponse.json({ error: giftError.message }, { status: 500 });
-    if (!gift) return NextResponse.json({ error: "Gift не найден" }, { status: 404 });
-    if (enabled) {
-      const { data: existing, error: existingError } = await supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift").eq("virtual_gift_id", giftId).maybeSingle();
-      if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-      if (!existing) {
-        const limitError = await watchlistLimitError();
-        if (limitError) return NextResponse.json({ error: limitError.message }, { status: limitError.status });
-        const { error } = await supabase.from("user_watchlist").insert({ profile_id: profile.id, kind: "gift", coin_id: null, gift_collection: null, virtual_gift_id: giftId });
-        if (error && error.code !== "23505") return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-    } else {
-      const { error } = await supabase.from("user_watchlist").delete().eq("profile_id", profile.id).eq("kind", "gift").eq("virtual_gift_id", giftId);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ enabled });
+  const { data, error } = await supabase.rpc("set_watchlist_v200", {
+    p_profile_id: profileId,
+    p_kind: kind,
+    p_enabled: enabled,
+    p_limit: watchlistLimit,
+    p_coin_id: coinId,
+    p_gift_collection: baseName,
+    p_virtual_gift_id: giftId,
+  });
+  if (error) {
+    console.error("watchlist mutation", error);
+    const missing = error.code === "42883" || /set_watchlist_v200|schema cache|could not find the function/i.test(error.message || "");
+    const limit = /watchlist limit reached/i.test(error.message || "");
+    const notFound = /not found/i.test(error.message || "");
+    return NextResponse.json({ error: missing ? "Примените миграцию экономики Market 2.0" : limit ? `Лимит избранного: ${watchlistLimit}` : notFound ? "Актив не найден" : "Не удалось изменить избранное" }, { status: missing ? 503 : limit ? 409 : notFound ? 404 : 500 });
   }
-
-  const baseName = typeof body.baseName === "string" ? body.baseName.trim() : "";
-  if (!baseName) return NextResponse.json({ error: "Не выбрана коллекция подарков" }, { status: 400 });
-  const { data: collection, error: collectionError } = await supabase.from("gift_collection_overview").select("base_name").eq("base_name", baseName).maybeSingle();
-  if (collectionError) return NextResponse.json({ error: collectionError.message }, { status: 500 });
-  if (!collection) return NextResponse.json({ error: "Коллекция подарков не найдена" }, { status: 404 });
-  if (enabled) {
-    const { data: existing, error: existingError } = await supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift_collection").eq("gift_collection", baseName).maybeSingle();
-    if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-    if (!existing) {
-      const limitError = await watchlistLimitError();
-      if (limitError) return NextResponse.json({ error: limitError.message }, { status: limitError.status });
-      const { error } = await supabase.from("user_watchlist").insert({ profile_id: profile.id, kind: "gift_collection", coin_id: null, gift_collection: baseName, virtual_gift_id: null });
-      if (error && error.code !== "23505") return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  } else {
-    const { error } = await supabase.from("user_watchlist").delete().eq("profile_id", profile.id).eq("kind", "gift_collection").eq("gift_collection", baseName);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  return NextResponse.json({ enabled });
+  return NextResponse.json(data || { enabled });
 }

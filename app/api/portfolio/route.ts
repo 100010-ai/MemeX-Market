@@ -3,10 +3,12 @@ import { requireProfile, getProfileSnapshot } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
-function relationOne(value: any, label: string) {
+type DbRow = Record<string, unknown>;
+
+function relationOne(value: unknown, label: string): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
-  if (!row) throw new Error(`${label} relation is missing`);
-  return row;
+  if (!row || typeof row !== "object") throw new Error(`${label} relation is missing`);
+  return row as DbRow;
 }
 
 export async function GET() {
@@ -23,7 +25,7 @@ export async function GET() {
     ]);
     const firstError = coinsResult.error || giftsResult.error || coinHistoryResult.error || giftHistoryResult.error;
     if (firstError) throw firstError;
-    const holdings = (coinsResult.data || []).map((row: any) => {
+    const holdings = ((coinsResult.data || []) as DbRow[]).map((row) => {
       const coin = relationOne(row.coins, "Portfolio coin");
       const quantity = Number(row.quantity);
       const currentPrice = Number(coin.current_price);
@@ -38,16 +40,16 @@ export async function GET() {
       return sum + (Number(current) - Number(gift.acquiredPrice));
     }, 0);
     const history = [
-      ...(coinHistoryResult.data || []).map((row: any) => {
+      ...((coinHistoryResult.data || []) as DbRow[]).map((row) => {
         const coin = relationOne(row.coins, "Coin history");
         if (typeof coin.symbol !== "string" || !coin.symbol) throw new Error("Coin history symbol is missing");
-        return { id: `coin-${row.id}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${coin.symbol}`, amount: Number(row.quote_amount), pnl: Number(row.realized_pnl), createdAt: row.created_at, href: `/coin/${row.coin_id}` };
+        return { id: `coin-${String(row.id)}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${coin.symbol}`, amount: Number(row.quote_amount), pnl: Number(row.realized_pnl), createdAt: String(row.created_at), href: `/coin/${String(row.coin_id)}` };
       }),
-      ...(giftHistoryResult.data || []).map((row: any) => {
+      ...((giftHistoryResult.data || []) as DbRow[]).map((row) => {
         const gift = relationOne(row.gift_assets, "Gift history");
         if (typeof gift.base_name !== "string" || !gift.base_name || !Number.isFinite(Number(gift.gift_number))) throw new Error("Gift history metadata is missing");
         const sold = String(row.seller_profile_id) === String(profile.id);
-        return { id: `gift-${row.id}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.price), pnl: sold ? Number(row.realized_pnl) : 0, createdAt: row.created_at, href: `/gifts/${row.virtual_gift_id}` };
+        return { id: `gift-${String(row.id)}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.price), pnl: sold ? Number(row.realized_pnl) : 0, createdAt: String(row.created_at), href: `/gifts/${String(row.virtual_gift_id)}` };
       }),
     ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 50);
     const bucketStart = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();

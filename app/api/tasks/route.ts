@@ -2,10 +2,6 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-function missingSponsoredSchema(error: { code?: string; message?: string } | null | undefined) {
-  return Boolean(error && (error.code === "42P01" || /sponsored_campaigns|sponsored_task_claims|schema cache/i.test(error.message || "")));
-}
-
 export async function GET() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,21 +18,18 @@ export async function GET() {
 
   if (missionResult.error) return NextResponse.json({ error: missionResult.error.message }, { status: 500 });
 
-  const sponsored: Array<Record<string, unknown>> = [];
-
   return NextResponse.json({
-    missions: (missionResult.data || []).map((m) => ({
-      id: m.mission_id,
-      key: m.key,
-      period: m.period,
-      title: m.title,
-      description: m.description,
-      reward: Number(m.reward),
-      target: Number(m.target),
-      progress: Number(m.progress),
-      claimed: Boolean(m.claimed),
-      actionType: m.action_type,
+    missions: (missionResult.data || []).map((mission) => ({
+      id: mission.mission_id,
+      key: mission.key,
+      period: mission.period,
+      title: mission.title,
+      description: mission.description,
+      reward: Number(mission.reward),
+      target: Number(mission.target),
+      progress: Number(mission.progress),
+      claimed: Boolean(mission.claimed),
+      actionType: mission.action_type,
     })),
-    sponsored,
   });
 }

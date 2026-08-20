@@ -1,8 +1,8 @@
-export async function telegramBotApi<T>(method: string, body: Record<string, unknown>) {
+export async function telegramBotApi<T>(method: string, body: Record<string, unknown>, timeoutMs = 12_000) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
   if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured");
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), Math.max(1_000, Math.min(12_000, timeoutMs)));
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: "POST",

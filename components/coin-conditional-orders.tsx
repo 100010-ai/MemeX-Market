@@ -32,7 +32,10 @@ export function CoinConditionalOrders({ coin, holdingQuantity, availableBalance,
       setError(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера"); }
   }, [coin.id]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const isBuy = kind === "limit_buy";
   const numericInput = Number(inputAmount);

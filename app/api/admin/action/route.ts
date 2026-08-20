@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { syncGiftCatalog } from "@/lib/gift-catalog";
 import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
-import { ensureBotCanVerifyChat, normalizeSponsoredUrl, telegramChatIdFrom } from "@/lib/sponsored-tasks";
-import { adsgramModerationMode } from "@/lib/feature-flags";
+import { telegramBotApi } from "@/lib/telegram-bot";
 
 export const runtime = "nodejs";
 
@@ -210,6 +209,9 @@ export async function POST(request: Request) {
     }
 
     if (action === "catalog.sync") {
+      if (!(await enforceRateLimit(request, "admin-catalog-sync", String(admin.id), 2, 600))) {
+        return NextResponse.json({ error: "Синхронизацию каталога можно запускать не чаще двух раз за 10 минут." }, { status: 429 });
+      }
       const catalog = await syncGiftCatalog();
       const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 1000 });
       await audit(actor, "catalog.sync", "telegram_hybrid_catalog", undefined, { catalog, liquidity });
@@ -217,119 +219,124 @@ export async function POST(request: Request) {
     }
 
     if (action === "npc.tick") {
+      if (!(await enforceRateLimit(request, "admin-npc-tick", String(admin.id), 4, 600))) {
+        return NextResponse.json({ error: "Обновление системной ликвидности временно ограничено." }, { status: 429 });
+      }
       const targetListings = Math.max(1, Math.min(2000, Math.floor(number(body.targetListings) ?? 18)));
       const result = await ensureNpcMarketLiquidity({ force: true, targetListings });
       await audit(actor, "npc.tick", "gift_liquidity", undefined, { result });
       return NextResponse.json({ ok: true, result });
     }
 
-    if (action === "sponsor.create") {
-      const advertiserName = text(body.advertiserName, 80);
-      const title = text(body.title, 120);
-      const description = text(body.description, 500);
-      const instructions = text(body.instructions, 1000);
-      const verificationType = ["telegram_membership", "link_visit", "manual"].includes(String(body.verificationType)) ? String(body.verificationType) : "manual";
-      const targetUrl = normalizeSponsoredUrl(body.targetUrl);
-      const telegramChatId = telegramChatIdFrom(body.telegramChatId, targetUrl) || null;
-      const buttonLabel = text(body.buttonLabel, 40) || "Открыть";
-      const reward = number(body.reward);
-      const maxCompletions = Math.floor(number(body.maxCompletions) ?? 0);
-      const priority = Math.max(0, Math.min(10000, Math.floor(number(body.priority) ?? 100)));
-      const status = ["draft", "active", "paused", "ended"].includes(String(body.status)) ? String(body.status) : "draft";
-      if (adsgramModerationMode() && status === "active") return NextResponse.json({ error: "AdsGram moderation mode: партнёрские incentivized-кампании нельзя активировать" }, { status: 409 });
-      const startsAt = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
-      const endsAt = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
-      const featured = Boolean(body.featured);
-      const internalNote = text(body.internalNote, 1000);
-      if (!advertiserName || !title || reward == null || reward <= 0 || reward > 100000 || maxCompletions < 1 || maxCompletions > 1000000) return NextResponse.json({ error: "Проверьте название, награду и лимит участников" }, { status: 400 });
-      if (endsAt && startsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) return NextResponse.json({ error: "Дата окончания должна быть позже даты старта" }, { status: 400 });
-      if (verificationType === "telegram_membership") {
-        if (!telegramChatId) return NextResponse.json({ error: "Укажите @username или ID Telegram-канала" }, { status: 400 });
-        if (status === "active") await ensureBotCanVerifyChat(telegramChatId);
+    if (action === "stars.refund") {
+      if (!(await enforceRateLimit(request, "admin-stars-refund", String(admin.id), 6, 3600))) {
+        return NextResponse.json({ error: "Лимит возвратов Stars временно исчерпан." }, { status: 429 });
       }
-      const { data, error } = await supabase.from("sponsored_campaigns").insert({ advertiser_name: advertiserName, title, description, instructions, verification_type: verificationType, target_url: targetUrl, telegram_chat_id: telegramChatId, button_label: buttonLabel, reward, max_completions: maxCompletions, status, starts_at: startsAt, ends_at: endsAt, priority, featured, internal_note: internalNote, created_by: actor }).select("id").single();
-      if (error) throw error;
-      await audit(actor, "sponsor.create", "sponsored_campaign", String(data.id), { advertiserName, title, verificationType, reward, maxCompletions, status });
-      return NextResponse.json({ ok: true, id: data.id });
-    }
-
-    if (action === "sponsor.update") {
-      const id = text(body.id, 80);
-      if (!id) return NextResponse.json({ error: "Кампания не выбрана" }, { status: 400 });
-      const current = await supabase.from("sponsored_campaigns").select("verification_type,target_url,telegram_chat_id,status,completed_count").eq("id", id).single();
-      if (current.error || !current.data) throw current.error || new Error("Кампания не найдена");
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (body.advertiserName !== undefined) patch.advertiser_name = text(body.advertiserName, 80);
-      if (body.title !== undefined) patch.title = text(body.title, 120);
-      if (body.description !== undefined) patch.description = text(body.description, 500);
-      if (body.instructions !== undefined) patch.instructions = text(body.instructions, 1000);
-      if (body.buttonLabel !== undefined) patch.button_label = text(body.buttonLabel, 40) || "Открыть";
-      if (body.targetUrl !== undefined) patch.target_url = normalizeSponsoredUrl(body.targetUrl);
-      if (body.telegramChatId !== undefined) patch.telegram_chat_id = text(body.telegramChatId, 120) || null;
-      if (["telegram_membership", "link_visit", "manual"].includes(String(body.verificationType))) patch.verification_type = String(body.verificationType);
-      if (["draft", "active", "paused", "ended"].includes(String(body.status))) patch.status = String(body.status);
-      if (number(body.reward) != null) { const reward = number(body.reward)!; if (reward <= 0 || reward > 100000) return NextResponse.json({ error: "Некорректная награда" }, { status: 400 }); if (Number(current.data.completed_count||0)>0) return NextResponse.json({ error: "Награду нельзя менять после первых выполнений — скопируйте кампанию и запустите новую" }, { status: 409 }); patch.reward = reward; }
-      if (number(body.maxCompletions) != null) { const max = Math.floor(number(body.maxCompletions)!); if (max < Math.max(1,Number(current.data.completed_count||0)) || max > 1000000) return NextResponse.json({ error: "Лимит не может быть меньше уже выполненных заданий" }, { status: 400 }); patch.max_completions = max; }
-      if (number(body.priority) != null) patch.priority = Math.max(0, Math.min(10000, Math.floor(number(body.priority)!)));
-      if (typeof body.featured === "boolean") patch.featured = body.featured;
-      if (body.startsAt !== undefined) patch.starts_at = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
-      if (body.endsAt !== undefined) patch.ends_at = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
-      if (body.internalNote !== undefined) patch.internal_note = text(body.internalNote, 1000);
-      const nextType = String(patch.verification_type ?? current.data.verification_type);
-      const nextUrl = String(patch.target_url ?? current.data.target_url);
-      const nextChat = telegramChatIdFrom(patch.telegram_chat_id ?? current.data.telegram_chat_id, nextUrl);
-      const nextStatus = String(patch.status ?? current.data.status);
-      if (adsgramModerationMode() && nextStatus === "active") return NextResponse.json({ error: "AdsGram moderation mode: партнёрские incentivized-кампании нельзя активировать" }, { status: 409 });
-      if (nextType === "telegram_membership" && nextStatus === "active") {
-        if (!nextChat) return NextResponse.json({ error: "Укажите Telegram-канал" }, { status: 400 });
-        await ensureBotCanVerifyChat(nextChat);
-        patch.telegram_chat_id = nextChat;
+      const purchaseId = text(body.purchaseId, 80);
+      const reason = text(body.reason, 500);
+      if (!validUuidLike(purchaseId) || reason.length < 5) {
+        return NextResponse.json({ error: "Укажите корректный ID покупки и причину возврата." }, { status: 400 });
       }
-      const { error } = await supabase.from("sponsored_campaigns").update(patch).eq("id", id);
-      if (error) throw error;
-      await audit(actor, "sponsor.update", "sponsored_campaign", id, patch);
-      return NextResponse.json({ ok: true });
-    }
-
-    if (action === "sponsor.clone") {
-      const id = text(body.id, 80);
-      const source = await supabase.from("sponsored_campaigns").select("advertiser_name,title,description,instructions,verification_type,target_url,telegram_chat_id,button_label,reward,max_completions,priority,featured,internal_note").eq("id", id).single();
-      if (source.error || !source.data) throw source.error || new Error("Кампания не найдена");
-      const { data, error } = await supabase.from("sponsored_campaigns").insert({ ...source.data, title: `${source.data.title} — копия`, status: "draft", completed_count: 0, starts_at: null, ends_at: null, created_by: actor }).select("id").single();
-      if (error) throw error;
-      await audit(actor, "sponsor.clone", "sponsored_campaign", String(data.id), { sourceId: id });
-      return NextResponse.json({ ok: true, id: data.id });
-    }
-
-    if (action === "sponsor.delete") {
-      const id = text(body.id, 80);
-      if (!id) return NextResponse.json({ error: "Кампания не выбрана" }, { status: 400 });
-      const current = await supabase.from("sponsored_campaigns").select("completed_count").eq("id", id).single();
-      if (current.error || !current.data) throw current.error || new Error("Кампания не найдена");
-      if (Number(current.data.completed_count||0)>0) return NextResponse.json({ error: "Кампанию с выполнениями нельзя удалить. Переведите её в статус «Завершена», чтобы сохранить историю." }, { status: 409 });
-      const { error } = await supabase.from("sponsored_campaigns").delete().eq("id", id);
-      if (error) throw error;
-      await audit(actor, "sponsor.delete", "sponsored_campaign", id);
-      return NextResponse.json({ ok: true });
-    }
-
-    if (action === "sponsor.review") {
-      const claimId = text(body.claimId, 80);
-      const approve = body.approve === true;
-      const claim = await supabase.from("sponsored_task_claims").select("id,campaign_id,profile_id,status").eq("id", claimId).single();
-      if (claim.error || !claim.data) throw claim.error || new Error("Заявка не найдена");
-      if (claim.data.status === "claimed") return NextResponse.json({ ok: true, alreadyClaimed: true });
-      if (approve) {
-        const result = await supabase.rpc("claim_sponsored_campaign_v047", { p_profile_id: claim.data.profile_id, p_campaign_id: claim.data.campaign_id, p_verification_source: "admin_manual" });
-        if (result.error) throw result.error;
-        await supabase.from("sponsored_task_claims").update({ reviewed_by: actor, updated_at: new Date().toISOString() }).eq("id", claimId);
-        await audit(actor, "sponsor.approve", "sponsored_claim", claimId, { campaignId: claim.data.campaign_id, profileId: claim.data.profile_id });
-        return NextResponse.json({ ok: true, result: result.data });
+      const purchase = await supabase.from("star_purchases")
+        .select("id,status,stars,product_sku,telegram_payment_charge_id,payer_telegram_id,refunded_at")
+        .eq("id", purchaseId)
+        .maybeSingle();
+      if (purchase.error) throw purchase.error;
+      if (!purchase.data) return NextResponse.json({ error: "Покупка Stars не найдена." }, { status: 404 });
+      if (purchase.data.status === "refunded" || purchase.data.refunded_at) {
+        return NextResponse.json({ error: "Эта покупка уже возвращена." }, { status: 409 });
       }
-      const { error } = await supabase.from("sponsored_task_claims").update({ status: "rejected", reviewed_by: actor, updated_at: new Date().toISOString() }).eq("id", claimId);
-      if (error) throw error;
-      await audit(actor, "sponsor.reject", "sponsored_claim", claimId, { campaignId: claim.data.campaign_id, profileId: claim.data.profile_id });
-      return NextResponse.json({ ok: true });
+      const chargeId = String(purchase.data.telegram_payment_charge_id || "").trim();
+      const payerTelegramId = Number(purchase.data.payer_telegram_id);
+      if (purchase.data.status !== "paid" || chargeId.length < 4 || !Number.isSafeInteger(payerTelegramId) || payerTelegramId <= 0) {
+        return NextResponse.json({ error: "Возврат доступен только для оплаченной покупки с сохранёнными charge ID и Telegram ID плательщика." }, { status: 409 });
+      }
+
+      let telegramRefunded = false;
+      try {
+        telegramRefunded = await telegramBotApi<boolean>("refundStarPayment", {
+          user_id: payerTelegramId,
+          telegram_payment_charge_id: chargeId,
+        });
+      } catch (error) {
+        console.error("Telegram Stars refund", purchaseId, error instanceof Error ? error.message : "unknown error");
+        await audit(actor, "stars.refund_failed", "star_purchase", purchaseId, { reason, stage: "telegram_bot_api" });
+        return NextResponse.json({ error: "Telegram не подтвердил возврат Stars; состояние покупки не изменено." }, { status: 502 });
+      }
+      if (telegramRefunded !== true) {
+        return NextResponse.json({ error: "Telegram не подтвердил возврат Stars; состояние покупки не изменено." }, { status: 502 });
+      }
+
+      const refundedAt = new Date().toISOString();
+      const refundMetadata = {
+        actor,
+        adminProfileId: String(admin.id),
+        via: "telegram_bot_api",
+        botApiMethod: "refundStarPayment",
+        fulfillmentReversal: "manual_review_required",
+      };
+      const transition = await supabase.rpc("mark_star_purchase_refunded_v200", {
+        p_purchase_id: purchaseId,
+        p_charge_id: chargeId,
+        p_reason: reason,
+        p_metadata: refundMetadata,
+      });
+      const transitioned = transition.data && typeof transition.data === "object" && !Array.isArray(transition.data)
+        ? transition.data as Record<string, unknown>
+        : {};
+      if (transition.error || transitioned.status !== "refunded") {
+        console.error("Stars refund reconciliation required", purchaseId, transition.error?.message || String(transitioned.status || "unexpected transition"));
+        await audit(actor, "stars.refund_reconcile", "star_purchase", purchaseId, { reason, refundedAt });
+        return NextResponse.json({ error: "Telegram выполнил возврат, но локальная запись требует ручной сверки." }, { status: 500 });
+      }
+      await audit(actor, "stars.refund", "star_purchase", purchaseId, {
+        reason,
+        refundedAt,
+        stars: Number(purchase.data.stars || 0),
+        productSku: purchase.data.product_sku || null,
+        fulfillmentReversal: "manual_review_required",
+      });
+      return NextResponse.json({ ok: true, purchaseId, status: "refunded", refundedAt });
+    }
+
+    if (action === "stars.refund.reconcile") {
+      if (!(await enforceRateLimit(request, "admin-stars-refund-reconcile", String(admin.id), 30, 3600))) {
+        return NextResponse.json({ error: "Лимит операций сверки возвратов временно исчерпан." }, { status: 429 });
+      }
+      const purchaseId = text(body.purchaseId, 80);
+      const notes = text(body.notes, 1_000);
+      if (!validUuidLike(purchaseId) || notes.length < 5) {
+        return NextResponse.json({ error: "Укажите корректный ID покупки и примечание о ручной сверке." }, { status: 400 });
+      }
+      const reconciliation = await supabase.rpc("reconcile_star_refund_v028", {
+        p_purchase_id: purchaseId,
+        p_actor: actor,
+        p_notes: notes,
+      });
+      if (reconciliation.error) throw reconciliation.error;
+      const result = reconciliation.data && typeof reconciliation.data === "object" && !Array.isArray(reconciliation.data)
+        ? reconciliation.data as Record<string, unknown>
+        : {};
+      if (result.status === "missing") {
+        return NextResponse.json({ error: "Покупка Stars не найдена." }, { status: 404 });
+      }
+      if (result.reconciled !== true) {
+        return NextResponse.json({ error: "Сверку можно завершить только для возвращённой покупки, ожидающей ручной проверки." }, { status: 409 });
+      }
+      if (result.alreadyReconciled !== true) {
+        await audit(actor, "stars.refund_reconciled", "star_purchase", purchaseId, {
+          notes,
+          reconciledAt: result.reconciledAt || new Date().toISOString(),
+          automaticReversal: false,
+        });
+      }
+      return NextResponse.json({
+        ok: true,
+        purchaseId,
+        status: "reconciled",
+        alreadyReconciled: result.alreadyReconciled === true,
+        automaticReversal: false,
+      });
     }
 
     if (action === "promo.create") {
@@ -373,38 +380,25 @@ export async function POST(request: Request) {
     }
 
     if (action === "economy.update") {
-      const reward = number(body.rewardedAdReward);
-      const dailyLimit = Math.floor(number(body.rewardedAdDailyLimit) ?? -1);
-      const cooldownMinutes = Math.floor(number(body.rewardedAdCooldownMinutes) ?? -1);
       const launchFee = number(body.coinLaunchFee);
       const launchCooldown = Math.floor(number(body.coinLaunchCooldownHours) ?? -1);
       const maxActive = Math.floor(number(body.coinMaxActive) ?? -1);
       const giftFeeBps = Math.floor(number(body.giftFeeBps) ?? -1);
-      if (reward == null || reward < 1 || reward > 500 || dailyLimit < 0 || dailyLimit > 20 || cooldownMinutes < 0 || cooldownMinutes > 1440 || launchFee == null || launchFee < 0 || launchFee > 100000 || launchCooldown < 1 || launchCooldown > 168 || maxActive < 1 || maxActive > 20 || giftFeeBps < 0 || giftFeeBps > 1000) {
+      if (launchFee == null || launchFee < 0 || launchFee > 100000 || launchCooldown < 1 || launchCooldown > 168 || maxActive < 1 || maxActive > 20 || giftFeeBps < 0 || giftFeeBps > 1000) {
         return NextResponse.json({ error: "Некорректные параметры экономики" }, { status: 400 });
       }
-      if (adsgramModerationMode() && (reward > 1 || dailyLimit > 3)) {
-        return NextResponse.json({ error: "AdsGram moderation mode: reward не больше 1 игрового TON и не больше 3 rewarded-показов в сутки" }, { status: 409 });
-      }
       const patch = {
-        rewarded_ad_reward: reward,
-        rewarded_ad_daily_limit: dailyLimit,
-        rewarded_ad_cooldown_minutes: cooldownMinutes,
         coin_launch_fee: launchFee,
         coin_launch_cooldown_hours: launchCooldown,
         coin_max_active: maxActive,
         gift_fee_bps: giftFeeBps,
         updated_at: new Date().toISOString(),
       };
-      const settings = await supabase.rpc("update_economy_settings_v045", {
-        p_rewarded_ad_reward: reward,
-        p_rewarded_ad_daily_limit: dailyLimit,
-        p_rewarded_ad_cooldown_minutes: cooldownMinutes,
-        p_coin_launch_fee: launchFee,
-        p_coin_launch_cooldown_hours: launchCooldown,
-        p_coin_max_active: maxActive,
-        p_gift_fee_bps: giftFeeBps,
-      });
+      const settings = await supabase.from("economy_settings")
+        .update(patch)
+        .eq("singleton", true)
+        .select("coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,gift_fee_bps,updated_at")
+        .single();
       if (settings.error) throw settings.error;
       await audit(actor, "economy.update", "economy_settings", "singleton", patch);
       return NextResponse.json({ ok: true, economy: settings.data });

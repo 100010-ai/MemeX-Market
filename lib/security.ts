@@ -49,10 +49,23 @@ export async function consumeRateLimit(key: string, limit: number, windowSeconds
 }
 
 export async function enforceRateLimit(request: Request, scope: string, actor: string | number, limit: number, windowSeconds: number) {
-  const key = securityKey(scope, actor, requestIp(request));
-  return consumeRateLimit(key, limit, windowSeconds);
+  // The actor-only bucket prevents a client from resetting its quota by
+  // rotating/spoofing forwarded IPs. The actor+IP bucket remains useful for
+  // incident analysis and constrains one device/network path independently.
+  const [actorAllowed, actorIpAllowed] = await Promise.all([
+    consumeRateLimit(securityKey(scope, "actor", actor), limit, windowSeconds),
+    consumeRateLimit(securityKey(scope, "actor-ip", actor, requestIp(request)), limit, windowSeconds),
+  ]);
+  return actorAllowed && actorIpAllowed;
 }
 
 export function validUuidLike(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function safeSecretEquals(actual: string, expected: string) {
+  if (!actual || !expected) return false;
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && crypto.timingSafeEqual(actualBytes, expectedBytes);
 }

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Award, BarChart3, Gift, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Award, BadgeCheck, BarChart3, Gift, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { PublicProfile } from "@/lib/types";
 import { money } from "@/lib/format";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { CoinAvatar } from "@/components/ui";
+import { ProfileAvatar, ProfileBadgeList } from "@/components/profile-avatar";
 
 export default function PublicProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -19,7 +20,8 @@ export default function PublicProfilePage() {
   return <div className="mx-auto max-w-5xl">
     <Link href="/leaderboard" className="mb-3 inline-flex items-center gap-2 text-xs text-[var(--muted)]"><ArrowLeft size={15} />Рейтинг</Link>
     <section className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-4">
-      <div className="flex items-center gap-3">{profile.photoUrl ? <img src={profile.photoUrl} alt="" className="h-12 w-12 rounded-[18px] object-cover" /> : <span className="grid h-14 w-14 place-items-center rounded-[18px] bg-[var(--panel-2)] text-base font-semibold">{profile.firstName.slice(0, 1).toUpperCase()}</span>}<div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold">{profile.name}</h1><p className="mt-0.5 text-xs text-[var(--muted)]">Ур. {profile.level} · регистрация {new Date(profile.joinedAt).toLocaleDateString("ru-RU")}</p>{profile.reputation ? <p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--muted)]"><ShieldCheck size={11} />Репутация {profile.reputation.score}/100</p> : null}</div></div>
+      <div className="flex items-center gap-3"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedProfileFrame} size="large" /><div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-1.5"><h1 className="truncate text-base font-semibold">{profile.name}</h1>{profile.creatorVerified ? <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-[rgba(85,225,190,.10)] px-2 py-1 text-[9px] text-[var(--positive)] ring-1 ring-[rgba(85,225,190,.16)]"><BadgeCheck size={10} />Проверенный автор</span> : null}</div><p className="mt-0.5 text-xs text-[var(--muted)]">Ур. {profile.level} · регистрация {new Date(profile.joinedAt).toLocaleDateString("ru-RU")}</p>{profile.reputation ? <p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--muted)]"><ShieldCheck size={11} />Репутация {profile.reputation.score}/100</p> : null}</div></div>
+      {profile.profileBadges?.length ? <div className="mt-3 border-t border-[var(--border-soft)] pt-3"><p className="mb-2 text-[9px] uppercase tracking-[.12em] text-[var(--muted-2)]">Бейджи профиля</p><ProfileBadgeList badges={profile.profileBadges} /></div> : null}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5"><Metric label="Gifts" value={String(profile.giftCount)} /><Metric label="Продажи Gifts" value={String(profile.giftSales)} /><Metric label="Gift volume" value={money(profile.giftTradeVolume)} /><Metric label="Coin volume" value={money(profile.coinTradeVolume)} /><Metric label="XP" value={String(profile.xp)} /></div>
       <p className="mt-3 text-[9px] text-[var(--muted-2)]">Баланс, стоимость портфеля, cost basis и PnL приватны и не публикуются в профиле.</p>
     </section>

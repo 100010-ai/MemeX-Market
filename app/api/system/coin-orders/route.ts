@@ -1,18 +1,13 @@
-import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { recordAppError } from "@/lib/error-inbox";
-
-function safeEqual(a: string, b: string) {
-  const aa = Buffer.from(a); const bb = Buffer.from(b);
-  return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
-}
+import { safeSecretEquals } from "@/lib/security";
 
 async function processOrders(request: Request) {
   const secret = process.env.CRON_SECRET || "";
   const auth = request.headers.get("authorization") || "";
   const supplied = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!secret || !supplied || !safeEqual(secret, supplied)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!safeSecretEquals(supplied, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("process_coin_conditional_orders_v056", { p_limit: 100 });
   if (error) {

@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    gifts: runtimeConfig.featureFlags.gifts ? [...unique.values()].map((row) => mapGift(row as Record<string, any>)) : [],
+    gifts: runtimeConfig.featureFlags.gifts ? [...unique.values()].map(mapGift) : [],
     coins: runtimeConfig.featureFlags.memecoins ? (coinsResult.data || []).map(mapCoin) : [],
     collections: runtimeConfig.featureFlags.gifts ? (collectionsResult.data || []).map((row) => ({
       baseName: String(row.base_name), itemCount: Number(row.item_count), holderCount: Number(row.holder_count), listedCount: Number(row.listed_count),

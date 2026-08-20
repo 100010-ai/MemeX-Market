@@ -21,6 +21,12 @@ export type Profile = {
   xpForNextLevel: number;
 };
 
+export type ProfileBadge = {
+  key: string;
+  title: string;
+  rarity: string;
+};
+
 export type Coin = {
   id: string;
   creatorId: string | null;
@@ -44,6 +50,7 @@ export type Coin = {
   totalSupply: number;
   tokenReserve: number;
   quoteReserve: number;
+  boostedUntil?: string | null;
   sparkline?: number[];
 };
 
@@ -276,6 +283,9 @@ export type PublicProfile = {
   username: string | null;
   firstName: string;
   photoUrl: string | null;
+  equippedProfileFrame: string | null;
+  creatorVerified: boolean;
+  profileBadges: ProfileBadge[];
   joinedAt: string;
   xp: number;
   level: number;

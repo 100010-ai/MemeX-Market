@@ -33,12 +33,13 @@ export async function GET(request: NextRequest) {
 
     const [outgoing, market] = await Promise.all([outgoingQuery, marketQuery]);
     if (outgoing.error || market.error) throw outgoing.error || market.error;
-    const map = (row: any) => {
-      const buyer = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    const map = (row: Record<string, unknown>) => {
+      const relatedBuyer = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+      const buyer = relatedBuyer && typeof relatedBuyer === "object" ? relatedBuyer as Record<string, unknown> : null;
       return {
         id: String(row.id),
         buyerId: String(row.buyer_profile_id),
-        buyerName: buyer ? (buyer.username ? `@${buyer.username}` : buyer.first_name) : null,
+        buyerName: buyer ? (buyer.username ? `@${String(buyer.username)}` : buyer.first_name ? String(buyer.first_name) : null) : null,
         baseName: String(row.base_name),
         scopeType: row.scope_type as "collection" | "model" | "backdrop" | "symbol",
         traitValue: row.trait_value == null ? null : String(row.trait_value),
@@ -51,8 +52,8 @@ export async function GET(request: NextRequest) {
       };
     };
     return NextResponse.json({
-      outgoing: (outgoing.data || []).map(map),
-      market: (market.data || []).map(map),
+      outgoing: ((outgoing.data || []) as Record<string, unknown>[]).map(map),
+      market: ((market.data || []) as Record<string, unknown>[]).map(map),
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("advanced offers", error);

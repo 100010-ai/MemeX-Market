@@ -142,12 +142,17 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   }, [id]);
 
   useEffect(() => {
-    setData(null);
-    setError(null);
-    setChartLoading(false);
     buyRequestKey.current = null;
-    void load();
-    return () => { loadSequence.current += 1; };
+    const timer = window.setTimeout(() => {
+      setData(null);
+      setError(null);
+      setChartLoading(false);
+      void load();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      loadSequence.current += 1;
+    };
   }, [load]);
 
   const realtimeReload = useCallback(() => { void load(); }, [load]);

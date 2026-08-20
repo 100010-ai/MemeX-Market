@@ -39,9 +39,13 @@ export function CommandPalette() {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setRemote(null);
+        setLoading(false);
         setOpen((value) => !value);
       } else if (event.key === "Escape") {
         setOpen(false);
+        setRemote(null);
+        setLoading(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -55,11 +59,7 @@ export function CommandPalette() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) {
-      setRemote(null);
-      setLoading(false);
-      return;
-    }
+    if (!open || query.trim().length < 2) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -96,14 +96,28 @@ export function CommandPalette() {
     router.push(href);
   }
 
+  function close() {
+    setOpen(false);
+    setRemote(null);
+    setLoading(false);
+  }
+
+  function updateQuery(value: string) {
+    setQuery(value);
+    if (value.trim().length < 2) {
+      setRemote(null);
+      setLoading(false);
+    }
+  }
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center bg-black/60 px-3 pt-[max(12vh,env(safe-area-inset-top))] backdrop-blur-[2px]" onMouseDown={(event) => { if (event.currentTarget === event.target) setOpen(false); }}>
+    <div className="fixed inset-0 z-[90] flex items-start justify-center bg-black/60 px-3 pt-[max(12vh,env(safe-area-inset-top))] backdrop-blur-[2px]" onMouseDown={(event) => { if (event.currentTarget === event.target) close(); }}>
       <section role="dialog" aria-modal="true" aria-label="Быстрый поиск" className="w-full max-w-[560px] overflow-hidden rounded-[20px] border border-white/[.10] bg-[#111318] shadow-2xl">
         <div className="flex items-center gap-2 border-b border-white/[.07] px-3">
           <Search size={16} className="shrink-0 text-[var(--muted)]" />
-          <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gift, коллекция, @user, $COIN или раздел" className="h-12 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
-          <button type="button" onClick={() => setOpen(false)} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-white/[.05]"><X size={15} /></button>
+          <input ref={inputRef} value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Gift, коллекция, @user, $COIN или раздел" className="h-12 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
+          <button type="button" onClick={close} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-white/[.05]"><X size={15} /></button>
         </div>
         <div className="max-h-[min(62vh,520px)] overflow-y-auto p-2">
           {loading ? <p className="px-2 py-3 text-[10px] text-[var(--muted)]">Ищем…</p> : null}

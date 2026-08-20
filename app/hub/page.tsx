@@ -38,7 +38,10 @@ export default function HubPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const realtimeReload = useCallback(() => { void load(true); }, [load]);
 
   return (

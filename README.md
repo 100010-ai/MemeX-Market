@@ -4,6 +4,18 @@ Telegram Mini App: simulated secondary market for Telegram collectible Gifts plu
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
+## Market 2.0 Economy Update
+
+- **MXM Store + Telegram Stars:** database-priced currency packs, Premium, current-season pass, disclosed-odds limited cases, Energy, Creator Tools and profile cosmetics. Invoice authorization and fulfilment are payer-bound, idempotent and stock-reserving; paid/refunded charge IDs are retained for support and reconciliation.
+- **Closed-loop MXM Coins:** Stars packs credit internal MXM Coins, while cases, Energy and cosmetics provide atomic MXM-denominated sinks. MXM/virtual TON and all rewards remain non-withdrawable and have no cash value.
+- **Seasons, cases and collections:** rolling 30-day seasons with Free/Premium reward claims, auditable case history and finite supply, collection XP/VIP progress, canonical completion targets and social profile rewards.
+- **Creator economy:** launch-time initial buy, floor guard, creator lock/vesting, platform + creator fee split, Genesis buyer positions, creator levels, earned-fee ledger and Creator Hub analytics.
+- **Discovery and WebView:** authoritative New Coins, activity-weighted HOT NOW, catalogue-wide server filters/sorts, indexed stable-random Gift pagination, off-screen card containment, Telegram safe-area/viewport synchronization and reduced mobile blur cost.
+- **Safety and operations:** atomic Premium watchlist limits, Energy enforcement, store eligibility checks, pre-checkout reservation expiry/grace, human payment support, mandatory refund-reconciliation queue, bounded admin aggregates and anti-abuse/rate-limit telemetry.
+- **Advertising removed:** AdsGram, rewarded-ad/sponsored-task routes, runtime flags, admin controls, documentation and live database objects are no longer part of the product.
+
+Apply every migration in numeric order through `supabase/migrations/029_market_scalability.sql` before deploying this build. Run `npm run release:check` after setting the required production environment variables.
+
 
 
 ## v0.56 — Quality Update + Marketplace 2.0
@@ -14,22 +26,10 @@ Telegram Mini App: simulated secondary market for Telegram collectible Gifts plu
 - **Unified discovery:** global `Ctrl/Cmd + K` command palette searches Gifts, collections, users, memecoins and core MXM sections. Market search respects runtime feature flags.
 - **Conditional memecoin orders:** limit buy/sell plus Take Profit / Stop Loss, open-order limits, expiration and server-side idempotent execution. Sell reservations prevent overselling the same token balance.
 - **Concurrency fixes:** conditional coin execution and manual trades use consistent locking/idempotency guards to reduce duplicate fills, race conditions and deadlocks.
-- **Admin Economy & Risk:** minted/burned/circulating TON, fees, referrals, rewarded ads, richest 1%, inflation indicators, suspicious Gift trading pairs, repeated AdsGram claims and Error Inbox.
-- **Health Center:** Supabase, Telegram Bot/webhook, TonAPI, AdsGram, background workers, Gift sync, recent errors and active conditional orders with sanitized diagnostics.
+- **Admin Economy & Risk:** minted/burned/circulating TON, fees, Stars revenue, ARPU/ARPPU, rolling DAU/MAU/M1 retention, 24-hour trade turnover, bounded top Gift/coin/Store lists, suspicious Gift trading pairs and Error Inbox.
+- **Health Center:** Supabase, Telegram Bot/webhook, TonAPI, background workers, Gift sync, recent errors and active conditional orders with sanitized diagnostics.
 - **Runtime Config:** maintenance message, feature flags and operational limits can be changed from admin without a redeploy.
-- **Database:** apply `supabase/migrations/026_v056_quality_market_orders_admin.sql` after migration 025 before deploying this application build.
-
-## v0.50 — AdsGram moderation + rewarded ads hardening
-
-- Rewarded-реклама полностью добровольна и не блокирует функции продукта.
-- Награда: 1 игровой TON, максимум 3 просмотра в сутки, cooldown 30 минут.
-- Клик по рекламе не требуется; production-награда подтверждается только серверным Reward URL.
-- Партнёрские incentivized subscription/click задания отключены по умолчанию и активные кампании ставятся на паузу миграцией 025.
-- Добавлен `/about` с явным пояснением виртуального баланса и рекламных правил.
-- Добавлен `npm run adsgram:check`, который проверяет production-конфиг и печатает Reward URL.
-
-Перед подачей AdsGram прочитайте `ADSGRAM_MODERATION.md` и примените миграцию `025_v050_adsgram_moderation.sql`.
-Публичные `/moderation` и `/reward-confirmations` позволяют модератору проверить добровольность рекламы и реальные server-verified начисления без Telegram-сессии.
+- **Database:** apply every migration in numeric order through `supabase/migrations/029_market_scalability.sql` before deploying this application build.
 
 ## v0.49 — Sweep, bulk listing, activity and market fixes
 
@@ -67,60 +67,16 @@ supabase/migrations/023_v048_watchlist_notifications_profiles.sql
 For server-side price-alert evaluation and Telegram delivery, configure `CRON_SECRET` and call `/api/system/notifications-dispatch` from a trusted scheduler. `NEXT_PUBLIC_APP_URL` is optional and enables the “Open in MXM” button in bot notifications.
 
 
-## v0.47 — Партнёрские задания и маркетинг
-
-- В `/admin` появился отдельный раздел **«Реклама»** с конструктором рекламных кампаний.
-- Поддерживаются задания на подписку в Telegram с автоматической проверкой, переходы по ссылке и произвольные задания с ручным подтверждением.
-- Для кампании настраиваются рекламодатель, награда, лимит участников, расписание, приоритет, закрепление, CTA, инструкция и внутренняя заметка.
-- Добавлена очередь ручной проверки, пауза/запуск, клонирование и сохранение истории кампаний.
-- Добавлены промокоды с лимитом активаций.
-- Партнёрские награды и промокоды участвуют в реферальной системе.
-- Игроки видят партнёрские задания прямо в разделе «Задания и награды».
-
-**Обязательная миграция при обновлении с v0.46:**
-
-```text
-supabase/migrations/022_v047_sponsored_tasks_admin_marketing.sql
-```
-
-Для автоматической проверки подписки MXM-бот должен быть администратором рекламируемого Telegram-канала/группы. Подробнее: `docs/ADMIN_MARKETING_V047.md`.
-
-## v0.45 — Economy, Rewarded Ads, Market UI + Audit
+## v0.45 — Economy, Market UI + Audit
 
 - Removed the old collection/floor dashboard block from the public Gift market and replaced the scattered filter chips with one reliable portal-based filter drawer.
 - Reworked memecoin launch economics: **150 virtual TON** launch fee, **12-hour** cooldown and **2 active coins** per creator. The creation screen now shows real internal AMM parameters instead of misleading huge “starting position” numbers.
-- Added controlled rewarded advertising: **50 virtual TON** per completed ad, **2 rewards/day**, **30-minute** cooldown. Rewards are internal MXM balance only.
-- Added AdsGram Reward integration with server callback verification. Production should set `ADSGRAM_REWARD_SECRET` and keep `ADSGRAM_ALLOW_CLIENT_FALLBACK=false`.
 - Added economy ledger/metrics, admin economy controls, atomic fee-setting updates and a system treasury for Gift marketplace fees.
 - Corrected profile PnL so virtual rewards, admin balance changes and launch fees no longer masquerade as trading profit/loss.
 - Hardened Telegram Gift media downloads with timeouts and size/decompression bounds.
 - Blocked coin launches when the v0.45 economy migration is missing, preventing UI/database fee mismatches during rolling deploys.
 - Games stay disabled and absent from the public interface.
-- Static audit: `docs/AUDIT_V045.md`. AdsGram setup: `docs/ADS_REWARDED_SETUP_V045.md`.
-
-**Required DB migration when upgrading from v0.43:**
-
-```text
-supabase/migrations/020_v045_economy_rewarded_ads.sql
-```
-
-If `019_v041_remove_games_interface.sql` was never applied on the database, apply `019` first and then `020`.
-
-### AdsGram setup
-
-```env
-NEXT_PUBLIC_ADSGRAM_BLOCK_ID=YOUR_REWARD_BLOCK_ID
-ADSGRAM_REWARD_SECRET=replace-with-a-long-random-server-secret
-ADSGRAM_ALLOW_CLIENT_FALLBACK=false
-```
-
-Set the AdsGram Reward URL to:
-
-```text
-https://YOUR_DOMAIN/api/rewards/ads/adsgram?userid=[userId]&token=YOUR_SECRET
-```
-
-Then redeploy so the server and client receive the new environment variables.
+- Static audit: `docs/AUDIT_V045.md`.
 
 ## v0.40 — Audit, Games 2.0, Speed
 

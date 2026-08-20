@@ -23,6 +23,7 @@ type Offer = {
 };
 
 type OfferPayload = { outgoing: Offer[]; market: Offer[] };
+type LoadedOfferPayload = OfferPayload & { checkedAt: number };
 
 function scopeLabel(offer: Offer) {
   if (offer.scopeType === "collection") return "Любой Gift коллекции";
@@ -46,7 +47,7 @@ export function AdvancedOffersPanel({
   backdrops: GiftTraitGroup[];
   symbols: GiftTraitGroup[];
 }) {
-  const [payload, setPayload] = useState<OfferPayload>({ outgoing: [], market: [] });
+  const [payload, setPayload] = useState<LoadedOfferPayload>({ outgoing: [], market: [], checkedAt: 0 });
   const [scopeType, setScopeType] = useState<ScopeType>("collection");
   const [traitValue, setTraitValue] = useState("");
   const [amount, setAmount] = useState("");
@@ -62,34 +63,36 @@ export function AdvancedOffersPanel({
     return [];
   }, [scopeType, models, backdrops, symbols]);
 
-  useEffect(() => {
-    if (scopeType === "collection") setTraitValue("");
-    else if (!values.includes(traitValue)) setTraitValue(values[0] || "");
-  }, [scopeType, values, traitValue]);
+  const selectedTraitValue = scopeType === "collection"
+    ? ""
+    : values.includes(traitValue) ? traitValue : values[0] || "";
 
   const load = useCallback(async () => {
     try {
       const next = await apiFetch<OfferPayload>(`/api/market/offers?baseName=${encodeURIComponent(baseName)}`, { cacheMs: 0 });
-      setPayload(next);
+      setPayload({ ...next, checkedAt: Date.now() });
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось загрузить офферы");
     }
   }, [baseName]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function createOffer() {
     const price = Number(amount);
     if (!Number.isFinite(price) || price <= 0) { setError("Укажите корректную цену оффера"); return; }
-    if (scopeType !== "collection" && !traitValue) { setError("Выберите trait"); return; }
+    if (scopeType !== "collection" && !selectedTraitValue) { setError("Выберите trait"); return; }
     setBusy(true);
     setError(null);
     try {
       await apiFetch("/api/market/offers", {
         method: "POST",
         headers: { "x-idempotency-key": `advanced-offer-${makeKey()}` },
-        body: JSON.stringify({ baseName, scopeType, traitValue: scopeType === "collection" ? null : traitValue, amount: price, maxFills, durationHours }),
+        body: JSON.stringify({ baseName, scopeType, traitValue: scopeType === "collection" ? null : selectedTraitValue, amount: price, maxFills, durationHours }),
       });
       setAmount("");
       await load();
@@ -109,7 +112,7 @@ export function AdvancedOffersPanel({
     } finally { setBusy(false); }
   }
 
-  const activeOutgoing = payload.outgoing.filter((offer) => offer.status === "active" && new Date(offer.expiresAt).getTime() > Date.now());
+  const activeOutgoing = payload.outgoing.filter((offer) => offer.status === "active" && new Date(offer.expiresAt).getTime() > payload.checkedAt);
   const topMarket = payload.market.slice(0, 10);
 
   return (
@@ -123,7 +126,7 @@ export function AdvancedOffersPanel({
           <select value={scopeType} onChange={(event) => setScopeType(event.target.value as ScopeType)} className="mxm-input">
             <option value="collection">Вся коллекция</option><option value="model">Модель</option><option value="backdrop">Фон</option><option value="symbol">Символ</option>
           </select>
-          {scopeType === "collection" ? <div className="mxm-input flex items-center text-[var(--muted)]">Любой {baseName}</div> : <select value={traitValue} onChange={(event) => setTraitValue(event.target.value)} className="mxm-input">{values.map((value) => <option key={value} value={value}>{value}</option>)}</select>}
+          {scopeType === "collection" ? <div className="mxm-input flex items-center text-[var(--muted)]">Любой {baseName}</div> : <select value={selectedTraitValue} onChange={(event) => setTraitValue(event.target.value)} className="mxm-input">{values.map((value) => <option key={value} value={value}>{value}</option>)}</select>}
         </div>
         <div className="mt-2 grid grid-cols-[minmax(0,1fr)_80px_92px] gap-2">
           <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="Цена за 1 Gift" className="mxm-input" />
