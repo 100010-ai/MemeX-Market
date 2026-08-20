@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 import type { GiftAsset } from "@/lib/types";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
     if (removed.error) return NextResponse.json({ error: removed.error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
+
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
 
   const gift = await supabase.from("virtual_gifts").select("id,owner_profile_id,status,listing_price,listing_expires_at").eq("id", id).maybeSingle();
   if (gift.error) return NextResponse.json({ error: gift.error.message }, { status: 500 });

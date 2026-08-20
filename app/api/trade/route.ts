@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { recordAppError } from "@/lib/error-inbox";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export async function POST(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-trade", String(profile.id), 90, 60))) return NextResponse.json({ error: "Слишком много торговых запросов. Подождите минуту." }, { status: 429 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
 
   try {
     const body = await request.json();
@@ -42,6 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("trade", error);
+    await recordAppError("/api/trade", error, String(profile.id));
     return NextResponse.json({ error: "Сделка не выполнена" }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Share2, Star, Users } from "luc
 import { CoinChart } from "@/components/coin-chart";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { CoinConditionalOrders } from "@/components/coin-conditional-orders";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
 import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
@@ -232,6 +233,7 @@ export default function CoinPage() {
             <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-3 w-full py-3 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
             <p className="mt-2 text-center text-[9px] text-[var(--muted-2)]">Расчёт показывается мгновенно. Сервер подтверждает итоговую сделку атомарно.</p>
             <div className="mt-4 grid grid-cols-2 gap-x-4 border-t border-[var(--border-soft)] pt-3"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Нереализованный PnL" value={money(holdingPnl)} tone={holdingPnl} /></div>
+            <CoinConditionalOrders coin={coin} holdingQuantity={data.holding.quantity} availableBalance={data.availableBalance} onBalanceChange={() => { void refreshProfile(); void load(true); }} />
           </section>
 
           <section><div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-2 text-xs font-medium"><Users size={14} />Топ холдеров</div>{data.topHolders.length ? <div className="divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="flex items-center justify-between gap-3 py-2.5 text-xs"><span className="truncate"><span className="mr-2 text-[var(--muted)]">{index + 1}</span>{holder.name}</span><span>{compact(holder.quantity)}</span></Link>)}</div> : <Empty text="Холдеров пока нет" />}</section>

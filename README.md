@@ -1,9 +1,23 @@
-# MXM Market v0.50.0
+# MXM Market v0.56.0
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
 
+
+
+## v0.56 — Quality Update + Marketplace 2.0
+
+- **Production hardening:** runtime feature flags and maintenance mode now gate server mutations, not only UI controls. Watchlist and price-alert validation were tightened and duplicate alerts are rejected.
+- **Telegram WebView:** dynamic/stable viewport CSS variables, Back Button handling, safe-area aware shell and navigation behavior for Telegram mobile clients.
+- **Marketplace 2.0:** collection/model/backdrop/symbol offers with balance reservation, multi-fill limits, expiration, cancellation and direct acceptance from matching Gifts.
+- **Unified discovery:** global `Ctrl/Cmd + K` command palette searches Gifts, collections, users, memecoins and core MXM sections. Market search respects runtime feature flags.
+- **Conditional memecoin orders:** limit buy/sell plus Take Profit / Stop Loss, open-order limits, expiration and server-side idempotent execution. Sell reservations prevent overselling the same token balance.
+- **Concurrency fixes:** conditional coin execution and manual trades use consistent locking/idempotency guards to reduce duplicate fills, race conditions and deadlocks.
+- **Admin Economy & Risk:** minted/burned/circulating TON, fees, referrals, rewarded ads, richest 1%, inflation indicators, suspicious Gift trading pairs, repeated AdsGram claims and Error Inbox.
+- **Health Center:** Supabase, Telegram Bot/webhook, TonAPI, AdsGram, background workers, Gift sync, recent errors and active conditional orders with sanitized diagnostics.
+- **Runtime Config:** maintenance message, feature flags and operational limits can be changed from admin without a redeploy.
+- **Database:** apply `supabase/migrations/026_v056_quality_market_orders_admin.sql` after migration 025 before deploying this application build.
 
 ## v0.50 — AdsGram moderation + rewarded ads hardening
 

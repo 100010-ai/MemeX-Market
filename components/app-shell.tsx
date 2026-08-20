@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { PerfOverlay } from "@/components/dev/perf-overlay";
+import { apiFetch } from "@/lib/api";
+import type { RuntimeConfig } from "@/lib/runtime-config";
+import { CommandPalette } from "@/components/command-palette";
 
 const nav = [
   { href: "/market", label: "Маркет", icon: Store },
@@ -48,7 +52,17 @@ function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; siz
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
   const { profile, loading, error, retryAuth } = useTelegramProfile();
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const title = currentTitle(pathname);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!profile) { setRuntimeConfig(null); return; }
+    apiFetch<{ config: RuntimeConfig }>("/api/runtime-config", { cacheMs: 15_000 })
+      .then((payload) => { if (!cancelled) setRuntimeConfig(payload.config); })
+      .catch((cause) => console.error("runtime config", cause));
+    return () => { cancelled = true; };
+  }, [profile?.id]);
 
   if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/moderation" || pathname === "/reward-confirmations") return <>{children}</>;
 
@@ -60,8 +74,12 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
     return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-5"><div className="w-full border-t border-white/[.14] py-6"><div className="mb-5 text-[13px] font-black tracking-[-.08em]">MXM</div><h1 className="text-lg font-semibold tracking-[-.025em]">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p><button type="button" onClick={retryAuth} className="mt-5 border-b border-white pb-1 text-xs font-semibold text-white">Повторить вход</button></div></main>;
   }
 
+  if (runtimeConfig?.maintenanceMode) {
+    return <main className="mx-auto flex min-h-[var(--mxm-viewport-height)] max-w-md items-center px-5"><section className="w-full rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-5"><p className="text-[11px] font-black tracking-[-.06em]">MXM</p><h1 className="mt-4 text-base font-semibold">Технические работы</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{runtimeConfig.maintenanceMessage}</p><button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-[14px] bg-[var(--panel-3)] px-3 py-2 text-[11px] font-medium">Проверить снова</button></section></main>;
+  }
+
   return (
-    <div className="mx-auto min-h-[100dvh] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
+    <div className="mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
       <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
           <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
@@ -104,6 +122,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         })}
       </nav>
 
+      <CommandPalette />
       <PerfOverlay />
       {modal}
     </div>

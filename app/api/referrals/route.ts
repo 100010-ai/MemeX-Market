@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export async function GET() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.referrals) return NextResponse.json({ error: "Реферальная программа временно отключена" }, { status: 503 });
   const supabase = getSupabaseAdmin();
   const [meResult, referredResult, rewardsResult, settingsResult] = await Promise.all([
     supabase.from("profiles").select("referral_code,referrer_profile_id").eq("id", profile.id).single(),

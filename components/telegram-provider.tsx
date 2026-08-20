@@ -177,6 +177,40 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, [isControl, isPublic, authNonce]);
 
 
+
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    const root = document.documentElement;
+    const syncViewport = () => {
+      const viewportHeight = Number(webApp?.viewportHeight || window.visualViewport?.height || window.innerHeight);
+      const stableHeight = Number(webApp?.viewportStableHeight || viewportHeight);
+      if (Number.isFinite(viewportHeight) && viewportHeight > 0) root.style.setProperty("--mxm-viewport-height", `${Math.round(viewportHeight)}px`);
+      if (Number.isFinite(stableHeight) && stableHeight > 0) root.style.setProperty("--mxm-viewport-stable-height", `${Math.round(stableHeight)}px`);
+    };
+    syncViewport();
+    webApp?.onEvent?.("viewportChanged", syncViewport);
+    window.visualViewport?.addEventListener("resize", syncViewport);
+    window.addEventListener("orientationchange", syncViewport);
+    return () => {
+      webApp?.offEvent?.("viewportChanged", syncViewport);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
+      window.removeEventListener("orientationchange", syncViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    const backButton = window.Telegram?.WebApp?.BackButton;
+    if (!backButton) return;
+    const rootRoutes = new Set(["/", "/market", "/orders", "/hub", "/tasks", "/vault", "/profile"]);
+    const onBack = () => {
+      if (window.history.length > 1) window.history.back();
+      else window.location.assign("/market");
+    };
+    if (rootRoutes.has(pathname) || pathname.startsWith("/control") || pathname.startsWith("/admin")) backButton.hide();
+    else { backButton.show(); backButton.onClick(onBack); }
+    return () => { backButton.offClick(onBack); };
+  }, [pathname]);
+
   const profileId = profile?.id ?? null;
   useEffect(() => {
     if (profileId && !isControl && !isPublic) warmCurrentRoute(pathname);
@@ -203,6 +237,11 @@ declare global {
         setHeaderColor?: (color: string) => void;
         setBackgroundColor?: (color: string) => void;
         HapticFeedback?: { impactOccurred: (style: "light" | "medium" | "heavy") => void };
+        viewportHeight?: number;
+        viewportStableHeight?: number;
+        onEvent?: (event: "viewportChanged", callback: () => void) => void;
+        offEvent?: (event: "viewportChanged", callback: () => void) => void;
+        BackButton?: { show: () => void; hide: () => void; onClick: (callback: () => void) => void; offClick: (callback: () => void) => void };
         openInvoice?: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending") => void) => void;
         openTelegramLink?: (url: string) => void;
       };

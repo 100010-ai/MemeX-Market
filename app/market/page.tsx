@@ -16,12 +16,36 @@ type GenesisState = { total: number; released: number; remainingToRelease: numbe
 type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
 type MarketPayload = { coins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; filterOptions?: GiftFilterOptions };
 type GiftPageChunk = { gifts: GiftAsset[]; nextOffset: number | null; marketSeed: string };
+type UnifiedSearch = {
+  gifts: GiftAsset[];
+  coins: Coin[];
+  collections: Array<{ baseName: string; itemCount: number; holderCount: number; listedCount: number; floorPrice: number | null; volume24h: number; change24h: number; tradeCount24h: number }>;
+  users: Array<{ id: string; name: string; username: string | null; firstName: string; photoUrl: string | null }>;
+};
 type GiftSort = "random" | "price" | "newest" | "number" | "rarity" | "offers";
 type CoinSort = "trending" | "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
 const emptyMarketPayload = (): MarketPayload => ({ coins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
+
+function weightedCoinScore(coin: Coin) {
+  const volume = Math.log1p(Math.max(0, coin.volume24h));
+  const trades = Math.log1p(Math.max(0, coin.tradeCount24h));
+  const holders = Math.log1p(Math.max(0, coin.holderCount));
+  const liquidity = Math.log1p(Math.max(0, coin.liquidity));
+  const momentum = Math.max(-60, Math.min(180, coin.change24h)) / 100;
+  return volume * .34 + trades * .28 + holders * .18 + liquidity * .16 + momentum * .04;
+}
+
+function weightedCollectionScore(collection: GiftCollection) {
+  const volume = Math.log1p(Math.max(0, collection.volume24h));
+  const trades = Math.log1p(Math.max(0, collection.tradeCount24h));
+  const holders = Math.log1p(Math.max(0, collection.holderCount));
+  const momentum = Math.max(-60, Math.min(180, collection.change24h)) / 100;
+  const listingHealth = collection.itemCount > 0 ? Math.min(.35, collection.listedCount / collection.itemCount) : 0;
+  return volume * .38 + trades * .30 + holders * .20 + momentum * .07 + listingHealth * .05;
+}
 const marketCache = new Map<"gifts" | "coins", { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
 const GIFT_PAGE_SIZE = 24;
@@ -45,7 +69,7 @@ export default function MarketPage() {
   const [watchBusy, setWatchBusy] = useState<string | null>(null);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [remoteGiftSearch, setRemoteGiftSearch] = useState<GiftAsset[] | null>(null);
+  const [remoteSearch, setRemoteSearch] = useState<UnifiedSearch | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
@@ -90,19 +114,18 @@ export default function MarketPage() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (tab !== "gifts") { setRemoteGiftSearch(null); setSearchLoading(false); return; }
     const q = query.trim();
-    if (q.length < 2) { setRemoteGiftSearch(null); setSearchLoading(false); return; }
+    if (q.length < 2) { setRemoteSearch(null); setSearchLoading(false); return; }
     let cancelled = false;
     setSearchLoading(true);
     const timer = window.setTimeout(() => {
-      void apiFetch<{ gifts: GiftAsset[] }>(`/api/market/search?q=${encodeURIComponent(q)}`)
-        .then((result) => { if (!cancelled) setRemoteGiftSearch(result.gifts); })
-        .catch((cause) => { if (!cancelled) console.error("gift search", cause); })
+      void apiFetch<UnifiedSearch>(`/api/market/search?q=${encodeURIComponent(q)}`)
+        .then((result) => { if (!cancelled) setRemoteSearch(result); })
+        .catch((cause) => { if (!cancelled) console.error("market search", cause); })
         .finally(() => { if (!cancelled) setSearchLoading(false); });
-    }, 260);
+    }, 240);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query, tab]);
+  }, [query]);
 
   const loadMoreGifts = useCallback(async () => {
     if (tab !== "gifts" || loadingMore || data.nextOffset == null || !data.marketSeed || query.trim().length >= 2) return;
@@ -184,7 +207,7 @@ export default function MarketPage() {
 
   const gifts = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    const source = deferredQuery.trim().length >= 2 && remoteGiftSearch ? remoteGiftSearch : data.gifts;
+    const source = deferredQuery.trim().length >= 2 && remoteSearch ? remoteSearch.gifts : data.gifts;
     return source.filter((gift) => {
       if (gift.isBurned) return false;
       if (watchOnly && !watchedCollections.has(gift.baseName)) return false;
@@ -212,7 +235,7 @@ export default function MarketPage() {
       if (giftSort === "offers") return b.offerCount - a.offerCount || Number(a.listingPrice) - Number(b.listingPrice);
       return Number(a.listingPrice) - Number(b.listingPrice);
     });
-  }, [data.gifts, remoteGiftSearch, deferredQuery, collection, model, backdrop, symbol, priceBand, giftSort, giftView, watchOnly, watchedCollections, marketNow]);
+  }, [data.gifts, remoteSearch, deferredQuery, collection, model, backdrop, symbol, priceBand, giftSort, giftView, watchOnly, watchedCollections, marketNow]);
 
   useEffect(() => {
     if (tab !== "gifts" || loading || loadingMore || query.trim().length >= 2) return;
@@ -222,7 +245,8 @@ export default function MarketPage() {
 
   const coins = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    return data.coins.filter((coin) => {
+    const source = deferredQuery.trim().length >= 2 && remoteSearch ? remoteSearch.coins : data.coins;
+    return source.filter((coin) => {
       if (watchOnly && !watchedCoins.has(coin.id)) return false;
       return !q || `${coin.name} ${coin.symbol}`.toLowerCase().includes(q);
     }).sort((a, b) => {
@@ -230,9 +254,11 @@ export default function MarketPage() {
       if (coinSort === "volume") return b.volume24h - a.volume24h;
       if (coinSort === "marketcap") return b.marketCap - a.marketCap;
       if (coinSort === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return b.volume24h - a.volume24h || b.tradeCount24h - a.tradeCount24h || b.holderCount - a.holderCount;
+      return weightedCoinScore(b) - weightedCoinScore(a);
     });
-  }, [data.coins, deferredQuery, watchOnly, watchedCoins, coinSort]);
+  }, [data.coins, remoteSearch, deferredQuery, watchOnly, watchedCoins, coinSort]);
+
+  const trendingCollections = useMemo(() => data.collections.slice().sort((a, b) => weightedCollectionScore(b) - weightedCollectionScore(a)).slice(0, 8), [data.collections]);
 
   function switchTab(next: "gifts" | "coins") {
     if (next === tab) return;
@@ -240,7 +266,7 @@ export default function MarketPage() {
     setData(remembered || emptyMarketPayload());
     setLoading(!remembered);
     setQuery("");
-    setRemoteGiftSearch(null);
+    setRemoteSearch(null);
     setSearchLoading(false);
     setTab(next);
   }
@@ -315,9 +341,17 @@ export default function MarketPage() {
         {query ? <button type="button" aria-label="Очистить поиск" onClick={() => setQuery("")} className="mxm-clear-search"><X size={14} /></button> : null}
         <Link href="/hub" aria-label="Лента" className="mxm-feed-link"><Sparkles size={14} /><span className="hidden sm:inline">Лента</span></Link>
       </div>
+      {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">
+        <div className="mxm-hscroll gap-2">
+          {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">floor {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
+          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{user.photoUrl ? <img src={user.photoUrl} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
+          {tab === "gifts" ? remoteSearch.coins.slice(0, 4).map((coin) => <Link key={`coin:${coin.id}`} href={`/coin/${coin.id}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">${coin.symbol}</span><span className="ml-2 text-[var(--muted)]">{percent(coin.change24h)}</span></Link>) : null}
+        </div>
+      </div> : null}
 
       {tab === "gifts" ? (
         <>
+          {!query.trim() && trendingCollections.length ? <section className="mb-4"><div className="mb-2 flex items-center justify-between"><p className="flex items-center gap-1.5 text-[11px] font-medium"><Flame size={13} className="text-[var(--accent)]"/>Коллекции в тренде</p><span className="text-[9px] text-[var(--muted)]">weighted score</span></div><div className="mxm-hscroll gap-2">{trendingCollections.map((item,index)=><Link key={item.baseName} href={`/collections/${encodeURIComponent(item.baseName)}`} className="min-w-[150px] rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel)] px-3 py-2.5"><div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-medium">{index+1}. {item.baseName}</span><span className={`text-[9px] ${item.change24h>=0?"text-[var(--positive)]":"text-[var(--negative)]"}`}>{percent(item.change24h)}</span></div><p className="mt-1 text-[9px] text-[var(--muted)]">floor {item.floorPrice==null?"—":money(item.floorPrice)} · {item.tradeCount24h} сделок</p></Link>)}</div></section> : null}
           <div className="mxm-view-tabs mxm-hscroll mb-3 gap-5">
             {([
               ["all","Все"],["deals","Выгодно"],["rare","Редкие"],["new","Новые"],["offers","С офферами"]

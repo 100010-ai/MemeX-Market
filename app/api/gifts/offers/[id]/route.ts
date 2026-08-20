@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -18,6 +19,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ status: "cancelled" });
   }
   if (action === "accept" || action === "reject") {
+    if (action === "accept") {
+      const runtimeConfig = await getRuntimeConfig();
+      if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+    }
     const { data, error } = await supabase.rpc("resolve_gift_offer_v2", { p_owner_id: profile.id, p_offer_id: id, p_action: action });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json(data);

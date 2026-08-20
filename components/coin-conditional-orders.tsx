@@ -1,0 +1,81 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Clock3, Gem, Target, X } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { compact, money, price } from "@/lib/format";
+import type { Coin } from "@/lib/types";
+
+type Kind = "limit_buy" | "limit_sell" | "take_profit" | "stop_loss";
+type Order = { id: string; kind: Kind; triggerPrice: number; inputAmount: number; status: string; expiresAt: string; result: unknown; failureReason: string | null; createdAt: string; executedAt: string | null };
+
+const labels: Record<Kind, string> = { limit_buy: "Лимитная покупка", limit_sell: "Лимитная продажа", take_profit: "Take Profit", stop_loss: "Stop Loss" };
+
+function requestKey() {
+  const value = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `coin-order:${value}`;
+}
+
+export function CoinConditionalOrders({ coin, holdingQuantity, availableBalance, onBalanceChange }: { coin: Coin; holdingQuantity: number; availableBalance: number; onBalanceChange: () => void }) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [kind, setKind] = useState<Kind>("limit_buy");
+  const [triggerPrice, setTriggerPrice] = useState("");
+  const [inputAmount, setInputAmount] = useState("");
+  const [durationDays, setDurationDays] = useState(7);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const payload = await apiFetch<{ orders: Order[] }>(`/api/coins/${coin.id}/orders`, { cacheMs: 0 });
+      setOrders(payload.orders);
+      setError(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера"); }
+  }, [coin.id]);
+  useEffect(() => { void load(); }, [load]);
+
+  const isBuy = kind === "limit_buy";
+  const numericInput = Number(inputAmount);
+  const numericTrigger = Number(triggerPrice);
+  const max = isBuy ? availableBalance : holdingQuantity;
+  const valid = Number.isFinite(numericInput) && numericInput > 0 && numericInput <= max && Number.isFinite(numericTrigger) && numericTrigger > 0;
+  const active = useMemo(() => orders.filter((order) => order.status === "active"), [orders]);
+
+  function setPercent(fraction: number) {
+    setInputAmount((max * fraction).toFixed(8).replace(/\.?0+$/, ""));
+  }
+
+  async function create() {
+    if (!valid || busy) return;
+    setBusy(true); setError(null);
+    try {
+      await apiFetch(`/api/coins/${coin.id}/orders`, { method: "POST", body: JSON.stringify({ kind, triggerPrice: numericTrigger, inputAmount: numericInput, durationDays, requestKey: requestKey() }) });
+      setInputAmount(""); setTriggerPrice("");
+      await load();
+      onBalanceChange();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось создать ордер"); }
+    finally { setBusy(false); }
+  }
+
+  async function cancel(id: string) {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      await apiFetch(`/api/coin-orders/${id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) });
+      await load(); onBalanceChange();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось отменить ордер"); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="border-t border-[var(--border-soft)] pt-4">
+    <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><Target size={13}/>Условные ордера</p><p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">Limit / TP / SL исполняются сервером при достижении цены. Покупка резервирует TON.</p></div><span className="text-[9px] text-[var(--muted)]">{active.length} активных</span></div>
+    <div className="mt-3 grid grid-cols-2 gap-2"><select value={kind} onChange={(event) => setKind(event.target.value as Kind)} className="mxm-input"><option value="limit_buy">Limit Buy</option><option value="limit_sell">Limit Sell</option><option value="take_profit">Take Profit</option><option value="stop_loss">Stop Loss</option></select><select value={durationDays} onChange={(event) => setDurationDays(Number(event.target.value))} className="mxm-input"><option value={1}>1 день</option><option value={3}>3 дня</option><option value={7}>7 дней</option><option value={14}>14 дней</option><option value={30}>30 дней</option></select></div>
+    <div className="mt-2 grid grid-cols-2 gap-2"><label className="block"><span className="mb-1 block text-[9px] text-[var(--muted)]">Триггер цены</span><input value={triggerPrice} onChange={(event) => setTriggerPrice(event.target.value)} inputMode="decimal" placeholder={price(coin.currentPrice)} className="mxm-input" /></label><label className="block"><span className="mb-1 block text-[9px] text-[var(--muted)]">{isBuy ? "Сумма TON" : `Количество ${coin.symbol}`}</span><input value={inputAmount} onChange={(event) => setInputAmount(event.target.value)} inputMode="decimal" placeholder="0" className="mxm-input" /></label></div>
+    <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-[var(--muted)]"><span>Доступно {isBuy ? money(availableBalance) : `${compact(holdingQuantity)} ${coin.symbol}`}</span><div className="flex gap-3">{[0.25,0.5,1].map((fraction)=><button type="button" key={fraction} onClick={()=>setPercent(fraction)}>{fraction===1?"МАКС":`${fraction*100}%`}</button>)}</div></div>
+    {kind === "take_profit" && numericTrigger > 0 && numericTrigger <= coin.currentPrice ? <p className="mt-2 text-[9px] text-[var(--negative)]">Take Profit обычно ставят выше текущей цены.</p> : null}
+    {kind === "stop_loss" && numericTrigger > 0 && numericTrigger >= coin.currentPrice ? <p className="mt-2 text-[9px] text-[var(--negative)]">Stop Loss обычно ставят ниже текущей цены.</p> : null}
+    {error ? <p className="mt-2 text-[10px] text-[var(--negative)]">{error}</p> : null}
+    <button type="button" disabled={!valid || busy} onClick={() => void create()} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-[15px] bg-[var(--panel-3)] text-[11px] font-semibold disabled:opacity-40"><Gem size={11} fill="currentColor"/>{busy?"Сохраняем…":"Создать ордер"}</button>
+    {orders.length ? <div className="mt-3 divide-y divide-[var(--border-soft)] border-t border-[var(--border-soft)]">{orders.slice(0,12).map((order)=><div key={order.id} className="flex items-center gap-2 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{labels[order.kind]} · {price(order.triggerPrice)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{order.kind === "limit_buy" ? money(order.inputAmount) : `${compact(order.inputAmount)} ${coin.symbol}`} · <span className={order.status === "active" ? "text-[var(--positive)]" : order.status === "failed" ? "text-[var(--negative)]" : ""}>{order.status}</span>{order.failureReason ? ` · ${order.failureReason}` : ""}</p></div>{order.status === "active" ? <button type="button" disabled={busy} onClick={() => void cancel(order.id)} className="grid h-8 w-8 place-items-center text-[var(--muted)]"><X size={12}/></button> : <Clock3 size={11} className="text-[var(--muted)]"/>}</div>)}</div> : null}
+  </section>;
+}

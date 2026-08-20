@@ -71,3 +71,12 @@ npm run adsgram:check
 - https://docs.adsgram.ai/publisher/get-block-id
 - https://docs.adsgram.ai/publisher/reward-interstitial-integration
 - https://docs.adsgram.ai/publisher/troubleshooting
+
+## Production MXM URLs
+
+- Web App: `https://meme-x-market.vercel.app`
+- Moderation: `https://meme-x-market.vercel.app/moderation`
+- Reward confirmations: `https://meme-x-market.vercel.app/reward-confirmations`
+- Reward endpoint base: `https://meme-x-market.vercel.app/api/rewards/ads/adsgram`
+
+The private `token` query parameter for the AdsGram Reward URL must come from `ADSGRAM_REWARD_SECRET` in Vercel Environment Variables. Never commit that secret to Git.

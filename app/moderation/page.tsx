@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default function ModerationPage() {
   const bot = String(process.env.NEXT_PUBLIC_BOT_USERNAME || "MemeXMarketBot").replace(/^@/, "");
-  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").replace(/\/$/, "");
   const botUrl = `https://t.me/${bot}`;
 
   const points = [

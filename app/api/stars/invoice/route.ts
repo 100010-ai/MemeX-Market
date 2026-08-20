@@ -4,6 +4,7 @@ import { STAR_PACKAGES } from "@/lib/economy";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation, enforceRateLimit } from "@/lib/security";
 import { telegramBotApi } from "@/lib/telegram-bot";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,8 @@ export async function POST(request: Request) {
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "stars-invoice", String(profile.id), 12, 300))) return NextResponse.json({ error: "Слишком много запросов оплаты" }, { status: 429 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.stars) return NextResponse.json({ error: "Покупки за Stars временно отключены" }, { status: 503 });
 
   const body = await request.json().catch(() => ({}));
   const stars = Number(body.stars);

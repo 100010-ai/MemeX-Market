@@ -29,9 +29,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const baseName = String(giftRow.base_name);
     const nowIso = new Date().toISOString();
 
-    const [tradesResult, offersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
+    const [tradesResult, offersResult, advancedOffersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(40),
       supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(30),
+      supabase.from("advanced_gift_offers_v056").select("id,buyer_profile_id,base_name,scope_type,trait_value,amount,max_fills,filled_count,status,created_at,expires_at").eq("base_name", baseName).eq("status", "active").gt("expires_at", nowIso).order("amount", { ascending: false }).limit(50),
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_item_market_stats", { p_virtual_gift_id: virtualGiftId }).single(),
       supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(60),
@@ -43,7 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // Analytics/history are secondary. The core resolved Gift stays usable when
     // an optional v0.30 table is not migrated during a rolling deployment.
     for (const [label, result] of [
-      ["trades", tradesResult], ["offers", offersResult],
+      ["trades", tradesResult], ["offers", offersResult], ["advanced offers", advancedOffersResult],
       ["collection", collectionResult], ["item stats", itemStatsResult], ["listing events", listingEventsResult], ["cart", cartResult], ["watchlist", watchedResult],
     ] as const) {
       if (result.error) console.warn(`gift detail ${label}`, result.error);
@@ -51,6 +52,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const trades = tradesResult.error ? [] : tradesResult.data || [];
     const offers = offersResult.error ? [] : (offersResult.data || []).filter((offer) => !offer.expires_at || String(offer.expires_at) > nowIso);
+    const advancedOffers = advancedOffersResult.error ? [] : (advancedOffersResult.data || []).filter((offer) => {
+      if (String(offer.buyer_profile_id) === String(profile.id)) return false;
+      const scope = String(offer.scope_type);
+      if (scope === "collection") return true;
+      if (scope === "model") return String(offer.trait_value || "") === String(giftRow.model_name || "");
+      if (scope === "backdrop") return String(offer.trait_value || "") === String(giftRow.backdrop_name || "");
+      if (scope === "symbol") return String(offer.trait_value || "") === String(giftRow.symbol_name || "");
+      return false;
+    });
     const listingEvents = listingEventsResult.error ? [] : listingEventsResult.data || [];
 
     const profileIds = new Set<string>();
@@ -59,6 +69,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       if (trade.seller_profile_id) profileIds.add(String(trade.seller_profile_id));
     }
     for (const offer of offers) if (offer.buyer_profile_id) profileIds.add(String(offer.buyer_profile_id));
+    for (const offer of advancedOffers) if (offer.buyer_profile_id) profileIds.add(String(offer.buyer_profile_id));
     for (const event of listingEvents) if (event.actor_profile_id) profileIds.add(String(event.actor_profile_id));
 
     const peopleResult = profileIds.size
@@ -143,6 +154,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       offers: offers.map((offer) => ({
         id: String(offer.id), amount: Number(offer.amount), status: offer.status, createdAt: String(offer.created_at), expiresAt: offer.expires_at ? String(offer.expires_at) : null,
         buyerId: String(offer.buyer_profile_id), buyerName: personName(names, String(offer.buyer_profile_id)), isMine: String(offer.buyer_profile_id) === String(profile.id),
+      })),
+      advancedOffers: advancedOffers.map((offer) => ({
+        id: String(offer.id), buyerId: String(offer.buyer_profile_id), buyerName: personName(names, String(offer.buyer_profile_id)),
+        scopeType: String(offer.scope_type), traitValue: offer.trait_value == null ? null : String(offer.trait_value), amount: Number(offer.amount),
+        maxFills: Number(offer.max_fills), filledCount: Number(offer.filled_count), expiresAt: String(offer.expires_at), createdAt: String(offer.created_at),
       })),
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `gift-detail;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {

@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift } from "@/lib/mappers";
 import { maybeMaintainGiftMarket } from "@/lib/market/maintenance";
 import type { GiftCollection } from "@/lib/types";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,6 +43,10 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const scope = request.nextUrl.searchParams.get("scope") === "coins" ? "coins" : "gifts";
+  const runtimeConfig = await getRuntimeConfig().catch((error) => { console.error("market runtime config", error); return null; });
+  if (!runtimeConfig) return NextResponse.json({ error: "Конфигурация рынка недоступна" }, { status: 503 });
+  if (scope === "coins" && !runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Мемкоины временно отключены" }, { status: 503 });
+  if (scope === "gifts" && !runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
 
   // Expiry is already enforced in every market view/RPC. Cleanup therefore
   // happens after the response and can never extend first paint latency.
@@ -72,7 +77,7 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
-    const limit = intParam(request.nextUrl.searchParams.get("limit"), 24, 12, 72);
+    const limit = intParam(request.nextUrl.searchParams.get("limit"), runtimeConfig.remoteConfig.marketPageSize, 12, 72);
     const suppliedSeed = request.nextUrl.searchParams.get("seed")?.trim();
     const marketSeed = suppliedSeed && /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedSeed) ? suppliedSeed : crypto.randomBytes(18).toString("base64url");
 

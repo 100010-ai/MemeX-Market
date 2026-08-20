@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { removeCoinImage, uploadCoinImage } from "@/lib/coin-media";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR } from "@/lib/economy";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
   if (!(await enforceRateLimit(request, "coin-create", String(profile.id), 6, 600))) {
     return NextResponse.json({ error: "Слишком много запусков. Подождите несколько минут." }, { status: 429 });
   }
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Мемкоины временно отключены" }, { status: 503 });
 
   const supabase = getSupabaseAdmin();
   const readiness = await supabase.from("economy_settings").select("schema_version").eq("singleton", true).maybeSingle();

@@ -4,6 +4,7 @@ import { rewardedAdsConfig } from "@/lib/rewarded-ads";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { adsgramModerationMode } from "@/lib/feature-flags";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ export async function POST(request: Request) {
   if (!(await enforceRateLimit(request, "rewarded-ad-session", String(profile.id), 8, 300))) {
     return NextResponse.json({ error: "Слишком много попыток запуска рекламы" }, { status: 429 });
   }
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.rewardedAds) return NextResponse.json({ error: "Реклама с наградой временно отключена" }, { status: 503 });
 
   const config = rewardedAdsConfig();
   if (config.configurationError) return NextResponse.json({ error: config.configurationError }, { status: 503 });

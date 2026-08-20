@@ -44,7 +44,7 @@ function secretLeaks() {
   return hits;
 }
 
-console.log("MXM v0.50 release gate\n");
+console.log("MXM v0.56 release gate\n");
 const migration017 = read("supabase/migrations/017_v030_market_foundation.sql");
 const migration018 = read("supabase/migrations/018_v040_games_speed_compact.sql");
 const migration019 = read("supabase/migrations/019_v041_remove_games_interface.sql");
@@ -54,6 +54,7 @@ const migration022 = read("supabase/migrations/022_v047_sponsored_tasks_admin_ma
 const migration023 = read("supabase/migrations/023_v048_watchlist_notifications_profiles.sql");
 const migration024 = read("supabase/migrations/024_v049_sweep_bulk_quality.sql");
 const migration025 = read("supabase/migrations/025_v050_adsgram_moderation.sql");
+const migration026 = read("supabase/migrations/026_v056_quality_market_orders_admin.sql");
 const packageJson = read("package.json");
 const packageLock = read("package-lock.json");
 const marketPage = read("app/market/page.tsx");
@@ -86,8 +87,19 @@ check("Migration 022 v0.47 present", Boolean(migration022));
 check("Migration 023 v0.48 present", Boolean(migration023));
 check("Migration 024 v0.49 present", Boolean(migration024));
 check("Migration 025 v0.50 present", Boolean(migration025));
-check("v0.50 package version", packageJson.includes('"version": "0.50.0"'));
-check("package-lock version synced", packageLock.includes('"version": "0.50.0"'));
+check("Migration 026 v0.56 present", Boolean(migration026));
+check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
+check("package-lock version synced", packageLock.includes('"version": "0.56.0"'));
+
+check("Runtime config schema", migration026.includes("create table if not exists public.runtime_config_v056") && exists("lib/runtime-config.ts") && exists("app/api/runtime-config/route.ts"));
+check("Maintenance mode + feature flags", read("components/app-shell.tsx").includes("maintenanceMode") && read("app/api/admin/runtime-config/route.ts").includes("validateRuntimeConfigInput"));
+check("Advanced Gift offers", migration026.includes("advanced_gift_offers_v056") && migration026.includes("create_advanced_gift_offer_v056") && migration026.includes("accept_advanced_gift_offer_v056") && exists("components/gifts/advanced-offers-panel.tsx"));
+check("Conditional memecoin orders", migration026.includes("coin_conditional_orders_v056") && exists("components/coin-conditional-orders.tsx") && exists("app/api/system/coin-orders/route.ts"));
+check("Command palette", exists("components/command-palette.tsx") && read("components/app-shell.tsx").includes("<CommandPalette"));
+check("Admin Economy & Risk", exists("app/admin/economy-risk/page.tsx") && exists("app/api/admin/economy-risk/route.ts"));
+check("Admin Health Center", exists("app/admin/health/page.tsx") && exists("app/api/admin/health/route.ts"));
+check("Error Inbox infrastructure", exists("lib/error-inbox.ts") && migration026.includes("error_inbox_v056"));
+
 check("Environment template present", Boolean(envTemplate));
 check("No local .env.local in artifact", !exists(".env.local"));
 check("No local control secret in artifact", !exists(".mxm-control-secret"));

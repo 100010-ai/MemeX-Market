@@ -72,7 +72,7 @@ async function dispatchTelegram() {
   if (profiles.error || prefs.error) throw profiles.error || prefs.error;
   const chats = new Map((profiles.data || []).map((p) => [String(p.id), Number(p.telegram_id)]));
   const allowed = new Map((prefs.data || []).map((p) => [String(p.profile_id), Boolean(p.telegram_push)]));
-  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || "").replace(/\/$/, "");
+  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_TELEGRAM_APP_URL || "https://meme-x-market.vercel.app").replace(/\/$/, "");
   let sent = 0;
   let failed = 0;
   for (const row of rows) {

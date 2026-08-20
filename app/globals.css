@@ -1353,3 +1353,16 @@ html { font-size:15.5px; }
   .admin-preset b { margin:0; }
   .admin-preset span { grid-column:2; }
 }
+
+/* v0.56 — Telegram WebView quality pass. JS synchronizes these variables with
+   Telegram viewport events and VisualViewport so the UI does not jump when
+   the mobile keyboard/browser chrome changes height. */
+:root {
+  --mxm-viewport-height: 100dvh;
+  --mxm-viewport-stable-height: 100dvh;
+}
+html, body { min-height: var(--mxm-viewport-stable-height); }
+body { min-height: var(--mxm-viewport-height); overscroll-behavior-y: none; touch-action: manipulation; }
+@supports (-webkit-touch-callout: none) {
+  input, textarea, select { font-size: max(16px, 1em); }
+}

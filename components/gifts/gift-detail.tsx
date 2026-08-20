@@ -35,6 +35,7 @@ const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) 
   loading: () => <div className="mxm-skeleton h-[260px] rounded-[14px]" />,
 });
 type DetailOffer = Pick<GiftOffer, "id" | "amount" | "status" | "createdAt" | "buyerId" | "buyerName"> & { isMine: boolean; expiresAt: string | null };
+type AdvancedOffer = { id: string; buyerId: string; buyerName: string; scopeType: "collection" | "model" | "backdrop" | "symbol"; traitValue: string | null; amount: number; maxFills: number; filledCount: number; expiresAt: string; createdAt: string };
 type Payload = {
   gift: GiftAsset;
   resolvedVirtualGiftId?: string;
@@ -49,6 +50,7 @@ type Payload = {
   collection: GiftCollection;
   traitStats: GiftTraitStats;
   offers: DetailOffer[];
+  advancedOffers: AdvancedOffer[];
   activity: GiftActivity[];
 };
 
@@ -307,6 +309,8 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <Trait label="Символ" value={gift.symbolName} rarity={gift.symbolRarityPerMille} floor={data.traitStats.symbolFloor} />
           </div>
 
+          {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие офферы коллекции</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">Офферы на коллекцию и traits, которые подходят этому Gift.</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
+
           {error ? <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
@@ -392,6 +396,14 @@ function OwnerTradePanel({ gift, listingPrice, setListingPrice, listingDays, set
     <PrimaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0} onClick={() => onList(parsed)}><Tag size={14} className="mr-1 inline" />{busy === "list" ? "…" : gift.status === "listed" ? "Обновить листинг" : "Выставить"}</PrimaryButton>
     {gift.status === "listed" ? <SecondaryButton className="mt-2 w-full" disabled={busy !== null} onClick={onUnlist}>Снять с продажи</SecondaryButton> : null}
   </>;
+}
+
+
+function advancedScopeLabel(offer: AdvancedOffer) {
+  if (offer.scopeType === "collection") return "Любой Gift коллекции";
+  if (offer.scopeType === "model") return `Модель · ${offer.traitValue || "—"}`;
+  if (offer.scopeType === "backdrop") return `Фон · ${offer.traitValue || "—"}`;
+  return `Символ · ${offer.traitValue || "—"}`;
 }
 
 function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offerAmount, setOfferAmount, offerHours, setOfferHours, myOffer, busy, onBuy, onCart, onOffer, onCancelOffer }: { gift: GiftAsset; inCart: boolean; availableBalance: number; reservedBalance: number; offerAmount: string; setOfferAmount: (value: string) => void; offerHours: number; setOfferHours: (value: number) => void; myOffer?: DetailOffer; busy: string | null; onBuy: () => void; onCart: () => void; onOffer: (amount: number) => void; onCancelOffer?: () => void }) {

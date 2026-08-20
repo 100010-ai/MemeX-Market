@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 const allowedCounts = new Set([2, 5, 10]);
 
@@ -11,6 +12,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "collection-sweep", String(profile.id), 12, 60))) return NextResponse.json({ error: "Слишком много операций. Подождите немного." }, { status: 429 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
 
   const { name } = await params;
   const baseName = decodeURIComponent(name).trim();

@@ -10,6 +10,7 @@ import type { GiftAsset, GiftCollectionDetail, GiftTraitGroup } from "@/lib/type
 import { CoinChart } from "@/components/coin-chart";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { AdvancedOffersPanel } from "@/components/gifts/advanced-offers-panel";
 
 const realtimeTables = ["virtual_gifts", "gift_trades", "gift_offers", "gift_listing_events", "market_events"];
 
@@ -184,6 +185,8 @@ export default function GiftCollectionPage() {
         <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Sweep</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
         <div className="mt-3 grid grid-cols-3 gap-2">{([2,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} Gifts`}</button>)}</div>
       </section>
+
+      <div className="mt-3"><AdvancedOffersPanel baseName={c.baseName} models={data.models} backdrops={data.backdrops} symbols={data.symbols} /></div>
 
       {error ? <div className="mt-3 rounded-[20px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
