@@ -1372,3 +1372,5 @@ body { min-height: var(--mxm-viewport-height); overscroll-behavior-y: none; touc
 .mxm-webview-fix { overscroll-behavior: none; }
 html, body { min-height: 100%; overflow-x: hidden; }
 img { content-visibility: auto; }
+
+.content-visibility-auto { content-visibility: auto; contain-intrinsic-size: 320px; }

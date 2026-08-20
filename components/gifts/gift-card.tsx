@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { memo } from "react";
 import { Gem, MessageSquareMore, ShoppingCart } from "lucide-react";
 import type { GiftAsset } from "@/lib/types";
 import { money } from "@/lib/format";
 import { GiftMedia } from "@/components/gifts/gift-media";
 
-export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = false, priority = false, onCart }: { gift: GiftAsset; showOwner?: boolean; inCart?: boolean; cartBusy?: boolean; priority?: boolean; onCart?: (gift: GiftAsset, enabled: boolean) => void }) {
+export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = false, priority = false, onCart }: { gift: GiftAsset; showOwner?: boolean; inCart?: boolean; cartBusy?: boolean; priority?: boolean; onCart?: (gift: GiftAsset, enabled: boolean) => void }) {
   const isListed = gift.status === "listed";
   const displayValue = isListed ? gift.listingPrice : (gift.externalListingPrice ?? gift.lastSalePrice ?? gift.referencePrice);
   const valueLabel = isListed ? "" : gift.externalListingPrice != null ? "Рынок · " : gift.lastSalePrice != null ? "Продажа · " : "Оценка · ";
@@ -15,9 +16,9 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
-    <article className="mxm-gift-card group relative min-w-0 transition duration-150 active:scale-[.992]">
+    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-3xl border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition duration-150 hover:border-white/[.12] active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block min-w-0">
-        <div className="mxm-gift-cover relative overflow-hidden">
+        <div className="mxm-gift-cover relative overflow-hidden rounded-2xl bg-black/20">
           <GiftMedia gift={gift} compact priority={priority} className="aspect-square w-full" />
           <span className="mxm-gift-number">#{gift.number}</span>
           {gift.offerCount > 0 ? <span className="mxm-gift-offers"><MessageSquareMore size={10} />{gift.offerCount}</span> : null}
@@ -45,4 +46,4 @@ export function GiftCard({ gift, showOwner = false, inCart = false, cartBusy = f
       </div>
     </article>
   );
-}
+});

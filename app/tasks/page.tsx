@@ -1,6 +1,5 @@
 "use client";
 
-import Script from "next/script";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Clock3, Eye, Flame, Gem, Gift, Link2, Megaphone, Play, Sparkles, TicketCheck, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -67,13 +66,9 @@ export default function TasksPage() {
   const { profile, refreshProfile, haptic } = useTelegramProfile();
 
   const load = useCallback(async () => {
-    const [missionResult, rewardResult] = await Promise.all([
-      apiFetch<{ missions: Mission[]; sponsored: SponsoredTask[] }>("/api/tasks", { cacheMs: 8_000 }),
-      apiFetch<RewardedAdStatus>("/api/rewards/ads/status", { cacheMs: 0 }).catch(() => null),
-    ]);
+    const missionResult = await apiFetch<{ missions: Mission[]; sponsored: SponsoredTask[] }>("/api/tasks", { cacheMs: 8_000 });
     setMissions(missionResult.missions);
     setSponsored(missionResult.sponsored || []);
-    if (rewardResult) setAdStatus(rewardResult);
   }, []);
 
   useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить задания")); }, [load]);
@@ -196,29 +191,12 @@ export default function TasksPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      {adStatus?.configured ? <Script src="https://sad.adsgram.ai/js/sad.min.js" strategy="afterInteractive" onLoad={() => setAdReady(true)} onError={() => setAdNotice("Не удалось загрузить рекламную сеть")} /> : null}
-
       <div className="mb-5 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-4">
         <div><p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted-2)]">Прогресс</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Задания и награды</h1></div>
         <div className="text-right"><p className="text-[9px] text-[var(--muted)]">доступно в заданиях</p><p className="mt-1 flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p></div>
       </div>
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} XP</span></div> : null}
-
-      <section className="mxm-reward-ad mb-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="mxm-reward-ad-icon"><Eye size={16} /></div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[12px] font-semibold">Добровольная реклама</h2>
-            <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">+{money(Number(adStatus?.reward || 1))} игровой TON · {adStatus ? `${adStatus.remainingToday}/${adStatus.dailyLimit} сегодня` : "до 3 раз в день"}{cooldownText ? ` · через ${cooldownText}` : ""}</p>
-          </div>
-        </div>
-        <button type="button" disabled={!adCanStart} onClick={() => void watchRewardedAd()} className="mxm-reward-ad-button">
-          {adBusy ? <span className="animate-pulse">…</span> : !adStatus?.configured ? (adStatus?.verificationMode === "disabled" ? "Не подключено" : "Не подключено") : adStatus.migrationRequired ? "Миграция" : adStatus.remainingToday <= 0 ? "Готово" : cooldownText ? cooldownText : !adReady ? "…" : <><Play size={12} fill="currentColor" />Смотреть рекламу</>}
-        </button>
-      </section>
-      {adNotice ? <div className="mb-4 border-l-2 border-[var(--accent)] pl-3 text-[10px] leading-4 text-[var(--muted)]">{adNotice}</div> : null}
-      <p className="-mt-3 mb-4 text-[9px] leading-4 text-[var(--muted-2)]">Реклама полностью добровольна и не блокирует функции MXM. Для награды достаточно полного просмотра — клик по объявлению не требуется. Игровой TON внутри MXM не является Toncoin, не выводится и не имеет денежной стоимости.</p>
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
 
       {sponsored.length ? <section className="mb-7">
