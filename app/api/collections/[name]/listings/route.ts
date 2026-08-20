@@ -18,12 +18,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
   const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 60);
   const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
   const result = await supabase
     .from("gift_market_overview")
     .select(giftMarketSelect)
     .eq("base_name", baseName)
     .eq("is_burned", false)
     .eq("status", "listed")
+    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
     .not("telegram_name", "is", null)
     .order("listing_price", { ascending: true })
     .range(offset, offset + limit);

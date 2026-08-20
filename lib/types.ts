@@ -99,11 +99,11 @@ export type GiftAsset = {
   backdropEdge: string;
   backdropSymbol: string;
   backdropText: string;
-  modelFileId: string;
+  modelFileId: string | null;
   modelThumbFileId: string | null;
   modelMediaUrl: string | null;
   modelPreviewUrl: string | null;
-  symbolFileId: string;
+  symbolFileId: string | null;
   symbolThumbFileId: string | null;
   symbolMediaUrl: string | null;
   symbolMediaKind: GiftMediaKind;
@@ -327,6 +327,18 @@ export type GiftTraitGroup = {
   rarityPerMille: number | null;
 };
 
+export type GiftCollectionActivity = {
+  id: string;
+  virtualGiftId: string;
+  giftNumber: number;
+  kind: "listed" | "repriced" | "unlisted" | "expired" | "sold" | "offer_accepted";
+  price: number | null;
+  previousPrice: number | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+};
+
 export type GiftCollectionDetail = {
   collection: GiftCollection;
   gifts: GiftAsset[];
@@ -336,5 +348,6 @@ export type GiftCollectionDetail = {
   backdrops: GiftTraitGroup[];
   symbols: GiftTraitGroup[];
   recentSales: GiftTrade[];
+  activity: GiftCollectionActivity[];
   watched: boolean;
 };

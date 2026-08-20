@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 
 const preferenceKeys = ["gift_sold", "gift_offer", "offer_resolved", "price_alert", "coin_move", "sponsored_task", "referral_reward", "promo", "telegram_push"] as const;
 
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   }
   if (action === "read") {
     const id = typeof body.id === "string" ? body.id : "";
+    if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID уведомления" }, { status: 400 });
     const { error } = await supabase.from("user_notifications").update({ read_at: new Date().toISOString() }).eq("profile_id", profile.id).eq("id", id);
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
   }

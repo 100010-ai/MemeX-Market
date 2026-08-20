@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 
 const kinds = new Set(["coin", "gift", "gift_collection"]);
 const directions = new Set(["below", "above"]);
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   if (action === "delete") {
     const id = typeof body.id === "string" ? body.id : "";
-    if (!id) return NextResponse.json({ error: "Не выбран алерт" }, { status: 400 });
+    if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID алерта" }, { status: 400 });
     const { error } = await supabase.from("price_alerts").delete().eq("id", id).eq("profile_id", profile.id);
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
   }
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
   if (action === "toggle") {
     const id = typeof body.id === "string" ? body.id : "";
     const enabled = body.enabled === true;
+    if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID алерта" }, { status: 400 });
     const { error } = await supabase.from("price_alerts").update({ enabled, updated_at: new Date().toISOString() }).eq("id", id).eq("profile_id", profile.id);
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true, enabled });
   }

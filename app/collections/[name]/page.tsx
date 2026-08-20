@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Gem, Layers3, RefreshCw, Search, Star, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Gem, Layers3, RefreshCw, Search, ShoppingBasket, Star, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ago, money, percent } from "@/lib/format";
 import type { GiftAsset, GiftCollectionDetail, GiftTraitGroup } from "@/lib/types";
@@ -26,6 +26,8 @@ export default function GiftCollectionPage() {
   const [data, setData] = useState<GiftCollectionDetail | null>(null);
   const [traitTab, setTraitTab] = useState<TraitTab>("models");
   const [busyWatch, setBusyWatch] = useState(false);
+  const [busySweep, setBusySweep] = useState<number | null>(null);
+  const [sweepMessage, setSweepMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [model, setModel] = useState("all");
@@ -94,6 +96,32 @@ export default function GiftCollectionPage() {
       });
   }, [data, query, model, backdrop, symbol, sort]);
 
+  async function sweep(count: 2 | 5 | 10) {
+    if (!data || busySweep !== null) return;
+    const cheapest = data.gifts.filter((gift) => gift.listingPrice != null).slice().sort((a, b) => Number(a.listingPrice) - Number(b.listingPrice)).slice(0, count);
+    const estimate = cheapest.length === count ? cheapest.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0) : null;
+    const question = estimate == null
+      ? `Купить ${count} самых дешёвых Gifts из ${data.collection.baseName}?`
+      : `Купить ${count} самых дешёвых Gifts примерно за ${money(estimate)}? Итог проверится сервером перед покупкой.`;
+    if (!window.confirm(question)) return;
+    setBusySweep(count);
+    setSweepMessage(null);
+    try {
+      const result = await apiFetch<{ sweep?: { total?: number; itemCount?: number } }>(`/api/collections/${encodeURIComponent(decodedName)}/sweep`, {
+        method: "POST",
+        headers: { "x-idempotency-key": `sweep-${Date.now()}-${count}` },
+        body: JSON.stringify({ count }),
+      });
+      const total = Number(result.sweep?.total || 0);
+      setSweepMessage(`Куплено ${Number(result.sweep?.itemCount || count)} Gifts${total > 0 ? ` · ${money(total)}` : ""}`);
+      await load(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось выполнить Sweep");
+    } finally {
+      setBusySweep(null);
+    }
+  }
+
   async function toggleWatch() {
     if (!data || busyWatch) return;
     setBusyWatch(true);
@@ -152,6 +180,11 @@ export default function GiftCollectionPage() {
         </div>
       </section>
 
+      <section className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3">
+        <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Sweep</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
+        <div className="mt-3 grid grid-cols-3 gap-2">{([2,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} Gifts`}</button>)}</div>
+      </section>
+
       {error ? <div className="mt-3 rounded-[20px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
       <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -184,14 +217,28 @@ export default function GiftCollectionPage() {
         </div>
 
         <aside className="space-y-3">
-          <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:sticky lg:top-[72px]">
+          <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
             <div className="border-b border-[var(--border-soft)] px-3 py-3 text-xs font-medium">Последние продажи</div>
-            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 18).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price)}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Продаж пока нет.</div>}
+            {data.recentSales.length ? <div className="divide-y divide-[var(--border-soft)]">{data.recentSales.slice(0, 12).map((sale) => <div key={sale.id} className="px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]"><span className="text-[var(--muted)]">{sale.sellerName || "—"}</span> → {sale.buyerName}</p><p className="flex shrink-0 items-center gap-1 text-xs font-medium"><Gem size={10} fill="currentColor" />{money(sale.price)}</p></div><p className="mt-1 text-[9px] text-[var(--muted)]">{ago(sale.createdAt)}</p></div>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Продаж пока нет.</div>}
+          </section>
+          <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)] lg:sticky lg:top-[72px]">
+            <div className="border-b border-[var(--border-soft)] px-3 py-3 text-xs font-medium">Активность коллекции</div>
+            {data.activity?.length ? <div className="divide-y divide-[var(--border-soft)]">{data.activity.slice(0, 20).map((event) => <Link href={`/gifts/${event.virtualGiftId}`} key={event.id} className="block px-3 py-2.5"><div className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-[11px]">#{event.giftNumber} · {activityLabel(event.kind)}</p>{event.price != null ? <p className="shrink-0 text-[10px] font-medium">{money(event.price)}</p> : null}</div><p className="mt-1 text-[9px] text-[var(--muted)]">{event.actorName || "Система"} · {ago(event.createdAt)}</p></Link>)}</div> : <div className="p-6 text-center text-xs text-[var(--muted)]">Активности пока нет.</div>}
           </section>
         </aside>
       </div>
     </div>
   );
+}
+
+function activityLabel(kind: string) {
+  if (kind === "listed") return "выставлен";
+  if (kind === "repriced") return "цена изменена";
+  if (kind === "unlisted") return "снят с продажи";
+  if (kind === "expired") return "листинг истёк";
+  if (kind === "sold") return "продан";
+  if (kind === "offer_accepted") return "оффер принят";
+  return kind;
 }
 
 function FilterSelect({ value, onChange, label, values }: { value: string; onChange: (value: string) => void; label: string; values: string[] }) {

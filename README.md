@@ -1,8 +1,27 @@
-# MXM Market v0.48.0
+# MXM Market v0.49.0
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+
+## v0.49 — Sweep, bulk listing, activity and market fixes
+
+- Sweep 2 / 5 / 10 cheapest active Gifts from a collection with an atomic cart purchase.
+- Bulk listing of up to 50 owned Gifts with one fixed price or a price relative to collection floor.
+- Collection-wide activity feed for listings, reprices, removals, expirations and sales.
+- Portfolio now separates realized and unrealized PnL.
+- TonAPI-backed Gifts no longer disappear when Telegram `file_id` is absent; media URLs are accepted.
+- Expired listings are filtered from collection pages, search, cart and order surfaces.
+- Missing/deleted public profile metadata no longer crashes collection history.
+- Mutation endpoints reject malformed notification/price-alert IDs before hitting the database.
+
+Apply both latest migrations in order:
+
+```text
+supabase/migrations/023_v048_watchlist_notifications_profiles.sql
+supabase/migrations/024_v049_sweep_bulk_quality.sql
+```
 
 ## v0.48 — Watchlist, alerts, reputation and portfolio analytics
 

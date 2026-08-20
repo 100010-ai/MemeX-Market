@@ -8,11 +8,12 @@ export async function GET() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
   try {
     const [outgoingResult, ownedResult, listingsResult] = await Promise.all([
       supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").eq("buyer_profile_id", profile.id).eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("virtual_gifts").select("id").eq("owner_profile_id", profile.id),
-      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("listing_price", { ascending: true }),
+      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`).not("telegram_name", "is", null).order("listing_price", { ascending: true }),
     ]);
     const firstError = outgoingResult.error || ownedResult.error || listingsResult.error;
     if (firstError) throw firstError;
@@ -26,7 +27,7 @@ export async function GET() {
     const giftIds = [...new Set(allOffers.map((row: any) => String(row.virtual_gift_id)))];
     const buyerIds = [...new Set(allOffers.map((row: any) => String(row.buyer_profile_id)))];
     const [giftRowsResult, buyersResult] = await Promise.all([
-      giftIds.length ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null) : Promise.resolve({ data: [] as any[], error: null }),
+      giftIds.length ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null) : Promise.resolve({ data: [] as any[], error: null }),
       buyerIds.length ? supabase.from("profiles").select("id,username,first_name").in("id", buyerIds) : Promise.resolve({ data: [] as any[], error: null }),
     ]);
     if (giftRowsResult.error || buyersResult.error) throw giftRowsResult.error || buyersResult.error;

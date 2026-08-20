@@ -13,11 +13,12 @@ export async function GET() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
   const cart = await supabase.from("market_cart_items").select("virtual_gift_id,added_at").eq("profile_id", profile.id).order("added_at", { ascending: false });
   if (cart.error) return NextResponse.json({ error: cart.error.message }, { status: 500 });
   const ids = (cart.data || []).map((row) => String(row.virtual_gift_id));
   if (!ids.length) return NextResponse.json({ items: [], total: 0, count: 0 });
-  const gifts = await supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", ids).eq("status", "listed").eq("is_burned", false);
+  const gifts = await supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", ids).eq("status", "listed").eq("is_burned", false).or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`);
   if (gifts.error) return NextResponse.json({ error: gifts.error.message }, { status: 500 });
   const byId = new Map((gifts.data || []).map((row: any) => [String(row.virtual_gift_id), mapGift(row)]));
   const items = ids.map((id) => byId.get(id)).filter((gift): gift is GiftAsset => Boolean(gift));
@@ -49,9 +50,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const gift = await supabase.from("virtual_gifts").select("id,owner_profile_id,status,listing_price").eq("id", id).maybeSingle();
+  const gift = await supabase.from("virtual_gifts").select("id,owner_profile_id,status,listing_price,listing_expires_at").eq("id", id).maybeSingle();
   if (gift.error) return NextResponse.json({ error: gift.error.message }, { status: 500 });
-  if (!gift.data || gift.data.status !== "listed" || gift.data.listing_price == null) return NextResponse.json({ error: "Gift is no longer listed" }, { status: 409 });
+  if (!gift.data || gift.data.status !== "listed" || gift.data.listing_price == null || (gift.data.listing_expires_at && new Date(gift.data.listing_expires_at).getTime() <= Date.now())) return NextResponse.json({ error: "Gift is no longer listed" }, { status: 409 });
   if (gift.data.owner_profile_id === profile.id) return NextResponse.json({ error: "You already own this Gift" }, { status: 409 });
 
   const existing = await supabase.from("market_cart_items").select("virtual_gift_id", { count: "exact", head: true }).eq("profile_id", profile.id);

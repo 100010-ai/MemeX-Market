@@ -19,11 +19,13 @@ export async function GET(request: NextRequest) {
   if (q.length < 2) return NextResponse.json({ gifts: [] });
 
   const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
   const baseQuery = () => supabase
     .from("gift_market_overview")
     .select(giftMarketSelect)
     .eq("status", "listed")
     .eq("is_burned", false)
+    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
     .not("telegram_name", "is", null);
 
   const pattern = `%${q}%`;

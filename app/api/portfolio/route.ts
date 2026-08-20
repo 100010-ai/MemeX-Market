@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const [coinsResult, giftsResult, coinHistoryResult, giftHistoryResult, snapshot] = await Promise.all([
       supabase.from("holdings").select("coin_id,quantity,cost_basis,coins(name,symbol,current_price,image_url)").eq("profile_id", profile.id).gt("quantity", 0),
-      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).not("telegram_name", "is", null).not("model_file_id", "is", null).not("symbol_file_id", "is", null).order("created_at", { ascending: false }),
+      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).not("telegram_name", "is", null).order("created_at", { ascending: false }),
       supabase.from("trades").select("id,coin_id,side,quote_amount,realized_pnl,created_at,coins(symbol)").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(40),
       supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,price,realized_pnl,created_at,gift_assets(base_name,gift_number)").or(`buyer_profile_id.eq.${profile.id},seller_profile_id.eq.${profile.id}`).order("created_at", { ascending: false }).limit(40),
       getProfileSnapshot(profile as Record<string, unknown>),
@@ -31,6 +31,12 @@ export async function GET() {
       const costBasis = Number(row.cost_basis);
       return { coinId: String(row.coin_id), name: coin.name, symbol: coin.symbol, imageUrl: typeof coin.image_url === "string" ? coin.image_url : null, quantity, currentPrice, marketValue, costBasis, pnl: marketValue - costBasis };
     });
+    const mappedGifts = (giftsResult.data || []).map(mapGift);
+    const unrealizedCoinPnl = holdings.reduce((sum, holding) => sum + holding.pnl, 0);
+    const unrealizedGiftPnl = mappedGifts.reduce((sum, gift) => {
+      const current = gift.estimatedValue ?? gift.listingPrice ?? gift.referencePrice ?? gift.lastSalePrice ?? gift.acquiredPrice;
+      return sum + (Number(current) - Number(gift.acquiredPrice));
+    }, 0);
     const history = [
       ...(coinHistoryResult.data || []).map((row: any) => {
         const coin = relationOne(row.coins, "Coin history");
@@ -58,7 +64,19 @@ export async function GET() {
     let portfolioSeries: Array<{ time: string; balance: number; coinValue: number; giftValue: number; netWorth: number; realizedPnl: number }> = [];
     const seriesResult = await supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: true }).limit(5000);
     if (!seriesResult.error) portfolioSeries = (seriesResult.data || []).map((row) => ({ time: String(row.bucket_start), balance: Number(row.balance), coinValue: Number(row.coin_value), giftValue: Number(row.gift_value), netWorth: Number(row.net_worth), realizedPnl: Number(row.realized_pnl) }));
-    return NextResponse.json({ holdings, gifts: (giftsResult.data || []).map(mapGift), profile: snapshot, history, portfolioSeries });
+    return NextResponse.json({
+      holdings,
+      gifts: mappedGifts,
+      profile: snapshot,
+      analytics: {
+        realizedPnl: snapshot.pnl,
+        unrealizedPnl: unrealizedCoinPnl + unrealizedGiftPnl,
+        unrealizedCoinPnl,
+        unrealizedGiftPnl,
+      },
+      history,
+      portfolioSeries,
+    });
   } catch (error) {
     console.error("portfolio", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить хранилище" }, { status: 500 });

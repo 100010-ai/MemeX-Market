@@ -214,14 +214,14 @@ function useAnimationPermit(enabled: boolean, key: string, limited: boolean) {
   return limited ? enabled && granted : enabled;
 }
 
-function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy = false }: { fileId: string; mediaUrl?: string | null; kind: GiftMediaKind; alt: string; className?: string; onError?: (message: string) => void; lazy?: boolean }) {
+function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy = false }: { fileId?: string | null; mediaUrl?: string | null; kind: GiftMediaKind; alt: string; className?: string; onError?: (message: string) => void; lazy?: boolean }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const lottieRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationRef = useRef<LottieAnimation | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const { near, active } = useViewportState(lazy, holderRef);
-  const mediaKey = `${fileId}|${mediaUrl || ""}|${kind}`;
+  const mediaKey = `${fileId || ""}|${mediaUrl || ""}|${kind}`;
   const error = errorKey === mediaKey;
   const permitted = useAnimationPermit(active && (kind === "animated" || kind === "video"), `telegram:${mediaKey}`, lazy);
 
@@ -230,7 +230,8 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
     let destroyed = false;
     let animation: LottieAnimation | null = null;
     let unsubscribeMotion: (() => void) | null = null;
-    const source = mediaUrl || `/api/telegram/tgs/${encodeURIComponent(fileId)}`;
+    const source = mediaUrl || (fileId ? `/api/telegram/tgs/${encodeURIComponent(fileId)}` : null);
+    if (!source) return;
 
     Promise.all([loadLottieModule(), loadLottieJson(source)]).then(([module, animationData]) => {
       if (destroyed || !lottieRef.current) return;
@@ -271,10 +272,10 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
     });
   }, [kind, near, permitted]);
 
-  const src = mediaUrl || `/api/telegram/file/${encodeURIComponent(fileId)}`;
+  const src = mediaUrl || (fileId ? `/api/telegram/file/${encodeURIComponent(fileId)}` : null);
   return (
     <div ref={holderRef} className={className} aria-label={alt}>
-      {error ? <div className="grid h-full w-full place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div> : !near ? null : kind === "video" ? (
+      {error || !src ? <div className="grid h-full w-full place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div> : !near ? null : kind === "video" ? (
         <video ref={videoRef} src={src} loop muted playsInline preload={lazy ? "metadata" : "auto"} onError={() => { setErrorKey(mediaKey); onError?.("Видео Telegram недоступно"); }} className="h-full w-full object-contain" />
       ) : kind === "animated" ? (
         <div ref={lottieRef} className="h-full w-full" />
@@ -412,7 +413,7 @@ export function GiftMedia({ gift, className = "", compact = false, priority = fa
 
   return (
     <div className={`mxm-gift-media relative isolate overflow-hidden ${className}`} style={{ background: `radial-gradient(circle at 48% 38%, ${gift.backdropCenter} 0%, ${gift.backdropEdge} 100%)` }}>
-      {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={gift.symbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
+      {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact && (gift.symbolFileId || gift.symbolMediaUrl) ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={gift.symbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
       <div className={`relative z-10 grid h-full w-full place-items-center ${compact ? "p-[14%]" : "p-[13%]"}`}>
         {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={setModelError} lazy={compact && !priority} />}
       </div>
