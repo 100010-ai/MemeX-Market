@@ -64,9 +64,9 @@ function buildReel(caseItem: CaseItem, reward: Reward): ReelState {
   const seed = textSeed(`${caseItem.sku}:${reward.label}:${reward.rarity}`);
   const stopIndex = 29 + (seed % 3);
   const length = stopIndex + 7;
-  const items = Array.from({ length }, (_, index) => {
+  const items: ReelItem[] = Array.from({ length }, (_, index): ReelItem => {
     const odd = source[(seed + index * 7 + Math.floor(index / 3) * 3) % source.length];
-    return { id: `${index}:${odd.reward}`, label: odd.label, rarity: odd.rarity } satisfies ReelItem;
+    return { id: `${index}:${odd.reward}`, label: odd.label, rarity: odd.rarity };
   });
   items[stopIndex] = { id: `winner:${reward.label}`, label: reward.label, rarity: reward.rarity, final: true };
   return { items, stopIndex, reward };
