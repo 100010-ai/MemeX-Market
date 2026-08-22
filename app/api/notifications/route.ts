@@ -3,19 +3,7 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
-
-const preferenceKeys = ["gift_sold", "gift_offer", "offer_resolved", "price_alert", "coin_move", "referral_reward", "promo", "telegram_push"] as const;
-
-const defaultPreferences = {
-  gift_sold: true,
-  gift_offer: true,
-  offer_resolved: true,
-  price_alert: true,
-  coin_move: false,
-  referral_reward: true,
-  promo: true,
-  telegram_push: true,
-} as const;
+import { normalizeNotificationHref, normalizeNotificationPreferences, notificationPreferenceKeys } from "@/lib/notifications";
 
 async function GETHandler() {
   const profile = await requireProfile();
@@ -26,14 +14,14 @@ async function GETHandler() {
   // same defaults are returned without an unnecessary write transaction.
   const [notifications, preferences, unread] = await Promise.all([
     supabase.from("user_notifications").select("id,kind,title,body,href,metadata,read_at,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(80),
-    supabase.from("notification_preferences").select(preferenceKeys.join(",")).eq("profile_id", profile.id).maybeSingle(),
+    supabase.from("notification_preferences").select(notificationPreferenceKeys.join(",")).eq("profile_id", profile.id).maybeSingle(),
     supabase.from("user_notifications").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).is("read_at", null),
   ]);
   const error = notifications.error || preferences.error || unread.error;
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
   return NextResponse.json({
-    notifications: (notifications.data || []).map((row) => ({ id: String(row.id), kind: row.kind, title: row.title, body: row.body, href: row.href || null, metadata: row.metadata || {}, readAt: row.read_at || null, createdAt: row.created_at })),
-    preferences: { ...defaultPreferences, ...(preferences.data || {}) },
+    notifications: (notifications.data || []).map((row) => ({ id: String(row.id), kind: row.kind, title: row.title, body: row.body, href: normalizeNotificationHref(row.href), metadata: row.metadata || {}, readAt: row.read_at || null, createdAt: row.created_at })),
+    preferences: normalizeNotificationPreferences(preferences.data),
     unreadCount: Number(unread.count || 0),
   }, { headers: { "cache-control": "private, no-store" } });
 }
@@ -61,7 +49,13 @@ async function POSTHandler(request: Request) {
   }
   if (action === "preferences") {
     const update: Record<string, unknown> = { profile_id: profile.id, updated_at: new Date().toISOString() };
-    for (const key of preferenceKeys) if (typeof body[key] === "boolean") update[key] = body[key];
+    let changed = false;
+    for (const key of notificationPreferenceKeys) {
+      if (typeof body[key] !== "boolean") continue;
+      update[key] = body[key];
+      changed = true;
+    }
+    if (!changed) return NextResponse.json({ error: "Нет настроек для обновления" }, { status: 400 });
     const { error } = await supabase.from("notification_preferences").upsert(update, { onConflict: "profile_id" });
     if (error) return apiFailure(error, "Не удалось обновить уведомления");
     return NextResponse.json({ ok: true });

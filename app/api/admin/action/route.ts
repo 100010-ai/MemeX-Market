@@ -6,6 +6,7 @@ import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/secur
 import { syncGiftCatalog } from "@/lib/gift-catalog";
 import { configureGiftMarketLiquidityPolicy, ensureNpcMarketLiquidity, evaluatePlayerMarketHandoff, getGiftMarketLiquidityState } from "@/lib/npc-market";
 import { telegramBotApi } from "@/lib/telegram-bot";
+import { safeIsoDate } from "@/lib/safe-data";
 
 export const runtime = "nodejs";
 
@@ -70,7 +71,11 @@ async function POSTHandler(request: Request) {
       if (typeof body.isBanned === "boolean") patch.is_banned = body.isBanned;
       if (typeof body.hiddenFromLeaderboard === "boolean") patch.hidden_from_leaderboard = body.hiddenFromLeaderboard;
       if (body.banReason !== undefined) patch.ban_reason = text(body.banReason, 500) || null;
-      if (body.bannedUntil !== undefined) patch.banned_until = body.bannedUntil ? new Date(String(body.bannedUntil)).toISOString() : null;
+      if (body.bannedUntil !== undefined) {
+        const bannedUntil = body.bannedUntil ? safeIsoDate(body.bannedUntil, "") : null;
+        if (body.bannedUntil && !bannedUntil) return NextResponse.json({ error: "Некорректная дата окончания блокировки" }, { status: 400 });
+        patch.banned_until = bannedUntil;
+      }
       if (!profileId || !Object.keys(patch).length) return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
       const { error } = await supabase.from("profiles").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", profileId);
       if (error) throw error;
@@ -87,7 +92,7 @@ async function POSTHandler(request: Request) {
       const target = Math.floor(number(body.target) ?? 0);
       const sortOrder = Math.floor(number(body.sortOrder) ?? 100);
       const actionType = text(body.actionType, 80);
-      if (!key || !title || !description || !actionType || reward == null || reward < 0 || target < 1) return NextResponse.json({ error: "Заполните все поля задания" }, { status: 400 });
+      if (!key || !title || !description || !actionType || reward == null || reward < 0 || reward > 100000 || target < 1 || target > 1000000) return NextResponse.json({ error: "Проверьте поля задания, награду и цель" }, { status: 400 });
       const { data, error } = await supabase.from("missions").insert({ key, title, description, period, reward, target, action_type: actionType, sort_order: sortOrder, active: true }).select("id").single();
       if (error) throw error;
       await audit(actor, "mission.create", "mission", String(data.id), { key, title, period, reward, target, actionType });
@@ -100,8 +105,16 @@ async function POSTHandler(request: Request) {
       if (body.title !== undefined) patch.title = text(body.title, 120);
       if (body.description !== undefined) patch.description = text(body.description, 500);
       if (typeof body.period === "string" && ["onboarding", "daily", "weekly"].includes(body.period)) patch.period = body.period;
-      if (number(body.reward) != null) patch.reward = number(body.reward);
-      if (number(body.target) != null) patch.target = Math.max(1, Math.floor(number(body.target)!));
+      if (body.reward !== undefined) {
+        const reward = number(body.reward);
+        if (reward == null || reward < 0 || reward > 100000) return NextResponse.json({ error: "Некорректная награда задания" }, { status: 400 });
+        patch.reward = reward;
+      }
+      if (body.target !== undefined) {
+        const target = number(body.target);
+        if (target == null || target < 1 || target > 1000000) return NextResponse.json({ error: "Некорректная цель задания" }, { status: 400 });
+        patch.target = Math.floor(target);
+      }
       if (body.actionType !== undefined) patch.action_type = text(body.actionType, 80);
       if (number(body.sortOrder) != null) patch.sort_order = Math.floor(number(body.sortOrder)!);
       if (typeof body.active === "boolean") patch.active = body.active;
@@ -378,8 +391,11 @@ async function POSTHandler(request: Request) {
       const reward = number(body.reward);
       const maxUses = Math.floor(number(body.maxUses) ?? 0);
       const note = text(body.note, 500);
-      const startsAt = body.startsAt ? new Date(String(body.startsAt)).toISOString() : null;
-      const endsAt = body.endsAt ? new Date(String(body.endsAt)).toISOString() : null;
+      const startsAt = body.startsAt ? safeIsoDate(body.startsAt, "") : null;
+      const endsAt = body.endsAt ? safeIsoDate(body.endsAt, "") : null;
+      if (body.startsAt && !startsAt) return NextResponse.json({ error: "Некорректная дата начала промокода" }, { status: 400 });
+      if (body.endsAt && !endsAt) return NextResponse.json({ error: "Некорректная дата окончания промокода" }, { status: 400 });
+      if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return NextResponse.json({ error: "Дата окончания должна быть позже даты начала" }, { status: 400 });
       if (!/^[A-Z0-9_-]{3,32}$/.test(code) || reward == null || reward <= 0 || reward > 100000 || maxUses < 1 || maxUses > 1000000) return NextResponse.json({ error: "Проверьте промокод, награду и лимит" }, { status: 400 });
       const { data, error } = await supabase.from("promo_codes").insert({ code, reward, max_uses: maxUses, active: true, starts_at: startsAt, ends_at: endsAt, note, created_by: actor }).select("id").single();
       if (error) throw error;
@@ -391,8 +407,16 @@ async function POSTHandler(request: Request) {
       const id = text(body.id, 80);
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (typeof body.active === "boolean") patch.active = body.active;
-      if (number(body.reward) != null) patch.reward = number(body.reward);
-      if (number(body.maxUses) != null) patch.max_uses = Math.floor(number(body.maxUses)!);
+      if (body.reward !== undefined) {
+        const reward = number(body.reward);
+        if (reward == null || reward <= 0 || reward > 100000) return NextResponse.json({ error: "Некорректная награда промокода" }, { status: 400 });
+        patch.reward = reward;
+      }
+      if (body.maxUses !== undefined) {
+        const maxUses = number(body.maxUses);
+        if (maxUses == null || maxUses < 1 || maxUses > 1000000) return NextResponse.json({ error: "Некорректный лимит использований" }, { status: 400 });
+        patch.max_uses = Math.floor(maxUses);
+      }
       if (body.note !== undefined) patch.note = text(body.note, 500);
       if (!id) return NextResponse.json({ error: "Промокод не выбран" }, { status: 400 });
       const { error } = await supabase.from("promo_codes").update(patch).eq("id", id);

@@ -2,13 +2,14 @@ import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { sameOriginMutation, validUuidLike } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
+  if (!(await enforceRateLimit(request, "gift-offer-action", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
   const { id } = await params;
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID предложения" }, { status: 400 });
   const body = await readJsonObject(request);
