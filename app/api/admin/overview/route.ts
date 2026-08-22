@@ -71,7 +71,7 @@ async function GETHandler() {
     if (primaryError) throw primaryError;
     if (promoCodes.error) throw promoCodes.error;
 
-    const [dashboard, tonapiCount, tonapiVerified, tonapiState, activeSourceCount, economy] = await Promise.all([
+    const [dashboard, tonapiCount, tonapiVerified, tonapiState, activeSourceCount, economy, liquidity] = await Promise.all([
       supabase.rpc("admin_dashboard_metrics_v028"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi").eq("chain_verified", true),
@@ -80,8 +80,9 @@ async function GETHandler() {
       supabase.from("economy_settings")
         .select("coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,gift_fee_bps,updated_at")
         .eq("singleton", true).maybeSingle(),
+      supabase.rpc("gift_market_liquidity_state"),
     ]);
-    const aggregateError = dashboard.error || tonapiCount.error || tonapiVerified.error || tonapiState.error || activeSourceCount.error || economy.error;
+    const aggregateError = dashboard.error || tonapiCount.error || tonapiVerified.error || tonapiState.error || activeSourceCount.error || economy.error || liquidity.error;
     if (aggregateError) throw aggregateError;
 
     const metrics = {
@@ -103,6 +104,7 @@ async function GETHandler() {
       npcState: npcState.data?.[0] || null,
       npcLog: npcLog.data || [],
       tonapiState: tonapiState.data || null,
+      liquidity: liquidity.data || null,
       promoCodes: promoCodes.data || [],
       refundReconciliation: (refundReconciliation.data || []).map((row) => {
         const profile = relationRecord(row.profiles);

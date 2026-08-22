@@ -6,6 +6,7 @@ import { giftMarketSelect, mapGift } from "@/lib/mappers";
 import type { GiftAsset } from "@/lib/types";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { getGiftMarketLiquidityState } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,12 @@ async function POSTHandler(request: NextRequest) {
 
   const gift = await supabase.from("virtual_gifts").select("id,owner_profile_id,status,listing_price,listing_expires_at").eq("id", id).maybeSingle();
   if (gift.error) return apiFailure(gift.error, "Не удалось проверить Gift");
+  const liquidity = await getGiftMarketLiquidityState();
+  if (liquidity.playerOnly && gift.data?.owner_profile_id) {
+    const owner = await supabase.from("profiles").select("is_system").eq("id", gift.data.owner_profile_id).maybeSingle();
+    if (owner.error) return apiFailure(owner.error, "Не удалось проверить продавца Gift");
+    if (owner.data?.is_system) return NextResponse.json({ error: "NPC liquidity is disabled. This Gift is no longer on the player market." }, { status: 409 });
+  }
   if (!gift.data || gift.data.status !== "listed" || gift.data.listing_price == null || (gift.data.listing_expires_at && new Date(gift.data.listing_expires_at).getTime() <= Date.now())) return NextResponse.json({ error: "Gift is no longer listed" }, { status: 409 });
   if (gift.data.owner_profile_id === profile.id) return NextResponse.json({ error: "You already own this Gift" }, { status: 409 });
 

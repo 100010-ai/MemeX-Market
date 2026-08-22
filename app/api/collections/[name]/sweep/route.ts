@@ -5,8 +5,10 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { safeDecodeURIComponent } from "@/lib/safe-data";
+import { getGiftMarketLiquidityState } from "@/lib/npc-market";
 
-const allowedCounts = new Set([2, 5, 10]);
+const allowedCounts = new Set([2, 3, 5, 10]);
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const profile = await requireProfile();
@@ -17,19 +19,26 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
   if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
 
   const { name } = await params;
-  const baseName = decodeURIComponent(name).trim();
+  const baseName = safeDecodeURIComponent(name);
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const count = Number(body.count);
-  if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
-  if (!Number.isInteger(count) || !allowedCounts.has(count)) return NextResponse.json({ error: "Можно купить 2, 5 или 10 самых дешёвых Gifts" }, { status: 400 });
+  if (!baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });
+  if (!Number.isInteger(count) || !allowedCounts.has(count)) return NextResponse.json({ error: "Можно купить 2, 3, 5 или 10 самых дешёвых Gifts" }, { status: 400 });
 
   const requestKey = request.headers.get("x-idempotency-key")?.trim() || `sweep-${crypto.randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
+  const liquidity = await getGiftMarketLiquidityState();
+  let systemOwnerIds: string[] = [];
+  if (liquidity.playerOnly) {
+    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true);
+    if (systemProfiles.error) return apiFailure(systemProfiles.error, "Не удалось проверить продавцов коллекции");
+    systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
+  }
   const nowIso = new Date().toISOString();
-  const candidates = await supabase
+  let candidateQuery = supabase
     .from("gift_market_overview")
     .select("virtual_gift_id,listing_price,owner_profile_id")
     .eq("base_name", baseName)
@@ -41,6 +50,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
     .order("listing_price", { ascending: true })
     .order("virtual_gift_id", { ascending: true })
     .limit(count);
+  if (systemOwnerIds.length) candidateQuery = candidateQuery.not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`);
+  const candidates = await candidateQuery;
 
   if (candidates.error) return apiFailure(candidates.error, "Не удалось выполнить запрос");
   const rows = candidates.data || [];

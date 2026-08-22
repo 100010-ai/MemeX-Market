@@ -1,10 +1,11 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { evaluatePlayerMarketHandoff, getGiftMarketLiquidityState } from "@/lib/npc-market";
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
@@ -17,10 +18,21 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const requestKey = request.headers.get("x-idempotency-key")?.trim() || `srv-${crypto.randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
   const supabase = getSupabaseAdmin();
+  const liquidity = await getGiftMarketLiquidityState();
+  if (liquidity.playerOnly) {
+    const ownerResult = await supabase.from("virtual_gifts").select("owner_profile_id").eq("id", id).maybeSingle();
+    if (ownerResult.error) return apiFailure(ownerResult.error, "Не удалось проверить продавца Gift");
+    if (ownerResult.data?.owner_profile_id) {
+      const ownerProfile = await supabase.from("profiles").select("is_system").eq("id", ownerResult.data.owner_profile_id).maybeSingle();
+      if (ownerProfile.error) return apiFailure(ownerProfile.error, "Не удалось проверить продавца Gift");
+      if (ownerProfile.data?.is_system) return NextResponse.json({ error: "NPC liquidity is disabled. This Gift is not available for purchase." }, { status: 409 });
+    }
+  }
   const { data, error } = await supabase.rpc("buy_virtual_gift_v2", { p_buyer_id: profile.id, p_virtual_gift_id: id, p_request_key: requestKey });
   if (error) return apiFailure(error, "Не удалось купить Gift", 400);
   const cartCleanup = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
   if (cartCleanup.error) console.error("gift buy cart cleanup", cartCleanup.error);
+  after(() => evaluatePlayerMarketHandoff(false).catch((cause) => console.error("gift market handoff after buy", cause)));
   return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
 }
 export const POST = withApiErrors("app/api/gifts/[id]/buy/route.ts:POST", POSTHandler);

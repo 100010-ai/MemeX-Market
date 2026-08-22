@@ -7,6 +7,7 @@ import { ArrowLeft, BarChart3, Gem, Layers3, RefreshCw, Search, ShoppingBasket, 
 import { apiFetch } from "@/lib/api";
 import { ago, money, percent } from "@/lib/format";
 import type { GiftAsset, GiftCollectionDetail, GiftTraitGroup } from "@/lib/types";
+import { safeDecodeURIComponent } from "@/lib/safe-data";
 import { CoinChart } from "@/components/coin-chart";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -21,14 +22,14 @@ function rarest(gift: GiftAsset) {
   return Math.min(gift.modelRarityPerMille, gift.backdropRarityPerMille, gift.symbolRarityPerMille);
 }
 
-function makeSweepRequestKey(count: 2 | 5 | 10) {
+function makeSweepRequestKey(count: 3 | 5 | 10) {
   const nonce = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `sweep-${nonce}-${count}`;
 }
 
 export default function GiftCollectionPage() {
   const { name } = useParams<{ name: string }>();
-  const decodedName = decodeURIComponent(name);
+  const decodedName = safeDecodeURIComponent(name) || "";
   const [data, setData] = useState<GiftCollectionDetail | null>(null);
   const [traitTab, setTraitTab] = useState<TraitTab>("models");
   const [busyWatch, setBusyWatch] = useState(false);
@@ -44,6 +45,11 @@ export default function GiftCollectionPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async (silent = false) => {
+    if (!decodedName) {
+      setData(null);
+      setError("Некорректное имя коллекции");
+      return;
+    }
     if (!silent) setData(null);
     try {
       const next = await apiFetch<GiftCollectionDetail>(`/api/collections/${encodeURIComponent(decodedName)}`);
@@ -105,7 +111,7 @@ export default function GiftCollectionPage() {
       });
   }, [data, query, model, backdrop, symbol, sort]);
 
-  async function sweep(count: 2 | 5 | 10) {
+  async function sweep(count: 3 | 5 | 10) {
     if (!data || busySweep !== null) return;
     const cheapest = data.gifts.filter((gift) => gift.listingPrice != null).slice().sort((a, b) => Number(a.listingPrice) - Number(b.listingPrice)).slice(0, count);
     const estimate = cheapest.length === count ? cheapest.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0) : null;
@@ -191,7 +197,7 @@ export default function GiftCollectionPage() {
 
       <section className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3">
         <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Sweep</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
-        <div className="mt-3 grid grid-cols-3 gap-2">{([2,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} Gifts`}</button>)}</div>
+        <div className="mt-3 grid grid-cols-3 gap-2">{([3,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} Gifts`}</button>)}</div>
       </section>
 
       <div className="mt-3"><AdvancedOffersPanel baseName={c.baseName} models={data.models} backdrops={data.backdrops} symbols={data.symbols} /></div>

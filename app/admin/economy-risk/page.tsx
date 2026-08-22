@@ -46,14 +46,14 @@ export default function EconomyRiskPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const riskCount = useMemo(() => data ? data.risks.washPairs.length + data.risks.errors.filter((row) => Number(row.count) >= 5).length : 0, [data]);
+  const riskCount = useMemo(() => data ? data.risks.washPairs.length + data.risks.errors.filter((row: Payload["risks"]["errors"][number]) => Number(row.count) >= 5).length : 0, [data]);
 
   async function saveRuntime() {
     if (!draft || busy) return;
     setBusy(true); setError(null); setNotice(null);
     try {
       const result = await apiFetch<{ config: RuntimeConfig }>("/api/admin/runtime-config", { method: "POST", body: JSON.stringify(draft) });
-      setDraft(result.config); setData((current) => current ? { ...current, runtime: result.config } : current); setNotice("Runtime Config сохранён без redeploy.");
+      setDraft(result.config); setData((current: Payload | null) => current ? { ...current, runtime: result.config } : current); setNotice("Runtime Config сохранён без redeploy.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить конфигурацию"); }
     finally { setBusy(false); }
   }

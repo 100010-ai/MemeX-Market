@@ -4,7 +4,7 @@ import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation } from "@/lib/security";
 import { syncGiftCatalog } from "@/lib/gift-catalog";
-import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
+import { configureGiftMarketLiquidityPolicy, ensureNpcMarketLiquidity, evaluatePlayerMarketHandoff, getGiftMarketLiquidityState } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 const ACTOR = "local-god-mode";
@@ -158,6 +158,16 @@ async function POSTHandler(request: Request) {
       const gift = await supabase.from("virtual_gifts").select("owner_profile_id").eq("id", id).single();
       if (gift.error || !gift.data) throw gift.error || new Error("Подарок не найден");
       if (price !== null && (price == null || price <= 0)) return NextResponse.json({ error: "Некорректная цена" }, { status: 400 });
+      if (price !== null) {
+        const [liquidity, owner] = await Promise.all([
+          getGiftMarketLiquidityState(),
+          supabase.from("profiles").select("is_system").eq("id", gift.data.owner_profile_id).maybeSingle(),
+        ]);
+        if (owner.error) throw owner.error;
+        if (liquidity.playerOnly && owner.data?.is_system) {
+          return NextResponse.json({ error: "Рынок уже передан игрокам. Системные/NPC Gifts больше нельзя выставлять." }, { status: 409 });
+        }
+      }
       const result = await supabase.rpc("list_virtual_gift", { p_profile_id: gift.data.owner_profile_id, p_virtual_gift_id: id, p_price: price });
       if (result.error) throw result.error;
       await audit(price == null ? "gift.unlist" : "gift.list", "virtual_gift", id, { price });
@@ -212,6 +222,28 @@ async function POSTHandler(request: Request) {
       const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 1000 });
       await audit("catalog.sync", "telegram_hybrid_catalog", undefined, { catalog, liquidity });
       return NextResponse.json({ ok: true, catalog, liquidity });
+    }
+
+    if (action === "npc.policy") {
+      const playerOwnedThreshold = number(body.playerOwnedThreshold);
+      const playerListedThreshold = number(body.playerListedThreshold);
+      const activeSellersThreshold = number(body.activeSellersThreshold);
+      if (![playerOwnedThreshold, playerListedThreshold, activeSellersThreshold].every((value) => value != null && Number.isInteger(value) && value > 0)) {
+        return NextResponse.json({ error: "Пороги рынка должны быть положительными целыми числами" }, { status: 400 });
+      }
+      const result = await configureGiftMarketLiquidityPolicy({
+        playerOwnedThreshold: playerOwnedThreshold!,
+        playerListedThreshold: playerListedThreshold!,
+        activeSellersThreshold: activeSellersThreshold!,
+      });
+      await audit("npc.policy", "gift_liquidity", undefined, { result });
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "npc.handoff") {
+      const result = await evaluatePlayerMarketHandoff(true);
+      await audit("npc.handoff", "gift_liquidity", undefined, { result });
+      return NextResponse.json({ ok: true, result });
     }
 
     if (action === "npc.tick") {

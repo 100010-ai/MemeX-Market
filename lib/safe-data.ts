@@ -53,3 +53,13 @@ export function nonEmptyId(value: unknown): string | null {
   const id = text(value, "", 240);
   return id && id !== "undefined" && id !== "null" ? id : null;
 }
+export function safeDecodeURIComponent(value: unknown, max = 180): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch { /* Next route params may already contain a literal % */ }
+  const normalized = decoded.trim().slice(0, Math.max(0, max));
+  return normalized || null;
+}
+

@@ -208,7 +208,7 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
       ? await supabase.from("gift_assets").select("id,telegram_name").in("telegram_name", seenNames)
       : { data: [] as Array<{ id: string; telegram_name: string }>, error: null };
     if (beforeResult.error) throw beforeResult.error;
-    const existingNames = new Set((beforeResult.data || []).map((row) => String(row.telegram_name)));
+    const existingNames = new Set(((beforeResult.data || []) as Array<{ telegram_name: unknown }>).map((row) => String(row.telegram_name)));
 
     const now = new Date().toISOString();
     const rows = unique.map(({ gift }) => ({
@@ -254,12 +254,12 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
     if (assetsResult.error) throw assetsResult.error;
     if ((assetsResult.data || []).length !== seenNames.length) throw new Error("Supabase did not return every synced Telegram Gift asset");
 
-    const assets = assetsResult.data || [];
+    const assets = (assetsResult.data || []) as Array<{ id: unknown; telegram_name: unknown; is_burned: boolean }>;
     const burnedAssetIds = assets.filter((asset) => asset.is_burned).map((asset) => String(asset.id));
     if (burnedAssetIds.length) {
       const burnedVirtualResult = await supabase.from("virtual_gifts").select("id").in("asset_id", burnedAssetIds);
       if (burnedVirtualResult.error) throw burnedVirtualResult.error;
-      const burnedVirtualIds = (burnedVirtualResult.data || []).map((row) => String(row.id));
+      const burnedVirtualIds = ((burnedVirtualResult.data || []) as Array<{ id: unknown }>).map((row) => String(row.id));
       const { error: burnedError } = await supabase
         .from("virtual_gifts")
         .update({ status: "owned", listing_price: null })
@@ -280,7 +280,7 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
       ? await supabase.from("virtual_gifts").select("asset_id").in("asset_id", assetIds)
       : { data: [] as Array<{ asset_id: string }>, error: null };
     if (existingVirtualResult.error) throw existingVirtualResult.error;
-    const existingVirtualIds = new Set((existingVirtualResult.data || []).map((row) => String(row.asset_id)));
+    const existingVirtualIds = new Set(((existingVirtualResult.data || []) as Array<{ asset_id: unknown }>).map((row) => String(row.asset_id)));
     const missingVirtualRows = tradeableAssets
       .filter((asset) => !existingVirtualIds.has(String(asset.id)))
       .map((asset) => ({ asset_id: asset.id, source_owner_profile_id: profileId, owner_profile_id: profileId, acquired_price: 0, status: "owned" }));

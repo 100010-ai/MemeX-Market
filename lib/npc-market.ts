@@ -21,6 +21,21 @@ type GenesisState = {
   seed: string;
 };
 
+export type GiftMarketLiquidityState = {
+  mode: "npc_bootstrap" | "player_only";
+  playerOnly: boolean;
+  playerOwned: number;
+  playerListed: number;
+  activeSellers: number;
+  npcListed: number;
+  playerOwnedThreshold: number;
+  playerListedThreshold: number;
+  activeSellersThreshold: number;
+  ready: boolean;
+  transitionedAt: string | null;
+  npcRemoved?: number;
+};
+
 export type NpcLiquidityResult = {
   skipped: boolean;
   currentListings: number;
@@ -31,6 +46,47 @@ export type NpcLiquidityResult = {
   remaining: number;
   completed: boolean;
 };
+
+
+function parseLiquidityState(value: unknown): GiftMarketLiquidityState {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    mode: row.mode === "player_only" ? "player_only" : "npc_bootstrap",
+    playerOnly: row.playerOnly === true || row.mode === "player_only",
+    playerOwned: Math.max(0, Number(row.playerOwned) || 0),
+    playerListed: Math.max(0, Number(row.playerListed) || 0),
+    activeSellers: Math.max(0, Number(row.activeSellers) || 0),
+    npcListed: Math.max(0, Number(row.npcListed) || 0),
+    playerOwnedThreshold: Math.max(1, Number(row.playerOwnedThreshold) || 500),
+    playerListedThreshold: Math.max(1, Number(row.playerListedThreshold) || 120),
+    activeSellersThreshold: Math.max(1, Number(row.activeSellersThreshold) || 20),
+    ready: row.ready === true,
+    transitionedAt: typeof row.transitionedAt === "string" && row.transitionedAt ? row.transitionedAt : null,
+    npcRemoved: Math.max(0, Number(row.npcRemoved) || 0),
+  };
+}
+
+export async function getGiftMarketLiquidityState(): Promise<GiftMarketLiquidityState> {
+  const result = await getSupabaseAdmin().rpc("gift_market_liquidity_state");
+  if (result.error) throw result.error;
+  return parseLiquidityState(result.data);
+}
+
+export async function evaluatePlayerMarketHandoff(force = false): Promise<GiftMarketLiquidityState> {
+  const result = await getSupabaseAdmin().rpc("maybe_handoff_gift_market_to_players", { p_force: force });
+  if (result.error) throw result.error;
+  return parseLiquidityState(result.data);
+}
+
+export async function configureGiftMarketLiquidityPolicy(input: { playerOwnedThreshold: number; playerListedThreshold: number; activeSellersThreshold: number }): Promise<GiftMarketLiquidityState> {
+  const result = await getSupabaseAdmin().rpc("configure_gift_market_liquidity_policy", {
+    p_player_owned_threshold: Math.max(1, Math.trunc(input.playerOwnedThreshold)),
+    p_player_listed_threshold: Math.max(1, Math.trunc(input.playerListedThreshold)),
+    p_active_sellers_threshold: Math.max(1, Math.trunc(input.activeSellersThreshold)),
+  });
+  if (result.error) throw result.error;
+  return parseLiquidityState(result.data);
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -51,6 +107,11 @@ function observedPrice(candidate: Candidate) {
   return Math.round(value * 1_000_000_000) / 1_000_000_000;
 }
 
+function isPlayerOnlyListingError(error: unknown) {
+  const message = error && typeof error === "object" && "message" in error ? String((error as { message?: unknown }).message || "") : String(error || "");
+  return /NPC liquidity is permanently disabled|player-only Gift market/i.test(message);
+}
+
 function parseGenesisState(value: unknown): GenesisState {
   const row = (value || {}) as Record<string, unknown>;
   return {
@@ -64,6 +125,23 @@ function parseGenesisState(value: unknown): GenesisState {
 
 export async function ensureGenesisGiftMarket(options: { batchSize?: number; force?: boolean } = {}): Promise<NpcLiquidityResult> {
   const supabase = getSupabaseAdmin();
+
+  // NPC inventory is bootstrap liquidity only. The handoff is irreversible: once
+  // player ownership + listings + seller breadth reach policy thresholds, no
+  // future bootstrap/admin call is allowed to repopulate system listings.
+  const liquidity = await evaluatePlayerMarketHandoff(false);
+  if (liquidity.playerOnly) {
+    return {
+      skipped: true,
+      currentListings: 0,
+      created: 0,
+      rareDeals: 0,
+      total: 0,
+      released: 0,
+      remaining: 0,
+      completed: true,
+    };
+  }
 
   // Reconcile old v0.13 synthetic NPC prices before publishing anything. This
   const reconcile = await supabase.rpc("reconcile_npc_external_prices");
@@ -115,7 +193,7 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
       const chunk = candidates.slice(start, start + 12);
       const results = await Promise.all(chunk.map(async (candidate) => {
         const price = observedPrice(candidate);
-        if (price == null) return false;
+        if (price == null) return "skipped" as const;
         const seeded = await supabase.rpc("npc_seed_virtual_gift", {
           p_asset_id: candidate.asset_id,
           // The DB function also re-reads the observed asset price and ignores
@@ -128,12 +206,18 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
           p_desk: Math.abs(Number(candidate.gift_number) || 0) % 3,
         });
         if (seeded.error) {
-          if (/already|unique|duplicate|fresh observed native TON listing price|observed native TON listing price is required/i.test(String(seeded.error.message || ""))) return false;
+          if (isPlayerOnlyListingError(seeded.error)) return "handoff" as const;
+          if (/already|unique|duplicate|fresh observed native TON listing price|observed native TON listing price is required/i.test(String(seeded.error.message || ""))) return "skipped" as const;
           throw seeded.error;
         }
-        return true;
+        return "created" as const;
       }));
-      created += results.filter(Boolean).length;
+      created += results.filter((result) => result === "created").length;
+      if (results.includes("handoff")) {
+        const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+        if (release.error) throw release.error;
+        return { skipped: true, currentListings: 0, created, rareDeals: 0, ...state, completed: true };
+      }
     }
 
     const refreshed = await supabase.rpc("initialize_gift_genesis_pool");

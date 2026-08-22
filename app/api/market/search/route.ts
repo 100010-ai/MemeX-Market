@@ -29,14 +29,27 @@ async function GETHandler(request: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const runtimeConfig = await getRuntimeConfig();
+  const liquidityResult = await supabase.rpc("gift_market_liquidity_state");
+  if (liquidityResult.error) return apiFailure(liquidityResult.error, "Не удалось проверить режим Gift-рынка");
+  const playerOnly = Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly);
+  let systemOwnerIds: string[] = [];
+  if (playerOnly) {
+    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true);
+    if (systemProfiles.error) return apiFailure(systemProfiles.error, "Не удалось проверить владельцев рынка");
+    systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
+  }
   const nowIso = new Date().toISOString();
-  const baseQuery = () => supabase
-    .from("gift_market_overview")
-    .select(giftMarketSelect)
-    .eq("status", "listed")
-    .eq("is_burned", false)
-    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
-    .not("telegram_name", "is", null);
+  const baseQuery = () => {
+    let query = supabase
+      .from("gift_market_overview")
+      .select(giftMarketSelect)
+      .eq("status", "listed")
+      .eq("is_burned", false)
+      .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
+      .not("telegram_name", "is", null);
+    if (systemOwnerIds.length) query = query.not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`);
+    return query;
+  };
 
   const giftTerm = q.replace(/^#/, "");
   const coinTerm = q.replace(/^\$/, "");

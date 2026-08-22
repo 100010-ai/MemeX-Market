@@ -151,15 +151,16 @@ async function GETHandler(request: NextRequest) {
     const profile = await requireProfile();
     if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const [giftsResult, collectionsResult, watchlistResult, cartResult, genesisResult, filterOptionsResult] = await Promise.all([
+    const [giftsResult, collectionsResult, watchlistResult, cartResult, genesisResult, liquidityResult, filterOptionsResult] = await Promise.all([
       supabase.rpc("gift_market_filtered_page_v200", giftPageArgs),
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").order("volume_24h", { ascending: false }).limit(80),
       supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       supabase.rpc("gift_genesis_public_state"),
+      supabase.rpc("gift_market_liquidity_state"),
       supabase.rpc("gift_market_filter_options_v046"),
     ]);
-    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || filterOptionsResult.error;
+    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || liquidityResult.error || filterOptionsResult.error;
     if (firstError) throw firstError;
 
     const page = parseGiftMarketPage(giftsResult.data);
@@ -172,8 +173,9 @@ async function GETHandler(request: NextRequest) {
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
-      bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters,
+      bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
       genesis: genesisResult.data || null,
+      liquidity: liquidityResult.data || null,
       filterOptions: filterOptionsResult.data,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),

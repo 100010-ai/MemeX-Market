@@ -1,43 +1,57 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
-import { giftMarketSelect, mapGift } from "@/lib/mappers";
+import { mapGift } from "@/lib/mappers";
+import { safeDecodeURIComponent } from "@/lib/safe-data";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 function intParam(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
+type GiftPage = { gifts?: unknown; nextOffset?: unknown; totalGifts?: unknown };
+
+function parseGiftPage(value: unknown) {
+  const row = value && typeof value === "object" && !Array.isArray(value) ? value as GiftPage : {};
+  const gifts = Array.isArray(row.gifts) ? row.gifts : [];
+  const nextRaw = row.nextOffset == null ? null : Number(row.nextOffset);
+  return {
+    gifts,
+    nextOffset: nextRaw != null && Number.isInteger(nextRaw) && nextRaw >= 0 ? nextRaw : null,
+  };
+}
+
 async function GETHandler(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
   const { name } = await params;
-  const baseName = decodeURIComponent(name).trim();
-  if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
+  const baseName = safeDecodeURIComponent(name);
+  if (!baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });
 
   const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
   const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 60);
-  const supabase = getSupabaseAdmin();
-  const nowIso = new Date().toISOString();
-  const result = await supabase
-    .from("gift_market_overview")
-    .select(giftMarketSelect)
-    .eq("base_name", baseName)
-    .eq("is_burned", false)
-    .eq("status", "listed")
-    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
-    .not("telegram_name", "is", null)
-    .order("listing_price", { ascending: true })
-    .range(offset, offset + limit);
+  const result = await getSupabaseAdmin().rpc("gift_market_filtered_page_v200", {
+    p_seed: `collection:${baseName}`,
+    p_offset: offset,
+    p_limit: limit,
+    p_collection: baseName,
+    p_model: null,
+    p_backdrop: null,
+    p_symbol: null,
+    p_price_band: "all",
+    p_view: "all",
+    p_sort: "price",
+  });
 
   if (result.error) return apiFailure(result.error, "Не удалось выполнить запрос");
-  const rows = result.data || [];
-  const hasMore = rows.length > limit;
-  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const page = parseGiftPage(result.data);
   return NextResponse.json({
-    gifts: pageRows.map(mapGift),
-    nextOffset: hasMore ? offset + pageRows.length : null,
+    gifts: page.gifts.flatMap((row) => row && typeof row === "object" && !Array.isArray(row) ? [mapGift(row as Record<string, unknown>)] : []),
+    nextOffset: page.nextOffset,
   }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
 }
 export const GET = withApiErrors("app/api/collections/[name]/listings/route.ts:GET", GETHandler);

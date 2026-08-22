@@ -4,7 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { syncTonApiGiftCatalog } from "@/lib/tonapi-gifts";
-import { ensureGenesisGiftMarket } from "@/lib/npc-market";
+import { ensureGenesisGiftMarket, getGiftMarketLiquidityState } from "@/lib/npc-market";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -60,6 +60,12 @@ async function POSTHandler(request: Request) {
   }
 
   try {
+    const liquidity = await getGiftMarketLiquidityState();
+    if (liquidity.playerOnly) {
+      const listed = await listedCount();
+      return NextResponse.json({ ok: true, skipped: true, playerOnly: true, listed, liquidity });
+    }
+
     const before = await listedCount();
     if (before >= 600) return NextResponse.json({ ok: true, skipped: true, listed: before });
 

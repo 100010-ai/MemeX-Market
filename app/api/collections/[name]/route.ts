@@ -2,8 +2,9 @@ import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { giftMarketSelect, mapGift, mapGiftCollection } from "@/lib/mappers";
-import { finiteNumber, nonEmptyId, nullableNumber, safeIsoDate, safeUnixSeconds, text } from "@/lib/safe-data";
+import { getRuntimeConfig } from "@/lib/runtime-config";
+import { mapGift, mapGiftCollection } from "@/lib/mappers";
+import { finiteNumber, nonEmptyId, nullableNumber, safeDecodeURIComponent, safeIsoDate, safeUnixSeconds, text } from "@/lib/safe-data";
 
 const INITIAL_LISTING_LIMIT = 36;
 
@@ -28,24 +29,33 @@ function mapTraitStats(rows: Record<string, unknown>[], type: "model" | "backdro
   });
 }
 
+type GiftPage = { gifts?: unknown; nextOffset?: unknown };
+function parseGiftPage(value: unknown) {
+  const page = value && typeof value === "object" && !Array.isArray(value) ? value as GiftPage : {};
+  const gifts = Array.isArray(page.gifts) ? page.gifts : [];
+  const nextRaw = page.nextOffset == null ? null : Number(page.nextOffset);
+  return { gifts, nextOffset: nextRaw != null && Number.isInteger(nextRaw) && nextRaw >= 0 ? nextRaw : null };
+}
 
 async function GETHandler(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
   const { name } = await params;
-  let baseName = "";
-  try { baseName = decodeURIComponent(name).trim().slice(0, 180); }
-  catch { return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 }); }
-  if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
+  const baseName = safeDecodeURIComponent(name);
+  if (!baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });
   const supabase = getSupabaseAdmin();
-  const nowIso = new Date().toISOString();
 
   try {
     const [collectionResult, traitStatsResult, listedResult, candlesResult, salesResult, activityResult, watchedResult] = await Promise.all([
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_collection_trait_stats", { p_base_name: baseName }),
-      supabase.from("gift_market_overview").select(giftMarketSelect, { count: "exact" }).eq("base_name", baseName).eq("is_burned", false).eq("status", "listed").or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`).not("telegram_name", "is", null).order("listing_price", { ascending: true }).range(0, INITIAL_LISTING_LIMIT - 1),
+      supabase.rpc("gift_market_filtered_page_v200", {
+        p_seed: `collection:${baseName}`, p_offset: 0, p_limit: INITIAL_LISTING_LIMIT, p_collection: baseName,
+        p_model: null, p_backdrop: null, p_symbol: null, p_price_band: "all", p_view: "all", p_sort: "price",
+      }),
       supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(480),
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id,gift_assets!inner(base_name,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(24),
       supabase.from("gift_listing_events").select("id,virtual_gift_id,actor_profile_id,kind,price,previous_price,created_at,gift_assets!inner(base_name,gift_number,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(50),
@@ -67,10 +77,11 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ nam
     }
 
     const traitRows = (traitStatsResult.data || []) as Record<string, unknown>[];
+    const listedPage = parseGiftPage(listedResult.data);
     return NextResponse.json({
       collection: mapGiftCollection(collectionResult.data as Record<string, unknown>),
-      gifts: (listedResult.data || []).map(mapGift).filter((gift) => Boolean(gift.virtualGiftId)),
-      nextOffset: (listedResult.data || []).length < (listedResult.count || 0) ? (listedResult.data || []).length : null,
+      gifts: listedPage.gifts.flatMap((row) => row && typeof row === "object" && !Array.isArray(row) ? [mapGift(row as Record<string, unknown>)] : []).filter((gift) => Boolean(gift.virtualGiftId)),
+      nextOffset: listedPage.nextOffset,
       candles: [...(candlesResult.data || [])].reverse().flatMap((candle) => {
         const time = safeUnixSeconds(candle.bucket_start);
         if (time == null) return [];

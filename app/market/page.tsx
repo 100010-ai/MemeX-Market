@@ -3,9 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Flame, Gift, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
+import { BarChart3, Coins, Flame, Gift, Layers3, List, Plus, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
+import type { ActivityItem, Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
 import { money, percent, price } from "@/lib/format";
 import { CoinAvatar } from "@/components/ui";
 import { GiftCard } from "@/components/gifts/gift-card";
@@ -13,10 +13,11 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 
-const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
+const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "gift_listing_events", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
 type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
-type MarketPayload = { coins: Coin[]; newCoins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; filterOptions?: GiftFilterOptions };
+type LiquidityState = { mode: "npc_bootstrap" | "player_only"; playerOnly: boolean; playerOwned: number; playerListed: number; activeSellers: number; npcListed: number; playerOwnedThreshold: number; playerListedThreshold: number; activeSellersThreshold: number; ready: boolean; transitionedAt: string | null };
+type MarketPayload = { coins: Coin[]; newCoins: Coin[]; gifts: GiftAsset[]; collections: GiftCollection[]; watchlist: Watchlist; cartIds: string[]; totalGifts: number; nextOffset: number | null; marketSeed: string | null; bootstrapRecommended: boolean; genesis: GenesisState | null; liquidity?: LiquidityState | null; filterOptions?: GiftFilterOptions };
 type GiftPageChunk = { gifts: GiftAsset[]; totalGifts: number; nextOffset: number | null; marketSeed: string };
 type UnifiedSearch = {
   gifts: GiftAsset[];
@@ -25,11 +26,13 @@ type UnifiedSearch = {
   users: Array<{ id: string; name: string; username: string | null; firstName: string; photoUrl: string | null }>;
 };
 type GiftSort = "random" | "price" | "newest" | "number" | "rarity" | "offers";
+type GiftMarketMode = "items" | "collections" | "feed";
+type MarketCollectionCard = { baseName: string; listedCount: number; floorPrice: number | null; previewTotal: number; previews: Array<{ virtualGiftId: string; giftNumber: number; listingPrice: number; imageUrl: string | null; modelName: string; backdropName: string; symbolName: string }> };
 type CoinSort = "gainers" | "volume" | "marketcap" | "newest";
 type PriceBand = "all" | "under50" | "50to250" | "250to1000" | "over1000";
 type GiftView = "all" | "deals" | "rare" | "new" | "offers";
 
-const emptyMarketPayload = (): MarketPayload => ({ coins: [], newCoins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
+const emptyMarketPayload = (): MarketPayload => ({ coins: [], newCoins: [], gifts: [], collections: [], watchlist: { coinIds: [], giftCollections: [], giftIds: [] }, cartIds: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null, liquidity: null, filterOptions: { collections: [], models: [], backdrops: [], symbols: [] } });
 
 function weightedCoinScore(coin: Coin) {
   const volume = Math.log1p(Math.max(0, coin.volume24h));
@@ -45,6 +48,14 @@ function weightedCollectionScore(collection: GiftCollection) {
   const holders = Math.log1p(Math.max(0, collection.holderCount));
   const momentum = Math.max(-1, Math.min(3, collection.change24h / 100));
   return volume * .36 + trades * .30 + holders * .20 + momentum * .14;
+}
+
+function liquidityMaturity(state: LiquidityState) {
+  if (state.playerOnly) return 100;
+  const owned = state.playerOwnedThreshold > 0 ? state.playerOwned / state.playerOwnedThreshold : 0;
+  const listed = state.playerListedThreshold > 0 ? state.playerListed / state.playerListedThreshold : 0;
+  const sellers = state.activeSellersThreshold > 0 ? state.activeSellers / state.activeSellersThreshold : 0;
+  return Math.max(0, Math.min(100, Math.floor(Math.min(owned, listed, sellers) * 100)));
 }
 const marketCache = new Map<string, { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
@@ -63,11 +74,17 @@ export default function MarketPage() {
   const [symbol, setSymbol] = useState("all");
   const [giftSort, setGiftSort] = useState<GiftSort>("random");
   const [giftView, setGiftView] = useState<GiftView>("all");
+  const [giftMode, setGiftMode] = useState<GiftMarketMode>("items");
+  const [collectionCards, setCollectionCards] = useState<MarketCollectionCard[]>([]);
+  const [feedItems, setFeedItems] = useState<ActivityItem[]>([]);
+  const [modeLoading, setModeLoading] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
   const [coinSort, setCoinSort] = useState<CoinSort>("volume");
   const [priceBand, setPriceBand] = useState<PriceBand>("all");
   const [loading, setLoading] = useState(true);
   const [watchBusy, setWatchBusy] = useState<string | null>(null);
   const [cartBusy, setCartBusy] = useState<string | null>(null);
+  const [collectionCartBusy, setCollectionCartBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
@@ -103,7 +120,7 @@ export default function MarketPage() {
   const loadSeq = useRef(0);
   const scopeDataRef = useRef<Record<string, MarketPayload>>({});
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, fresh = false) => {
     const seq = ++loadSeq.current;
     const forced = typeof window !== "undefined" && sessionStorage.getItem("mxm-market-dirty") === "1";
     if (forced) {
@@ -120,7 +137,10 @@ export default function MarketPage() {
     if (cacheFresh && !silent) silent = true;
     try {
       const catalogParams = tab === "gifts" && giftCatalogQuery ? `&${giftCatalogQuery}` : "";
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced ? Date.now() : 0}${catalogParams}`);
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced || fresh ? Date.now() : 0}${catalogParams}`, {
+        cacheMs: fresh ? 0 : undefined,
+        dedupe: !fresh,
+      });
       if (seq !== loadSeq.current) return;
       marketCache.set(activeScopeKey, { at: Date.now(), payload });
       scopeDataRef.current[activeScopeKey] = payload;
@@ -201,7 +221,40 @@ export default function MarketPage() {
     return () => observer.disconnect();
   }, [tab, data.nextOffset, query, loadMoreError, loadMoreGifts]);
 
-  const realtimeReload = useCallback(() => { void load(true); }, [load]);
+  const loadGiftMode = useCallback(async (mode: GiftMarketMode, fresh = false) => {
+    if (mode === "items") return;
+    setModeLoading(true);
+    setModeError(null);
+    try {
+      if (mode === "collections") {
+        const payload = await apiFetch<{ collections: MarketCollectionCard[] }>("/api/market/collections?limit=40", {
+          cacheMs: fresh ? 0 : 10_000,
+          dedupe: !fresh,
+        });
+        setCollectionCards(Array.isArray(payload.collections) ? payload.collections : []);
+      } else {
+        const payload = await apiFetch<{ activity: ActivityItem[] }>("/api/feed?limit=50", {
+          cacheMs: fresh ? 0 : 5_000,
+          dedupe: !fresh,
+        });
+        setFeedItems(Array.isArray(payload.activity) ? payload.activity : []);
+      }
+    } catch (cause) {
+      setModeError(cause instanceof Error ? cause.message : "Не удалось загрузить раздел рынка");
+    } finally {
+      setModeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "gifts" || giftMode === "items") return;
+    void loadGiftMode(giftMode);
+  }, [tab, giftMode, loadGiftMode]);
+
+  const realtimeReload = useCallback(() => {
+    void load(true, true);
+    if (tab === "gifts" && giftMode !== "items") void loadGiftMode(giftMode, true);
+  }, [load, loadGiftMode, tab, giftMode]);
 
   const bootstrapGifts = useCallback(async () => {
     if (bootstrapInFlight.current || tab !== "gifts") return;
@@ -290,6 +343,16 @@ export default function MarketPage() {
     return () => window.clearTimeout(timer);
   }, [tab, loading, loadingMore, query, hasGiftFilters, gifts.length, data.nextOffset, loadMoreError, loadMoreGifts]);
 
+  const visibleCollectionCards = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
+    return collectionCards.filter((item) => !q || item.baseName.toLowerCase().includes(q));
+  }, [collectionCards, deferredQuery]);
+
+  const visibleFeedItems = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
+    return feedItems.filter((item) => !q || `${item.label} ${item.detail}`.toLowerCase().includes(q));
+  }, [feedItems, deferredQuery]);
+
   const coins = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     const source = deferredQuery.trim().length >= 2 && remoteSearch
@@ -320,6 +383,7 @@ export default function MarketPage() {
     setRemoteSearchState(null);
     setLoadError(null);
     setLoadMoreError(null);
+    if (next === "coins") setGiftMode("items");
     setTab(next);
   }
 
@@ -379,6 +443,28 @@ export default function MarketPage() {
     }
   }, []);
 
+  const addCollectionPreviewToCart = useCallback(async (card: MarketCollectionCard) => {
+    if (collectionCartBusy) return;
+    const ids = card.previews.slice(0, 3).map((gift) => gift.virtualGiftId).filter((id) => !cartIds.has(id));
+    if (!ids.length) return;
+    setCollectionCartBusy(card.baseName);
+    try {
+      const result = await apiFetch<{ added?: string[] }>("/api/cart/bulk", { method: "POST", body: JSON.stringify({ virtualGiftIds: ids }) });
+      const added = Array.isArray(result.added) ? result.added : [];
+      setData((current) => {
+        const next = { ...current, cartIds: [...new Set([...current.cartIds, ...added])] };
+        scopeDataRef.current[activeScopeKeyRef.current] = next;
+        return next;
+      });
+      marketCache.clear();
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось добавить набор в корзину");
+    } finally {
+      setCollectionCartBusy(null);
+    }
+  }, [cartIds, collectionCartBusy]);
+
   return (
     <div className="mx-auto max-w-6xl">
       <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={1500} />
@@ -398,8 +484,14 @@ export default function MarketPage() {
         <Search size={16} className="shrink-0 text-[var(--muted)]" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "gifts" ? "Найти подарок или номер" : "Найти коин или тикер"} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
         {query ? <button type="button" aria-label="Очистить поиск" onClick={() => setQuery("")} className="mxm-clear-search"><X size={14} /></button> : null}
-        <Link href="/hub" aria-label="Лента" className="mxm-feed-link"><Sparkles size={14} /><span className="hidden sm:inline">Лента</span></Link>
+        {tab === "gifts" ? <button type="button" onClick={() => setGiftMode("feed")} aria-label="Feed" className={`mxm-feed-link ${giftMode === "feed" ? "is-active" : ""}`}><List size={14} /><span>Feed</span></button> : <Link href="/hub" aria-label="Лента" className="mxm-feed-link"><Sparkles size={14} /><span className="hidden sm:inline">Лента</span></Link>}
       </div>
+      {tab === "gifts" ? <div className="mxm-hscroll mb-3 gap-2">
+        <button type="button" onClick={() => setGiftMode("items")} className={`mxm-filter-chip ${giftMode === "items" ? "is-active" : ""}`}><Gift size={13} />Подарки</button>
+        <button type="button" onClick={() => setGiftMode("collections")} className={`mxm-filter-chip ${giftMode === "collections" ? "is-active" : ""}`}><Layers3 size={13} />Коллекции</button>
+        {data.liquidity ? <span className={`ml-auto shrink-0 rounded-[13px] border px-2.5 py-1.5 text-[9px] ${data.liquidity.playerOnly ? "border-[rgba(88,196,132,.24)] text-[var(--positive)]" : "border-[var(--border-soft)] text-[var(--muted)]"}`}>{data.liquidity.playerOnly ? "Рынок игроков" : `Стартовая ликвидность · ${liquidityMaturity(data.liquidity)}%`}</span> : null}
+      </div> : null}
+
       {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">
         <div className="mxm-hscroll gap-2">
           {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">floor {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
@@ -408,9 +500,9 @@ export default function MarketPage() {
         </div>
       </div> : null}
 
-      <HotNowStrip tab={tab} coins={hotCoins} collections={hotCollections} loading={loading} />
+      {tab !== "gifts" || giftMode === "items" ? <HotNowStrip tab={tab} coins={hotCoins} collections={hotCollections} loading={loading} /> : null}
 
-      {tab === "gifts" ? (
+      {tab === "gifts" && giftMode === "items" ? (
         <>
           <div className="mxm-view-tabs mxm-hscroll mb-3 gap-5">
             {([
@@ -440,12 +532,12 @@ export default function MarketPage() {
             collections={filterCollections} models={models} backdrops={backdrops} symbols={symbols}
           />
         </>
-      ) : (
+      ) : tab === "coins" ? (
         <div className="mxm-view-tabs mxm-hscroll mb-4 gap-5">
           {(["gainers","volume","marketcap","newest"] as CoinSort[]).map((value) => <button key={value} onClick={() => setCoinSort(value)} className={`mxm-tab-chip capitalize ${coinSort === value ? "is-active" : ""}`}>{value === "marketcap" ? "Капитализация" : value === "gainers" ? "Рост" : value === "volume" ? "Объём" : "Новые"}</button>)}
           <Link href="/create" className="mxm-filter-chip is-active"><Plus size={14} />Создать</Link>
         </div>
-      )}
+      ) : null}
 
       {error ? <div className="mb-3 flex items-center justify-between gap-3 mxm-alert mxm-alert-error">
         <span>{error}</span>
@@ -454,7 +546,13 @@ export default function MarketPage() {
       </div> : null}
 
       {tab === "gifts" ? (
-        <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-center text-[9px] text-[var(--muted)]">{loadMoreError ? <div className="flex items-center gap-2"><span>{loadMoreError}</span><button type="button" onClick={() => void loadMoreGifts()} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px] text-white">Повторить</button></div> : loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : "Нет активных лотов."} action={<button disabled={bootstrapLoading} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
+        giftMode === "items" ? (
+          <div>{loading ? <GridSkeleton /> : gifts.length ? <><div className="market-grid grid gap-x-2.5 gap-y-5 md:gap-x-3">{gifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} inCart={cartIds.has(gift.virtualGiftId)} cartBusy={cartBusy === gift.virtualGiftId} onCart={toggleCart} />)}</div>{data.nextOffset != null && query.trim().length < 2 ? <div ref={loadMoreRef} className="flex min-h-12 items-center justify-center text-center text-[9px] text-[var(--muted)]">{loadMoreError ? <div className="flex items-center gap-2"><span>{loadMoreError}</span><button type="button" onClick={() => void loadMoreGifts()} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px] text-white">Повторить</button></div> : loadingMore ? "Загружаем ещё…" : ""}</div> : null}</> : <EmptyMarket icon={<Gift />} title={watchOnly ? "В избранном пока пусто" : "Ничего не найдено"} text={watchOnly ? "Добавь коллекции в избранное." : data.liquidity?.playerOnly ? "На рынке игроков пока нет активных лотов. Выставить Gifts могут только реальные владельцы." : "Нет активных лотов."} action={<button disabled={bootstrapLoading || Boolean(data.liquidity?.playerOnly)} onClick={watchOnly ? () => setWatchOnly(false) : data.totalGifts === 0 && !data.liquidity?.playerOnly ? () => void bootstrapGifts() : resetGiftFilters} className="inline-flex rounded-[14px] bg-[var(--panel-3)] px-4 py-2.5 text-[11px] font-medium disabled:opacity-50">{watchOnly ? "Показать всё" : data.liquidity?.playerOnly ? "Ждём лоты игроков" : data.totalGifts === 0 ? (bootstrapLoading ? "Загружаем…" : "Загрузить Gifts") : "Сбросить фильтры"}</button>} />}</div>
+        ) : giftMode === "collections" ? (
+          <MarketCollectionsView collections={visibleCollectionCards} loading={modeLoading} error={modeError} onRetry={() => void loadGiftMode("collections")} cartIds={cartIds} busyCollection={collectionCartBusy} onAddPreviews={addCollectionPreviewToCart} />
+        ) : (
+          <MarketFeedView items={visibleFeedItems} loading={modeLoading} error={modeError} onRetry={() => void loadGiftMode("feed")} />
+        )
       ) : (
         <div>
           <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-sm font-medium"><Flame size={15} className="text-[var(--accent)]" />{coinSort === "gainers" ? "Лидеры роста" : coinSort === "volume" ? "Объём" : coinSort === "marketcap" ? "Капитализация" : "Новые коины"}</div><span className="text-[9px] text-[var(--muted)]">{loading ? "Загрузка…" : `${coins.length} активов`}</span></div>
@@ -465,6 +563,37 @@ export default function MarketPage() {
       {tab === "gifts" && data.cartIds.length ? <Link href="/cart" className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-[17px] border border-[rgba(198,170,88,.25)] bg-[rgba(19,20,22,.96)] px-4 py-2.5 text-[11px] font-semibold mxm-floating-glass shadow-[0_10px_28px_rgba(0,0,0,.38)] lg:bottom-5"><ShoppingCart size={14} className="text-[var(--accent)]"/><span>Корзина · {data.cartIds.length}</span></Link> : null}
     </div>
   );
+}
+
+
+function MarketCollectionsView({ collections, loading, error, onRetry, cartIds, busyCollection, onAddPreviews }: { collections: MarketCollectionCard[]; loading: boolean; error: string | null; onRetry: () => void; cartIds: Set<string>; busyCollection: string | null; onAddPreviews: (card: MarketCollectionCard) => void }) {
+  if (loading) return <RowsSkeleton />;
+  if (error) return <div className="mxm-alert mxm-alert-error flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={onRetry} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px]">Повторить</button></div>;
+  if (!collections.length) return <EmptyMarket icon={<Layers3 />} title="Коллекций с лотами пока нет" text="Как только владельцы начнут выставлять Gifts, коллекции появятся здесь автоматически." action={<span className="text-[10px] text-[var(--muted)]">Только реальные активные листинги</span>} />;
+  return <div className="grid gap-2.5 md:grid-cols-2">{collections.map((item) => <article key={item.baseName} className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-2.5">
+    <div className="mb-2 flex items-center justify-between gap-3"><div className="min-w-0"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="block truncate text-[12px] font-semibold">{item.baseName}</Link><p className="mt-0.5 text-[9px] text-[var(--muted)]">{item.listedCount} лотов · floor {item.floorPrice == null ? "—" : money(item.floorPrice)}</p></div><span className="rounded-[10px] bg-[var(--accent)] px-2 py-1 text-[9px] font-semibold text-black">🎁 {item.listedCount}</span></div>
+    <div className="grid grid-cols-3 gap-2">{item.previews.slice(0, 3).map((gift) => <Link href={`/gifts/${gift.virtualGiftId}`} key={gift.virtualGiftId} className="min-w-0 overflow-hidden rounded-[13px] bg-[var(--panel-2)]">
+      <div className="relative aspect-square overflow-hidden">{gift.imageUrl ? <img src={gift.imageUrl} alt={`${item.baseName} #${gift.giftNumber}`} loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-[var(--muted)]"><Gift size={18} /></div>}<span className="absolute bottom-1 right-1 rounded-md bg-black/55 px-1 py-0.5 text-[8px] text-white">#{gift.giftNumber}</span></div>
+    </Link>)}</div>
+    <div className="mt-2 flex items-center gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="flex min-w-0 flex-1 items-center justify-center rounded-[12px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2 text-[11px] font-medium">{item.previewTotal > 0 ? `${item.previews.length} cheapest · ${money(item.previewTotal)}` : "Открыть коллекцию"}</Link><button type="button" disabled={busyCollection===item.baseName || !item.previews.some((gift)=>!cartIds.has(gift.virtualGiftId))} onClick={()=>onAddPreviews(item)} aria-label="Добавить дешёвые Gifts в корзину" className="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] border border-[var(--border-soft)] bg-[var(--panel-2)] disabled:opacity-40">{busyCollection===item.baseName?<span className="text-[9px]">…</span>:<ShoppingCart size={14} />}</button></div>
+  </article>)}</div>;
+}
+
+function MarketFeedView({ items, loading, error, onRetry }: { items: ActivityItem[]; loading: boolean; error: string | null; onRetry: () => void }) {
+  if (loading) return <RowsSkeleton />;
+  if (error) return <div className="mxm-alert mxm-alert-error flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={onRetry} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px]">Повторить</button></div>;
+  if (!items.length) return <EmptyMarket icon={<List />} title="Feed пока пуст" text="Листинги, изменения цены, покупки и офферы появятся здесь в реальном времени." action={<button type="button" onClick={onRetry} className="rounded-[13px] bg-[var(--panel-3)] px-3 py-2 text-[10px]">Обновить</button>} />;
+  return <div className="space-y-1.5">{items.map((item) => <Link href={item.href} key={item.id} className="grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[14px] border border-[var(--border-soft)] bg-[var(--panel)] px-2.5 py-2">
+    <div className="relative h-[38px] w-[38px] overflow-hidden rounded-[10px] bg-[var(--panel-2)]">{item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-[var(--muted)]">{item.kind === "coin" || item.kind === "launch" ? <Coins size={14} /> : <Gift size={14} />}</div>}</div>
+    <div className="min-w-0"><p className="truncate text-[11px] font-medium">{item.detail}</p><p className={`mt-1 truncate text-[9px] ${item.kind === "listing" ? "text-[var(--accent)]" : item.kind === "reprice" ? "text-[#8eb8d8]" : "text-[var(--muted)]"}`}>{item.label}</p></div>
+    <div className="shrink-0 text-right">{item.amount != null && Number.isFinite(item.amount) ? <p className="text-[11px] font-medium">{money(item.amount)}</p> : null}<p className="mt-1 text-[8px] text-[var(--muted-2)]">{formatMarketTime(item.createdAt)}</p></div>
+  </Link>)}</div>;
+}
+
+function formatMarketTime(value: string) {
+  const time = new Date(value);
+  if (!Number.isFinite(time.getTime())) return "—";
+  return time.toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 const CoinRow = memo(function CoinRow({ coin, index, watched, busy, onWatch }: { coin: Coin; index: number; watched: boolean; busy: boolean; onWatch: (kind: "coin" | "gift_collection", id: string, enabled: boolean) => void }) {

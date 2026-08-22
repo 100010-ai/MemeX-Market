@@ -109,11 +109,11 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
   const retryAuth = useCallback(() => {
     if (authInFlight.current) return;
-    setAuthNonce((value) => value + 1);
+    setAuthNonce((value: number) => value + 1);
   }, []);
 
   const patchProfile = useCallback((patch: Partial<Profile>) => {
-    setProfile((current) => current ? { ...current, ...patch } : current);
+    setProfile((current: Profile | null) => current ? { ...current, ...patch } : current);
   }, []);
 
   const haptic = useCallback((style: "light" | "medium" | "heavy" = "light") => {

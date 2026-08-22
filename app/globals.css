@@ -1335,3 +1335,8 @@ img { content-visibility: auto; }
     backdrop-filter: none;
   }
 }
+
+/* MRKT-style market modes */
+.mxm-feed-link.is-active {
+  color:#f0f3ff;
+}

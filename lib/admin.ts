@@ -4,7 +4,7 @@ function adminTelegramIds() {
   return new Set(
     (process.env.ADMIN_TELEGRAM_IDS || "")
       .split(",")
-      .map((value) => value.trim())
+      .map((value: string) => value.trim())
       .filter(Boolean),
   );
 }

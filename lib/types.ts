@@ -232,13 +232,14 @@ export type Mission = {
 
 export type ActivityItem = {
   id: string;
-  kind: "coin" | "gift" | "launch" | "listing" | "offer";
+  kind: "coin" | "gift" | "launch" | "listing" | "reprice" | "unlist" | "offer";
   actorId: string | null;
   label: string;
   detail: string;
   amount: number | null;
   createdAt: string;
   href: string;
+  imageUrl?: string | null;
 };
 
 export type LeaderboardPlayer = {

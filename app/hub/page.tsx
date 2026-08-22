@@ -107,4 +107,4 @@ function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-44 place-items-center px-4 text-center text-[11px] text-[var(--muted)]">{text}</div>; }
 function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-[14px]" />)}</div>; }
-function activityKind(kind: ActivityItem["kind"]) { return kind === "coin" ? "коин" : kind === "gift" ? "подарок" : kind === "launch" ? "запуск" : kind === "listing" ? "лот" : "оффер"; }
+function activityKind(kind: ActivityItem["kind"]) { return kind === "coin" ? "коин" : kind === "gift" ? "покупка" : kind === "launch" ? "запуск" : kind === "listing" ? "листинг" : kind === "reprice" ? "цена" : kind === "unlist" ? "снят" : "оффер"; }

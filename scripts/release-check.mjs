@@ -19,8 +19,23 @@ function run(label, command, args) {
 }
 function trackedFiles() {
   const result = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", shell: false });
-  if (result.status !== 0) return [];
-  return result.stdout.split("\0").filter(Boolean).map((relative) => relative.replaceAll("\\", "/"));
+  if (result.status === 0) return result.stdout.split("\0").filter(Boolean).map((relative) => relative.replaceAll("\\", "/"));
+
+  // Release archives are often checked before `git init`. Do not let the secret
+  // scanner silently become a no-op just because .git is absent.
+  const out = [];
+  const ignoredDirs = new Set(["node_modules", ".next", ".git"]);
+  const walk = (directory, prefix = "") => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && ignoredDirs.has(entry.name)) continue;
+      const absolute = path.join(directory, entry.name);
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(absolute, relative);
+      else if (entry.isFile()) out.push(relative.replaceAll("\\", "/"));
+    }
+  };
+  walk(root);
+  return out;
 }
 function secretLeaks() {
   const riskyNames = new Set([".env", ".env.local", ".env.production", ".env.development", ".mxm-control-secret"]);
@@ -57,6 +72,7 @@ const migration027Name = fs.readdirSync(path.join(root, "supabase/migrations")).
 const migration027 = migration027Name ? read(`supabase/migrations/${migration027Name}`) : "";
 const migration028 = read("supabase/migrations/028_remove_advertising.sql");
 const migration029 = read("supabase/migrations/029_market_scalability.sql");
+const migration9994 = read("supabase/migrations/9994_mrkt_player_market_handoff.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -76,6 +92,10 @@ const notificationsApi = read("app/api/notifications/route.ts");
 const supportPage = read("app/paysupport/page.tsx");
 const supportConfig = read("lib/support.ts");
 const webhookRoute = read("app/api/telegram/webhook/route.ts");
+const npcMarket = read("lib/npc-market.ts");
+const marketCollectionsRoute = read("app/api/market/collections/route.ts");
+const bulkCartRoute = read("app/api/cart/bulk/route.ts");
+const giftsBootstrapRoute = read("app/api/gifts/bootstrap/route.ts");
 
 function normalizedTelegramUsername(value) {
   return String(value || "").trim().replace(/^@+/, "");
@@ -94,6 +114,8 @@ check("Migration 026 v0.56 present", Boolean(migration026));
 check("Migration 027 present", Boolean(migration027), migration027Name || "missing");
 check("Migration 028 advertising teardown present", Boolean(migration028));
 check("Migration 029 scalable market present", Boolean(migration029));
+check("Migration 9994 player market handoff present", Boolean(migration9994));
+check("Migration 9995 player-only consistency present", exists("supabase/migrations/9995_mrkt_player_only_consistency.sql"));
 check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 
@@ -162,7 +184,7 @@ const retiredAdvertisingPattern = /(adsgram|reward(?:ed)?[_-]?ads?|sponsored[_-]
 const liveAdvertisingReferences = trackedFiles()
   .filter((relative) => exists(relative))
   .filter((relative) => relative === ".env.example" || relative === "package.json" || /^(app|components|lib|scripts)\//.test(relative))
-  .filter((relative) => relative !== "scripts/release-check.mjs")
+  .filter((relative) => relative !== "scripts/release-check.mjs" && relative !== "scripts/cleanup-retired-source.mjs")
   .filter((relative) => retiredAdvertisingPattern.test(read(relative)));
 
 check("Advertising routes, helpers, pages and setup docs removed", retiredAdvertisingFiles.every((relative) => !exists(relative)), retiredAdvertisingFiles.filter(exists).join(", "));
@@ -201,6 +223,40 @@ check("Catalogue-wide indexed market paging",
   migration029.includes("market_shuffle_key")
   && migration029.includes("gift_market_filtered_page_v200")
   && read("app/api/market/route.ts").includes("gift_market_filtered_page_v200")
+);
+check("NPC liquidity has irreversible player-only handoff",
+  migration9994.includes("gift_market_liquidity_policy")
+  && migration9994.includes("maybe_handoff_gift_market_to_players")
+  && migration9994.includes("enforce_player_only_gift_listing")
+  && migration9994.includes("mode='player_only'")
+  && npcMarket.includes("evaluatePlayerMarketHandoff")
+  && giftsBootstrapRoute.includes("playerOnly")
+);
+check("Player-only market filters stale system listings",
+  migration9994.includes("policy.mode<>'player_only' or coalesce(owner_profile.is_system,false)=false")
+  && read("app/api/market/search/route.ts").includes("playerOnly")
+  && read("app/api/cart/route.ts").includes("NPC liquidity is disabled")
+  && read("app/api/collections/[name]/sweep/route.ts").includes("playerOnly")
+);
+check("MRKT-style collections + activity feed are real-data backed",
+  migration9994.includes("gift_market_collection_cards_v210")
+  && marketCollectionsRoute.includes("gift_market_collection_cards_v210")
+  && marketPage.includes('GiftMarketMode = "items" | "collections" | "feed"')
+  && marketPage.includes("MarketCollectionsView")
+  && marketPage.includes("MarketFeedView")
+  && read("lib/feed.ts").includes("gift_listing_events")
+);
+check("Collection preview basket uses validated bulk cart",
+  Boolean(bulkCartRoute)
+  && bulkCartRoute.includes("market_cart_items")
+  && bulkCartRoute.includes("getGiftMarketLiquidityState")
+  && marketPage.includes("addCollectionPreviewToCart")
+);
+check("Admin can tune thresholds or force irreversible handoff",
+  migration9994.includes("configure_gift_market_liquidity_policy")
+  && adminAction.includes('action === "npc.policy"')
+  && adminAction.includes('action === "npc.handoff"')
+  && adminPage.includes("Переход на рынок игроков")
 );
 check("Paid Coin Boost is visible in New Coins",
   migration029.includes("active_coin_boosts_v200")
