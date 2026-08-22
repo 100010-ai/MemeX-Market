@@ -33,11 +33,14 @@ export async function GET() {
     ]);
     if (giftRowsResult.error || buyersResult.error) throw giftRowsResult.error || buyersResult.error;
     const gifts = new Map<string, GiftAsset>(((giftRowsResult.data || []) as DbRow[]).map((row) => [String(row.virtual_gift_id), mapGift(row)] as [string, GiftAsset]));
-    const names = new Map(((buyersResult.data || []) as DbRow[]).map((person) => {
-      const name = person.username ? `@${person.username}` : person.first_name;
-      if (typeof name !== "string" || !name) return "Пользователь";
-      return [String(person.id), name] as const;
-    }));
+    const names = new Map<string, string>(((buyersResult.data || []) as DbRow[])
+      .map((person) => {
+        const name = person.username ? `@${person.username}` : person.first_name;
+        if (typeof name !== "string" || !name.trim()) {
+          return [String(person.id), "Пользователь"] as const;
+        }
+        return [String(person.id), name] as const;
+      }));
     const mapOffer = (offer: DbRow) => {
       const gift = gifts.get(String(offer.virtual_gift_id));
       if (!gift) return null;
