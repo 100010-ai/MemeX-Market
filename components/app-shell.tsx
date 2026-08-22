@@ -11,6 +11,7 @@ import { money } from "@/lib/format";
 import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
+import { AppLaunchScreen } from "@/components/app-launch-screen";
 
 
 const DeferredCommandPalette = dynamic(() => import("@/components/command-palette").then((module) => module.CommandPalette), { ssr: false });
@@ -58,7 +59,7 @@ function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; siz
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
-  const { profile, loading, error, retryAuth } = useTelegramProfile();
+  const { profile, loading, appReady, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [desktopToolsReady, setDesktopToolsReady] = useState(false);
   const title = currentTitle(pathname);
@@ -92,7 +93,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/terms" || pathname === "/paysupport") return <>{children}</>;
 
   if (loading) {
-    return <div className="mx-auto min-h-[100dvh] max-w-md px-3 pt-3"><div className="mxm-skeleton h-12 rounded-[18px]" /><div className="mxm-skeleton mt-3 h-40 rounded-[22px]" /><div className="mt-3 grid grid-cols-2 gap-2.5"><div className="mxm-skeleton aspect-square rounded-[20px]" /><div className="mxm-skeleton aspect-square rounded-[20px]" /></div></div>;
+    return <AppLaunchScreen ready={false} />;
   }
 
   if (!profile) {
@@ -150,6 +151,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       {desktopToolsReady ? <DeferredCommandPalette /> : null}
       {process.env.NODE_ENV !== "production" && desktopToolsReady ? <DeferredPerfOverlay /> : null}
       {modal}
+      <AppLaunchScreen ready={appReady} />
     </div>
   );
 }

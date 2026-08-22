@@ -130,7 +130,7 @@ export default function TasksPage() {
               <div className="flex items-center gap-2 text-[12px] font-semibold"><Icon size={14} className={period === "daily" ? "text-[#ff855d]" : "text-[var(--muted)]"} />{sectionMeta[period].title}<span className="text-[9px] font-normal text-[var(--muted-2)]">{items.length}</span></div>
               {period !== "onboarding" ? <span className="flex items-center gap-1 text-[9px] text-[var(--muted-2)]"><Clock3 size={10} />автосброс</span> : null}
             </div>
-            <div className="space-y-2.5">{items.map((mission) => {
+            <div className="mxm-task-list">{items.map((mission) => {
               const done = mission.progress >= mission.target;
               const progress = Math.min(100, mission.progress / mission.target * 100);
               const channelTask = mission.actionType === "telegram_channel_subscription";

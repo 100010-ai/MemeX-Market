@@ -489,7 +489,7 @@ export default function MarketPage() {
       {tab === "gifts" ? <div className="mxm-hscroll mb-3 gap-2">
         <button type="button" onClick={() => setGiftMode("items")} className={`mxm-filter-chip ${giftMode === "items" ? "is-active" : ""}`}><Gift size={13} />Подарки</button>
         <button type="button" onClick={() => setGiftMode("collections")} className={`mxm-filter-chip ${giftMode === "collections" ? "is-active" : ""}`}><Layers3 size={13} />Коллекции</button>
-        {data.liquidity ? <span className={`ml-auto shrink-0 rounded-[13px] border px-2.5 py-1.5 text-[9px] ${data.liquidity.playerOnly ? "border-[rgba(88,196,132,.24)] text-[var(--positive)]" : "border-[var(--border-soft)] text-[var(--muted)]"}`}>{data.liquidity.playerOnly ? "Рынок игроков" : `Стартовая ликвидность · ${liquidityMaturity(data.liquidity)}%`}</span> : null}
+        {data.liquidity ? <span className={`ml-auto shrink-0 py-1.5 text-[9px] ${data.liquidity.playerOnly ? "text-[var(--positive)]" : "text-[var(--muted-2)]"}`}>{data.liquidity.playerOnly ? "Рынок игроков" : `Развитие рынка · ${liquidityMaturity(data.liquidity)}%`}</span> : null}
       </div> : null}
 
       {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">

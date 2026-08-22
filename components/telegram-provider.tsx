@@ -8,6 +8,7 @@ import { apiFetch, prefetchApi } from "@/lib/api";
 type TelegramContextValue = {
   profile: Profile | null;
   loading: boolean;
+  appReady: boolean;
   error: string | null;
   refreshProfile: () => Promise<void>;
   retryAuth: () => void;
@@ -90,10 +91,12 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const isPublic = pathname === "/about" || pathname === "/terms" || pathname === "/paysupport";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [appReady, setAppReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authNonce, setAuthNonce] = useState(0);
   const authInFlight = useRef(false);
   const authRun = useRef(0);
+  const appWarmRun = useRef(0);
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -228,7 +231,68 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     if (profileId && !isControl && !isPublic) warmCurrentRoute(pathname);
   }, [profileId, isControl, isPublic, pathname]);
 
-  const value = useMemo(() => ({ profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, error, refreshProfile, retryAuth, patchProfile, haptic]);
+  useEffect(() => {
+    if (isControl || isPublic) {
+      setAppReady(true);
+      return;
+    }
+    if (!profileId) {
+      setAppReady(false);
+      return;
+    }
+
+    const run = ++appWarmRun.current;
+    let cancelled = false;
+    const startedAt = performance.now();
+    setAppReady(false);
+
+    const primaryRoutes = ["/market", "/orders", "/hub", "/tasks", "/vault"];
+    const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/store", "/cart", "/referrals", "/season", "/cases", "/collections"];
+    for (const href of primaryRoutes) router.prefetch(href);
+
+    const criticalRequests = [
+      prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 30_000, timeoutMs: 14_000 }),
+      prefetchApi("/api/market/collections?limit=40", { cacheMs: 30_000, timeoutMs: 14_000 }),
+      prefetchApi("/api/feed?limit=20", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/orders", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/portfolio", { cacheMs: 20_000, timeoutMs: 14_000 }),
+      prefetchApi("/api/tasks", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/leaderboard?board=overall", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/runtime-config", { cacheMs: 30_000, timeoutMs: 10_000 }),
+    ];
+
+    const preload = Promise.allSettled(criticalRequests);
+    const timeout = sleep(3_200);
+    void Promise.race([preload, timeout]).then(async () => {
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < 780) await sleep(780 - elapsed);
+      if (cancelled || run !== appWarmRun.current) return;
+      setAppReady(true);
+
+      const warmSecondary = () => {
+        for (const href of secondaryRoutes) router.prefetch(href);
+        void Promise.allSettled([
+          prefetchApi("/api/leaderboard?board=overall&limit=8", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/watchlist", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/notifications", { cacheMs: 15_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/profile/meta", { cacheMs: 25_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/cart", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/referrals", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/store", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/season", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/cases", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/collections/progress", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/market?scope=coins&limit=72&t=0", { cacheMs: 25_000, timeoutMs: 14_000 }),
+        ]);
+      };
+      if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(warmSecondary, { timeout: 1_200 });
+      else window.setTimeout(warmSecondary, 180);
+    });
+
+    return () => { cancelled = true; };
+  }, [profileId, isControl, isPublic, router]);
+
+  const value = useMemo(() => ({ profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
 }
 
