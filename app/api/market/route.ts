@@ -1,8 +1,7 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { after, NextRequest, NextResponse } from "next/server";
-import { requireProfile } from "@/lib/auth";
-import { readSession } from "@/lib/session";
+import { requireProfile, requireSession } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin, mapGift, mapGiftCollection } from "@/lib/mappers";
 import { maybeMaintainGiftMarket } from "@/lib/market/maintenance";
@@ -89,7 +88,7 @@ function parseGiftMarketPage(value: unknown): Required<GiftMarketPage> {
 
 async function GETHandler(request: NextRequest) {
   const startedAt = Date.now();
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const scope = request.nextUrl.searchParams.get("scope") === "coins" ? "coins" : "gifts";
@@ -106,16 +105,15 @@ async function GETHandler(request: NextRequest) {
     if (scope === "coins") {
       const profile = await requireProfile();
       if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-      const [coinsResult, newCoinsResult, boostsResult, watchlistResult, cartResult] = await Promise.all([
+      const [coinsResult, newCoinsResult, boostsResult, watchlistResult] = await Promise.all([
         supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(72),
         // Discovery must not be derived from the volume leaderboard: a freshly
         // launched coin can legitimately have no trades yet.
         supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("created_at", { ascending: false }).limit(48),
         supabase.from("active_coin_boosts_v200").select("coin_id,boosted_until").order("boosted_until", { ascending: false }).limit(48),
-        supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id),
-        supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
+        supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id).limit(500),
       ]);
-      const firstError = coinsResult.error || newCoinsResult.error || boostsResult.error || watchlistResult.error || cartResult.error;
+      const firstError = coinsResult.error || newCoinsResult.error || boostsResult.error || watchlistResult.error;
       if (firstError) throw firstError;
       const boostRows = boostsResult.data || [];
       const boostByCoin = new Map<string, string>(boostRows.map((row) => [String(row.coin_id), String(row.boosted_until)] as [string, string]));
@@ -149,7 +147,7 @@ async function GETHandler(request: NextRequest) {
           giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
           giftIds: (watchlistResult.data || []).filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id)),
         },
-        cartIds: (cartResult.data || []).map((row) => String(row.virtual_gift_id)),
+        cartIds: [],
       }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-coins;dur=${Date.now() - startedAt}` } });
     }
 
@@ -194,8 +192,8 @@ async function GETHandler(request: NextRequest) {
     const [giftsResult, collectionRows, watchlistResult, cartResult, genesisResult, liquidityResult, filterOptions] = await Promise.all([
       supabase.rpc("gift_market_filtered_page_v200", giftPageArgs),
       getCachedGiftCollectionOverview(),
-      supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id),
-      supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
+      supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id).limit(500),
+      supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).limit(21),
       supabase.rpc("gift_genesis_public_state"),
       supabase.rpc("gift_market_liquidity_state"),
       getCachedGiftFilterOptions(),

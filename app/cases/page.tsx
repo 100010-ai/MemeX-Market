@@ -22,7 +22,7 @@ export default function CasesPage() {
   const openingRequestRef = useRef<{ caseSku: string; requestId: string } | null>(null);
 
   const load = useCallback(async () => {
-    const payload = await apiFetch<Payload>("/api/cases", { cacheMs: 0 });
+    const payload = await apiFetch<Payload>("/api/cases", { cacheMs: 20_000 });
     setData(payload);
     setSelected((current) => payload.cases.some((item) => item.sku === current) ? current : payload.cases[0]?.sku || "case_starter");
   }, []);

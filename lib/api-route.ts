@@ -4,6 +4,14 @@ type RouteHandler<Args extends unknown[] = unknown[]> = (...args: Args) => Respo
 
 type ErrorLike = { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
 
+function requestId() {
+  try {
+    return globalThis.crypto?.randomUUID?.() || `mxm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  } catch {
+    return `mxm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 export function errorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   if (error && typeof error === "object" && "message" in error && typeof (error as ErrorLike).message === "string") {
@@ -17,6 +25,26 @@ export function errorCode(error: unknown) {
   if (!error || typeof error !== "object" || !("code" in error)) return "";
   const code = (error as ErrorLike).code;
   return typeof code === "string" ? code.trim() : "";
+}
+
+/** Map expected database/RPC business failures to stable player-facing copy. */
+export function publicBusinessError(error: unknown, fallback: string) {
+  const message = errorMessage(error);
+  if (/insufficient.*balance|not enough.*balance|недостаточно.*баланс/i.test(message)) return "Недостаточно доступного баланса.";
+  if (/insufficient.*token/i.test(message)) return "Недостаточно мемкоинов для этой операции.";
+  if (/insufficient.*energy|not enough.*energy/i.test(message)) return "Недостаточно энергии для этой операции.";
+  if (/symbol.*already|duplicate.*symbol|coins_symbol/i.test(message)) return "Этот тикер уже занят.";
+  if (/launch.*cooldown|cooldown.*launch|too soon.*launch/i.test(message)) return "До следующего запуска мемкоина нужно немного подождать.";
+  if (/max.*active.*coin|active coin.*limit/i.test(message)) return "Достигнут лимит активных мемкоинов.";
+  if (/already.*claim|reward.*claimed|already.*redeem/i.test(message)) return "Эта награда уже получена.";
+  if (/mission.*not complete|not complete|required progress/i.test(message)) return "Задание ещё не выполнено.";
+  if (/gift.*not listed|no longer listed/i.test(message)) return "Подарок уже снят с продажи.";
+  if (/listing.*expired|offer.*expired/i.test(message)) return "Срок операции уже истёк.";
+  if (/price moved|slippage/i.test(message)) return "Цена изменилась. Обновите данные и повторите операцию.";
+  if (/already.*own|own gift/i.test(message)) return "Этот подарок уже принадлежит вам.";
+  if (/duplicate|unique constraint|already exists/i.test(message)) return "Такая операция уже была выполнена.";
+  if (/not found/i.test(message)) return fallback;
+  return fallback;
 }
 
 /** PostgREST/Postgres errors that indicate application code and DB migrations are out of sync. */
@@ -43,6 +71,21 @@ export function apiFailure(error: unknown, fallback = "Внутренняя ош
   );
 }
 
+function decorateResponse(response: Response, id: string, startedAt: number) {
+  // App Router responses created inside this process expose mutable headers.
+  // If a future runtime returns immutable headers, the request still succeeds;
+  // observability must never become a new failure mode.
+  try {
+    response.headers.set("x-mxm-request-id", id);
+    const duration = Math.max(0, Date.now() - startedAt);
+    const currentTiming = response.headers.get("server-timing");
+    response.headers.set("server-timing", currentTiming ? `${currentTiming}, mxm-route;dur=${duration}` : `mxm-route;dur=${duration}`);
+  } catch {
+    // intentionally best-effort
+  }
+  return response;
+}
+
 /**
  * Last-resort guard for App Router API handlers.
  * Business/validation errors should still be handled inside each route with an
@@ -51,11 +94,14 @@ export function apiFailure(error: unknown, fallback = "Внутренняя ош
  */
 export function withApiErrors<Args extends unknown[]>(label: string, handler: RouteHandler<Args>): RouteHandler<Args> {
   return async (...args: Args) => {
+    const id = requestId();
+    const startedAt = Date.now();
     try {
-      return await handler(...args);
+      const response = await handler(...args);
+      return decorateResponse(response, id, startedAt);
     } catch (error) {
-      console.error(`[api:${label}]`, error);
-      return apiFailure(error);
+      console.error(`[api:${label}][${id}]`, error);
+      return decorateResponse(apiFailure(error), id, startedAt);
     }
   };
 }

@@ -5,7 +5,11 @@ import { telegramBotApi } from "@/lib/telegram-bot";
 import { safeSecretEquals } from "@/lib/security";
 import crypto from "node:crypto";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 type DbRow = Record<string, unknown>;
+type PendingNotification = { id: string; profile_id: string; title: string; body: string | null; href: string | null };
 
 function authorized(request: Request) {
   const secret = String(process.env.CRON_SECRET || "").trim();
@@ -15,7 +19,17 @@ function authorized(request: Request) {
   return safeSecretEquals(bearer, secret) || safeSecretEquals(request.headers.get("x-mxm-cron-secret") || "", secret);
 }
 
-function currentPrice(kind: string, id: string | null, collection: string | null, maps: { coins: Map<string, number>; gifts: Map<string, number>; collections: Map<string, number> }) {
+function finiteNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function currentPrice(
+  kind: string,
+  id: string | null,
+  collection: string | null,
+  maps: { coins: Map<string, number>; gifts: Map<string, number>; collections: Map<string, number> },
+) {
   if (kind === "coin" && id) return maps.coins.get(id) ?? null;
   if (kind === "gift" && id) return maps.gifts.get(id) ?? null;
   if (kind === "gift_collection" && collection) return maps.collections.get(collection) ?? null;
@@ -24,37 +38,84 @@ function currentPrice(kind: string, id: string | null, collection: string | null
 
 async function evaluatePriceAlerts() {
   const supabase = getSupabaseAdmin();
-  const alerts = await supabase.from("price_alerts").select("id,profile_id,kind,coin_id,virtual_gift_id,gift_collection,direction,target_price,is_triggered").eq("enabled", true).limit(300);
+  const alerts = await supabase
+    .from("price_alerts")
+    .select("id,profile_id,kind,coin_id,virtual_gift_id,gift_collection,direction,target_price,is_triggered")
+    .eq("enabled", true)
+    .limit(300);
   if (alerts.error) throw alerts.error;
-  const rows = alerts.data || [];
+
+  const rows = (alerts.data || []) as DbRow[];
   if (!rows.length) return 0;
-  const coinIds = [...new Set(rows.filter((r) => r.kind === "coin" && r.coin_id).map((r) => String(r.coin_id)))];
-  const giftIds = [...new Set(rows.filter((r) => r.kind === "gift" && r.virtual_gift_id).map((r) => String(r.virtual_gift_id)))];
-  const collections = [...new Set(rows.filter((r) => r.kind === "gift_collection" && r.gift_collection).map((r) => String(r.gift_collection)))];
+
+  const coinIds = [...new Set(rows.filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)))];
+  const giftIds = [...new Set(rows.filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id)))];
+  const collections = [...new Set(rows.filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)))];
+
   const [coinResult, giftResult, collectionResult] = await Promise.all([
-    coinIds.length ? supabase.from("coins").select("id,current_price").in("id", coinIds) : Promise.resolve({ data: [], error: null }),
-    giftIds.length ? supabase.from("gift_market_overview").select("virtual_gift_id,listing_price,reference_price_ton,collection_floor").in("virtual_gift_id", giftIds) : Promise.resolve({ data: [], error: null }),
-    collections.length ? supabase.from("gift_collection_overview").select("base_name,floor_price").in("base_name", collections) : Promise.resolve({ data: [], error: null }),
+    coinIds.length
+      ? supabase.from("coins").select("id,current_price").in("id", coinIds)
+      : Promise.resolve({ data: [], error: null }),
+    giftIds.length
+      ? supabase.from("gift_market_overview").select("virtual_gift_id,listing_price,reference_price_ton,collection_floor").in("virtual_gift_id", giftIds)
+      : Promise.resolve({ data: [], error: null }),
+    collections.length
+      ? supabase.from("gift_collection_overview").select("base_name,floor_price").in("base_name", collections)
+      : Promise.resolve({ data: [], error: null }),
   ]);
-  const error = coinResult.error || giftResult.error || collectionResult.error;
-  if (error) throw error;
+  const priceError = coinResult.error || giftResult.error || collectionResult.error;
+  if (priceError) throw priceError;
+
   const coinRows = (coinResult.data || []) as DbRow[];
   const giftRows = (giftResult.data || []) as DbRow[];
   const collectionRows = (collectionResult.data || []) as DbRow[];
   const maps = {
-    coins: new Map(coinRows.map((row) => [String(row.id), Number(row.current_price)])),
-    gifts: new Map(giftRows.flatMap((row) => { const raw = row.listing_price ?? row.reference_price_ton ?? row.collection_floor; return raw == null ? [] : [[String(row.virtual_gift_id), Number(raw)] as [string, number]]; })),
-    collections: new Map(collectionRows.filter((row) => row.floor_price != null).map((row) => [String(row.base_name), Number(row.floor_price)])),
+    coins: new Map<string, number>(coinRows.flatMap((row) => {
+      const price = finiteNumber(row.current_price);
+      return row.id && price != null ? [[String(row.id), price] as [string, number]] : [];
+    })),
+    gifts: new Map<string, number>(giftRows.flatMap((row) => {
+      const raw = row.listing_price ?? row.reference_price_ton ?? row.collection_floor;
+      const price = finiteNumber(raw);
+      return row.virtual_gift_id && price != null ? [[String(row.virtual_gift_id), price] as [string, number]] : [];
+    })),
+    collections: new Map<string, number>(collectionRows.flatMap((row) => {
+      const floor = finiteNumber(row.floor_price);
+      return row.base_name && floor != null ? [[String(row.base_name), floor] as [string, number]] : [];
+    })),
   };
+
   let triggered = 0;
-  for (const row of rows) {
-    const price = currentPrice(String(row.kind), row.kind === "coin" ? String(row.coin_id || "") : row.kind === "gift" ? String(row.virtual_gift_id || "") : null, row.gift_collection ? String(row.gift_collection) : null, maps);
-    if (price == null || !Number.isFinite(price)) continue;
-    const target = Number(row.target_price);
-    const hit = row.direction === "below" ? price <= target : price >= target;
-    if ((hit && !row.is_triggered) || (!hit && row.is_triggered)) {
-      const label = row.kind === "gift_collection" ? String(row.gift_collection) : row.kind === "coin" ? `Мемкоин ${String(row.coin_id).slice(0, 8)}` : `Gift ${String(row.virtual_gift_id).slice(0, 8)}`;
-      const href = row.kind === "gift_collection" ? `/collections/${encodeURIComponent(String(row.gift_collection))}` : row.kind === "coin" ? `/coin/${row.coin_id}` : `/gifts/${row.virtual_gift_id}`;
+  const queue = [...rows];
+  const worker = async () => {
+    while (queue.length) {
+      const row = queue.shift();
+      if (!row) return;
+      const kind = String(row.kind || "");
+      const id = kind === "coin"
+        ? String(row.coin_id || "")
+        : kind === "gift"
+          ? String(row.virtual_gift_id || "")
+          : null;
+      const collection = row.gift_collection ? String(row.gift_collection) : null;
+      const price = currentPrice(kind, id, collection, maps);
+      const target = finiteNumber(row.target_price);
+      if (price == null || target == null) continue;
+
+      const hit = row.direction === "below" ? price <= target : price >= target;
+      if (!((hit && !row.is_triggered) || (!hit && row.is_triggered))) continue;
+
+      const label = kind === "gift_collection"
+        ? String(row.gift_collection || "Коллекция")
+        : kind === "coin"
+          ? `Мемкоин ${String(row.coin_id || "").slice(0, 8)}`
+          : `Подарок ${String(row.virtual_gift_id || "").slice(0, 8)}`;
+      const href = kind === "gift_collection"
+        ? `/collections/${encodeURIComponent(String(row.gift_collection || ""))}`
+        : kind === "coin"
+          ? `/coin/${String(row.coin_id || "")}`
+          : `/gifts/${String(row.virtual_gift_id || "")}`;
+
       const transition = await supabase.rpc("process_price_alert_transition_v300", {
         p_alert_id: row.id,
         p_price: price,
@@ -67,7 +128,9 @@ async function evaluatePriceAlerts() {
       if (transition.error) throw transition.error;
       if (transition.data === "triggered") triggered += 1;
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(8, queue.length) }, () => worker()));
   return triggered;
 }
 
@@ -76,7 +139,8 @@ async function dispatchTelegram() {
   const claimToken = crypto.randomUUID();
   const pending = await supabase.rpc("claim_pending_notifications_v300", { p_claim_token: claimToken, p_limit: 50 });
   if (pending.error) throw pending.error;
-  const rows = (pending.data || []) as Array<{ id: string; profile_id: string; title: string; body: string | null; href: string | null }>;
+
+  const rows = (pending.data || []) as PendingNotification[];
   if (!rows.length) return { sent: 0, failed: 0 };
 
   const profileIds = [...new Set(rows.map((row) => String(row.profile_id)).filter(Boolean))];
@@ -93,39 +157,65 @@ async function dispatchTelegram() {
   let failed = 0;
 
   const complete = async (id: string, values: Record<string, unknown>) => {
-    const result = await supabase.from("user_notifications").update({ ...values, telegram_claim_token: null, telegram_claimed_at: null })
-      .eq("id", id).eq("telegram_claim_token", claimToken);
+    const result = await supabase
+      .from("user_notifications")
+      .update({ ...values, telegram_claim_token: null, telegram_claimed_at: null })
+      .eq("id", id)
+      .eq("telegram_claim_token", claimToken);
     if (result.error) throw result.error;
   };
 
-  for (const row of rows) {
-    const profileId = String(row.profile_id);
-    if (allowed.get(profileId) === false) {
-      await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "disabled" });
-      continue;
-    }
-    const chatId = chats.get(profileId);
-    if (!Number.isSafeInteger(chatId) || Number(chatId) <= 0) {
-      await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "missing_chat_id" });
-      continue;
-    }
+  const escapeMarkdownV2 = (value: unknown) => String(value || "").replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
+  const queue = [...rows];
+  const worker = async () => {
+    while (queue.length) {
+      const row = queue.shift();
+      if (!row) return;
+      const profileId = String(row.profile_id);
 
-    const escape = (value: unknown) => String(value || "").replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
-    const text = `*${escape(row.title)}*${row.body ? `\n${escape(row.body)}` : ""}`;
-    try {
-      const payload: Record<string, unknown> = { chat_id: chatId, text, parse_mode: "MarkdownV2", disable_web_page_preview: true };
-      if (appUrl && row.href && row.href.startsWith("/")) payload.reply_markup = { inline_keyboard: [[{ text: "Открыть в MXM", web_app: { url: `${appUrl}${row.href}` } }]] };
-      await telegramBotApi("sendMessage", payload);
-      await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: null });
-      sent += 1;
-    } catch (error) {
-      failed += 1;
-      const failedUpdate = await supabase.from("user_notifications").update({
-        telegram_error: error instanceof Error ? error.message.slice(0, 500) : "telegram error",
-      }).eq("id", row.id).eq("telegram_claim_token", claimToken);
-      if (failedUpdate.error) console.error("notification delivery failure state", failedUpdate.error);
+      if (allowed.get(profileId) === false) {
+        await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "disabled" });
+        continue;
+      }
+      const chatId = chats.get(profileId);
+      if (!Number.isSafeInteger(chatId) || Number(chatId) <= 0) {
+        await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "missing_chat_id" });
+        continue;
+      }
+
+      const text = `*${escapeMarkdownV2(row.title)}*${row.body ? `\n${escapeMarkdownV2(row.body)}` : ""}`;
+      try {
+        const payload: Record<string, unknown> = {
+          chat_id: chatId,
+          text,
+          parse_mode: "MarkdownV2",
+          disable_web_page_preview: true,
+        };
+        if (appUrl && row.href?.startsWith("/")) {
+          payload.reply_markup = {
+            inline_keyboard: [[{ text: "Открыть в MXM", web_app: { url: `${appUrl}${row.href}` } }]],
+          };
+        }
+        await telegramBotApi("sendMessage", payload);
+        await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: null });
+        sent += 1;
+      } catch (error) {
+        failed += 1;
+        const failedUpdate = await supabase
+          .from("user_notifications")
+          .update({
+            telegram_error: error instanceof Error ? error.message.slice(0, 500) : "telegram error",
+            telegram_claim_token: null,
+            telegram_claimed_at: null,
+          })
+          .eq("id", row.id)
+          .eq("telegram_claim_token", claimToken);
+        if (failedUpdate.error) console.error("notification delivery failure state", failedUpdate.error);
+      }
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(5, queue.length) }, () => worker()));
   return { sent, failed };
 }
 

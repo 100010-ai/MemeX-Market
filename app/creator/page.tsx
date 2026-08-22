@@ -22,7 +22,7 @@ type Payload = {
 export default function CreatorDashboardPage() {
   const [data,setData]=useState<Payload|null>(null);
   const [error,setError]=useState<string|null>(null);
-  useEffect(()=>{ void apiFetch<Payload>("/api/creator",{cacheMs:0}).then(setData).catch((cause)=>setError(cause instanceof Error?cause.message:"Не удалось загрузить кабинет")); },[]);
+  useEffect(()=>{ void apiFetch<Payload>("/api/creator",{cacheMs:15_000}).then(setData).catch((cause)=>setError(cause instanceof Error?cause.message:"Не удалось загрузить кабинет")); },[]);
   if (error) return <div className="mxm-alert mxm-alert-error">{error}</div>;
   if (!data) return <div className="mxm-skeleton h-48" />;
   return <div className="mx-auto max-w-5xl">

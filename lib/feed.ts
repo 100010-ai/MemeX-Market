@@ -3,7 +3,7 @@ import type { ActivityItem } from "@/lib/types";
 import { resolveGiftImageUrl } from "@/lib/mappers";
 import { nonEmptyId, nullableNumber, safeIsoDate, text } from "@/lib/safe-data";
 
-type ProfileRef = { id?: string; username: string | null; first_name: string | null };
+type ProfileRef = { id?: string; username: string | null; first_name: string | null; is_system?: boolean | null };
 type CoinRef = { id?: string; name?: string; symbol: string; image_url?: string | null };
 type GiftRef = { virtual_gift_id?: string; base_name: string; gift_number: number | string; model_preview_url?: unknown; model_media_url?: unknown; symbol_media_url?: unknown };
 type CoinTradeRow = {
@@ -66,8 +66,8 @@ function rows<T>(value: unknown): T[] {
 export async function getMarketActivity(supabase: SupabaseClient, limit = 30): Promise<ActivityItem[]> {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit || 30), 100));
   const [coinTrades, giftTrades, events, listingEvents] = await Promise.all([
-    supabase.from("trades").select("id,profile_id,coin_id,side,quote_amount,created_at,coins(symbol,image_url),profiles(username,first_name)").order("created_at", { ascending: false }).limit(safeLimit),
-    supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,price,created_at,gift_assets(base_name,gift_number,model_preview_url,model_media_url,symbol_media_url),profiles!gift_trades_buyer_profile_id_fkey(username,first_name)").order("created_at", { ascending: false }).limit(safeLimit),
+    supabase.from("trades").select("id,profile_id,coin_id,side,quote_amount,created_at,coins(symbol,image_url),profiles(username,first_name,is_system)").order("created_at", { ascending: false }).limit(safeLimit),
+    supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,price,created_at,gift_assets(base_name,gift_number,model_preview_url,model_media_url,symbol_media_url),profiles!gift_trades_buyer_profile_id_fkey(username,first_name,is_system)").order("created_at", { ascending: false }).limit(safeLimit),
     supabase.from("market_events").select("id,actor_profile_id,kind,coin_id,virtual_gift_id,amount,created_at").order("created_at", { ascending: false }).limit(safeLimit),
     supabase.from("gift_listing_events").select("id,actor_profile_id,virtual_gift_id,kind,price,previous_price,created_at").order("created_at", { ascending: false }).limit(safeLimit),
   ]);
@@ -86,14 +86,16 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
   ])];
 
   const [actorsResult, eventCoinsResult, eventGiftsResult] = await Promise.all([
-    actorIds.length ? supabase.from("profiles").select("id,username,first_name").in("id", actorIds) : Promise.resolve({ data: [] as ActivityActorRow[], error: null }),
+    actorIds.length ? supabase.from("profiles").select("id,username,first_name,is_system").in("id", actorIds) : Promise.resolve({ data: [] as ActivityActorRow[], error: null }),
     coinIds.length ? supabase.from("coins").select("id,name,symbol,image_url").in("id", coinIds) : Promise.resolve({ data: [] as ActivityCoinRow[], error: null }),
     giftIds.length ? supabase.from("gift_market_overview").select("virtual_gift_id,base_name,gift_number,model_preview_url,model_media_url,symbol_media_url").in("virtual_gift_id", giftIds) : Promise.resolve({ data: [] as ActivityGiftRow[], error: null }),
   ]);
   const lookupError = actorsResult.error || eventCoinsResult.error || eventGiftsResult.error;
   if (lookupError) throw lookupError;
 
-  const actors = new Map(rows<ActivityActorRow>(actorsResult.data).map((row) => [String(row.id), displayName(row)]));
+  const actorRows = rows<ActivityActorRow>(actorsResult.data);
+  const actors = new Map(actorRows.map((row) => [String(row.id), displayName(row)]));
+  const systemActors = new Set(actorRows.filter((row) => row.is_system === true).map((row) => String(row.id)));
   const eventCoins = new Map(rows<ActivityCoinRow>(eventCoinsResult.data).map((row) => [String(row.id), row]));
   const eventGifts = new Map(rows<ActivityGiftRow>(eventGiftsResult.data).map((row) => [String(row.virtual_gift_id), row]));
   const detailedListingTimes = new Map<string, number[]>();
@@ -114,7 +116,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
     const profileId = nonEmptyId(row.profile_id);
     const coinId = nonEmptyId(row.coin_id);
     const createdAt = safeIsoDate(row.created_at, "");
-    if (!coin?.symbol || !tradeId || !profileId || !coinId || !createdAt) continue;
+    if (!coin?.symbol || !tradeId || !profileId || !coinId || !createdAt || user?.is_system === true) continue;
     items.push({
       id: `coin-${tradeId}`,
       kind: "coin",
@@ -135,7 +137,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
     const giftId = nonEmptyId(row.virtual_gift_id);
     const buyerId = nonEmptyId(row.buyer_profile_id);
     const createdAt = safeIsoDate(row.created_at, "");
-    if (!gift?.base_name || !Number.isFinite(Number(gift.gift_number)) || !tradeId || !giftId || !buyerId || !createdAt) continue;
+    if (!gift?.base_name || !Number.isFinite(Number(gift.gift_number)) || !tradeId || !giftId || !buyerId || !createdAt || user?.is_system === true) continue;
     items.push({
       id: `gift-${tradeId}`,
       kind: "gift",
@@ -158,6 +160,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
     const gift = eventGifts.get(virtualGiftId);
     if (!gift?.base_name || !Number.isFinite(Number(gift.gift_number))) continue;
     const actorId = nonEmptyId(row.actor_profile_id);
+    if (actorId && systemActors.has(actorId)) continue;
     const actorName = actorId ? actors.get(actorId) || "Удалённый игрок" : "Система";
     const detail = `${gift.base_name} #${Number(gift.gift_number)}`;
     if (row.kind === "listed") {
@@ -174,6 +177,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
   for (const row of eventRows) {
     const eventId = nonEmptyId(row.id);
     const actorId = nonEmptyId(row.actor_profile_id);
+    if (actorId && systemActors.has(actorId)) continue;
     const createdAt = safeIsoDate(row.created_at, "");
     if (!eventId || !createdAt) continue;
     const actorName = actorId ? actors.get(actorId) || "Удалённый игрок" : "Система";

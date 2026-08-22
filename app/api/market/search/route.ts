@@ -1,6 +1,6 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { looseRowsQuery } from "@/lib/supabase/loose-query";
 import { giftMarketSelect, mapCoin, mapGift, mapGiftCollection } from "@/lib/mappers";
@@ -28,7 +28,7 @@ function profileName(row: { username?: unknown; first_name?: unknown }) {
 }
 
 async function GETHandler(request: NextRequest) {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!(await enforceRateLimit(request, "market-search", String(session.telegramId), 80, 60))) return NextResponse.json({ error: "Слишком много поисковых запросов" }, { status: 429 });
 
@@ -42,7 +42,7 @@ async function GETHandler(request: NextRequest) {
   const playerOnly = Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly);
   let systemOwnerIds: string[] = [];
   if (playerOnly) {
-    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true);
+    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true).limit(100);
     if (systemProfiles.error) return apiFailure(systemProfiles.error, "Не удалось проверить владельцев рынка");
     systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
   }

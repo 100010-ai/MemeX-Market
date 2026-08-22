@@ -15,7 +15,7 @@ export default function CollectionsPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/collections/progress", { cacheMs: 0 })), []);
+  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/collections/progress", { cacheMs: 20_000 })), []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load().catch((cause) => setNotice(cause instanceof Error ? cause.message : "Не удалось загрузить коллекции"));

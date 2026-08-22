@@ -1,13 +1,13 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { tonApiHealth } from "@/lib/providers/tonapi-client";
 
 export const runtime = "nodejs";
 
 async function GETHandler() {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const settings = await supabase.from("market_settings").select("external_quote_hours").eq("singleton", true).maybeSingle();

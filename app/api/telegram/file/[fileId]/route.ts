@@ -1,6 +1,6 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { getTelegramFile, isKnownGiftFile, MAX_TELEGRAM_GIFT_FILE_BYTES } from "@/lib/gifts";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
@@ -19,7 +19,7 @@ function contentType(path: string) {
 async function GETHandler(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
   // Media requests are numerous; verifying the signed Telegram session cookie is
   // enough here and avoids a Supabase profile query for every image tile.
-  if (!(await readSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+  if (!(await requireSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { fileId } = await params;
   if (!/^[A-Za-z0-9_-]{16,512}$/.test(fileId)) return NextResponse.json({ error: "Некорректный ID файла" }, { status: 400 });
   // DB/schema failures must propagate to the shared API guard (500/503), not be

@@ -13,7 +13,7 @@ async function GETHandler() {
 
   const supabase = getSupabaseAdmin();
   try {
-    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true);
+    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true).limit(100);
     if (systemProfiles.error) throw systemProfiles.error;
     const systemIds = (systemProfiles.data || []).map((row) => String(row.id));
     if (!systemIds.length) return NextResponse.json({ items: [], checkedAt: new Date().toISOString() });
@@ -26,7 +26,8 @@ async function GETHandler() {
       .in("owner_profile_id", systemIds)
       .eq("status", "owned")
       .eq("is_burned", false)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(1_000);
     if (overview.error) throw overview.error;
 
     const items = (overview.data || []).map((row) => ({

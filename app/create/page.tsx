@@ -47,7 +47,7 @@ export default function CreatePage() {
   const launchRequestId = useRef<string | null>(null);
 
   useEffect(() => {
-    void apiFetch<Rules>("/api/coins", { cacheMs: 0 })
+    void apiFetch<Rules>("/api/coins", { cacheMs: 15_000 })
       .then(setRules)
       .catch(() => setError("Не удалось загрузить параметры запуска"))
       .finally(() => setRulesLoaded(true));

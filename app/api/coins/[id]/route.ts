@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapCoin } from "@/lib/mappers";
+import { validUuidLike } from "@/lib/security";
+import { finiteNumber, safeIsoDate } from "@/lib/safe-data";
 
 type DbRow = Record<string, unknown>;
 
@@ -23,9 +25,10 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { id } = await params;
+  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный идентификатор мемкоина" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   try {
-    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult, earlyBuyersResult] = await Promise.all([
+    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult] = await Promise.all([
       supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").eq("id", id).single(),
       supabase.from("candles").select("bucket_start,open,high,low,close,volume").eq("coin_id", id).order("bucket_start", { ascending: false }).limit(480),
       supabase.from("trades").select("id,profile_id,side,quote_amount,token_amount,price,created_at,profiles(username,first_name)").eq("coin_id", id).order("created_at", { ascending: false }).limit(30),
@@ -34,38 +37,52 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "coin").eq("coin_id", id).maybeSingle(),
       getProfileSnapshot(profile as Record<string, unknown>),
       supabase.rpc("coin_economy_snapshot_v200", { p_profile_id: profile.id, p_coin_id: id }),
-      supabase.from("coin_early_buyers").select("profile_id,ordinal").eq("coin_id", id),
     ]);
     if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Мемкоин не найден" }, { status: 404 });
-    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error || earlyBuyersResult.error;
+    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error;
     if (otherError) throw otherError;
+    const tradeRows = (tradeResult.data || []) as DbRow[];
+    const topHolderRows = (topHoldersResult.data || []) as DbRow[];
+    const relevantProfileIds = [...new Set([...tradeRows, ...topHolderRows].map((row) => String(row.profile_id || "")).filter(Boolean))];
+    const earlyBuyersResult = relevantProfileIds.length
+      ? await supabase.from("coin_early_buyers").select("profile_id,ordinal").eq("coin_id", id).in("profile_id", relevantProfileIds)
+      : { data: [] as Array<{ profile_id: string; ordinal: number }>, error: null };
+    if (earlyBuyersResult.error) throw earlyBuyersResult.error;
     const economy = economyResult.data && typeof economyResult.data === "object" && !Array.isArray(economyResult.data)
       ? economyResult.data as Record<string, unknown>
       : {};
-    const holdingQuantity = Number(holdingResult.data?.quantity || 0);
+    const holdingQuantity = Math.max(0, finiteNumber(holdingResult.data?.quantity));
     const earlyOrdinals = new Map((earlyBuyersResult.data || []).map((row) => [String(row.profile_id), Number(row.ordinal)]));
     return NextResponse.json({
       coin: mapCoin(coinResult.data),
       candles: [...((candleResult.data || []) as DbRow[])].reverse().map((candle) => ({
-        time: Math.floor(new Date(String(candle.bucket_start)).getTime() / 1000),
-        open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
+        time: Math.floor(Date.parse(safeIsoDate(candle.bucket_start)) / 1000),
+        open: finiteNumber(candle.open), high: finiteNumber(candle.high), low: finiteNumber(candle.low), close: finiteNumber(candle.close), volume: Math.max(0, finiteNumber(candle.volume)),
       })),
-      trades: ((tradeResult.data || []) as DbRow[]).map((trade) => {
+      trades: tradeRows.flatMap((trade) => {
         const trader = relationOne(trade.profiles, "Trade profile");
-        return {
-          id: String(trade.id), side: trade.side, quoteAmount: Number(trade.quote_amount), tokenAmount: Number(trade.token_amount), price: Number(trade.price), createdAt: String(trade.created_at),
-          traderId: String(trade.profile_id), traderName: profileName(trader), genesisOrdinal: earlyOrdinals.get(String(trade.profile_id)) || null,
-        };
+        const tradeId = typeof trade.id === "string" ? trade.id : "";
+        const traderId = typeof trade.profile_id === "string" ? trade.profile_id : "";
+        const createdAt = safeIsoDate(trade.created_at, "");
+        const side = trade.side === "sell" ? "sell" : trade.side === "buy" ? "buy" : null;
+        if (!tradeId || !traderId || !createdAt || !side) return [];
+        return [{
+          id: tradeId, side, quoteAmount: Math.max(0, finiteNumber(trade.quote_amount)), tokenAmount: Math.max(0, finiteNumber(trade.token_amount)), price: Math.max(0, finiteNumber(trade.price)), createdAt,
+          traderId, traderName: profileName(trader), genesisOrdinal: earlyOrdinals.get(traderId) || null,
+        }];
       }),
-      holding: { quantity: holdingQuantity, availableQuantity: Number(economy.availableQuantity ?? holdingQuantity), costBasis: Number(holdingResult.data?.cost_basis || 0) },
+      holding: { quantity: holdingQuantity, availableQuantity: Math.max(0, finiteNumber(economy.availableQuantity, holdingQuantity)), costBasis: Math.max(0, finiteNumber(holdingResult.data?.cost_basis)) },
       economy,
       balance: profileSnapshot.balance,
       availableBalance: profileSnapshot.availableBalance,
       reservedBalance: profileSnapshot.reservedBalance,
       watched: Boolean(watchedResult.data),
-      topHolders: ((topHoldersResult.data || []) as DbRow[]).map((holder) => {
+      topHolders: topHolderRows.flatMap((holder) => {
         const person = relationOne(holder.profiles, "Holder profile");
-        return { id: String(holder.profile_id), name: profileName(person), quantity: Number(holder.quantity), genesisOrdinal: earlyOrdinals.get(String(holder.profile_id)) || null };
+        const holderId = typeof holder.profile_id === "string" ? holder.profile_id : "";
+        const quantity = Math.max(0, finiteNumber(holder.quantity));
+        if (!holderId || quantity <= 0) return [];
+        return [{ id: holderId, name: profileName(person), quantity, genesisOrdinal: earlyOrdinals.get(holderId) || null }];
       }),
     }, { headers: { "server-timing": `coin-detail;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {

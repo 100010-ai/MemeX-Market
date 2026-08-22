@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -18,7 +18,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const supabase = getSupabaseAdmin();
   if (action === "cancel") {
     const { data, error } = await supabase.rpc("cancel_advanced_gift_offer_v056", { p_buyer_id: profile.id, p_offer_id: id });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: publicBusinessError(error, "Не удалось отменить предложение") }, { status: 400 });
     return NextResponse.json({ result: data });
   }
   const runtimeConfig = await getRuntimeConfig();
@@ -26,7 +26,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const virtualGiftId = typeof body.virtualGiftId === "string" ? body.virtualGiftId : "";
   if (!validUuidLike(virtualGiftId)) return NextResponse.json({ error: "Выберите подарок для принятия предложения" }, { status: 400 });
   const { data, error } = await supabase.rpc("accept_advanced_gift_offer_v056", { p_owner_id: profile.id, p_virtual_gift_id: virtualGiftId, p_offer_id: id });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return NextResponse.json({ error: publicBusinessError(error, "Не удалось принять предложение") }, { status: 400 });
   return NextResponse.json({ result: data });
 }
 export const POST = withApiErrors("app/api/market/offers/[id]/route.ts:POST", POSTHandler);

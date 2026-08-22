@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "mxm_tg_session";
 
 type SessionPayload = {
+  version?: number;
   telegramId: number;
   issuedAt: number;
 };
@@ -24,7 +25,7 @@ function sign(input: string) {
 }
 
 export async function setSession(telegramId: number) {
-  const payload: SessionPayload = { telegramId, issuedAt: Math.floor(Date.now() / 1000) };
+  const payload: SessionPayload = { version: 2, telegramId, issuedAt: Math.floor(Date.now() / 1000) };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const value = `${encoded}.${sign(encoded)}`;
   const store = await cookies();
@@ -34,6 +35,18 @@ export async function setSession(telegramId: number) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
+  });
+}
+
+export async function clearSession() {
+  const store = await cookies();
+  store.set(COOKIE_NAME, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
   });
 }
 

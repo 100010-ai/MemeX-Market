@@ -1,6 +1,6 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { mapGift } from "@/lib/mappers";
 import { safeDecodeURIComponent } from "@/lib/safe-data";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -24,7 +24,7 @@ function parseGiftPage(value: unknown) {
 }
 
 async function GETHandler(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });

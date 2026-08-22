@@ -16,10 +16,10 @@ export default function CustomizeProfilePage() {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/profile/customize", { cacheMs: 0 })), []);
+  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/profile/customize", { cacheMs: 15_000 })), []);
   useEffect(() => {
     let cancelled = false;
-    void apiFetch<Payload>("/api/profile/customize", { cacheMs: 0 })
+    void apiFetch<Payload>("/api/profile/customize", { cacheMs: 15_000 })
       .then((result) => { if (!cancelled) setData(result); })
       .catch((cause) => { if (!cancelled) setNotice(cause instanceof Error ? cause.message : "Не удалось загрузить оформление"); });
     return () => { cancelled = true; };

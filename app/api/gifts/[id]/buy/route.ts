@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
+import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { evaluatePlayerMarketHandoff, getGiftMarketLiquidityState } from "@/lib/npc-market";
 
@@ -15,6 +15,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   const { id } = await params;
+  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID подарка" }, { status: 400 });
   const requestKey = request.headers.get("x-idempotency-key")?.trim() || `srv-${crypto.randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
   const supabase = getSupabaseAdmin();
@@ -30,9 +31,14 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   }
   const { data, error } = await supabase.rpc("buy_virtual_gift_v2", { p_buyer_id: profile.id, p_virtual_gift_id: id, p_request_key: requestKey });
   if (error) return apiFailure(error, "Не удалось купить подарок", 400);
-  const cartCleanup = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
-  if (cartCleanup.error) console.error("gift buy cart cleanup", cartCleanup.error);
-  after(() => evaluatePlayerMarketHandoff(false).catch((cause) => console.error("gift market handoff after buy", cause)));
+  const profileId = String(profile.id);
+  after(async () => {
+    try {
+      const cartCleanup = await getSupabaseAdmin().from("market_cart_items").delete().eq("profile_id", profileId).eq("virtual_gift_id", id);
+      if (cartCleanup.error) console.error("gift buy cart cleanup", cartCleanup.error);
+    } catch (cause) { console.error("gift buy cart cleanup", cause); }
+    await evaluatePlayerMarketHandoff(false).catch((cause) => console.error("gift market handoff after buy", cause));
+  });
   return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
 }
 export const POST = withApiErrors("app/api/gifts/[id]/buy/route.ts:POST", POSTHandler);

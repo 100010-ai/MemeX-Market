@@ -1,4 +1,4 @@
-import { apiFailure, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -25,7 +25,7 @@ async function POSTHandler(request: NextRequest) {
   if (!ids.length) return NextResponse.json({ error: "Корзина пуста" }, { status: 409 });
 
   const result = await supabase.rpc("buy_virtual_gift_cart_v2", { p_buyer_id: profile.id, p_virtual_gift_ids: ids, p_request_key: requestKey });
-  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 409 });
+  if (result.error) return NextResponse.json({ error: publicBusinessError(result.error, "Не удалось купить выбранные подарки") }, { status: 409 });
   return NextResponse.json(result.data, { headers: { "cache-control": "no-store" } });
 }
 export const POST = withApiErrors("app/api/cart/checkout/route.ts:POST", POSTHandler);

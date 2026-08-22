@@ -5,68 +5,145 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 import type { GiftAsset } from "@/lib/types";
 
+const OFFER_LIMIT = 120;
+const LISTING_LIMIT = 500;
+type DbRow = Record<string, unknown>;
+
+function cleanId(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function finite(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function safeIso(value: unknown) {
+  if (typeof value !== "string" || !value) return new Date(0).toISOString();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date(0).toISOString();
+}
+
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
-  try {
-    const [outgoingResult, ownedResult, listingsResult] = await Promise.all([
-      supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").eq("buyer_profile_id", profile.id).eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("virtual_gifts").select("id").eq("owner_profile_id", profile.id),
-      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`).not("telegram_name", "is", null).order("listing_price", { ascending: true }),
-    ]);
-    const firstError = outgoingResult.error || ownedResult.error || listingsResult.error;
-    if (firstError) throw firstError;
-    type DbRow = Record<string, unknown>;
-    const ownedIds = ((ownedResult.data || []) as DbRow[]).flatMap((row) => typeof row.id === "string" && row.id.trim() ? [row.id.trim()] : []);
-    const incomingResult = ownedIds.length
-      ? await supabase.from("gift_offers").select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at").in("virtual_gift_id", ownedIds).eq("status", "pending").order("amount", { ascending: false })
-      : { data: [] as DbRow[], error: null };
-    if (incomingResult.error) throw incomingResult.error;
 
-    const allOffers = [...((outgoingResult.data || []) as DbRow[]), ...((incomingResult.data || []) as DbRow[])];
-    const giftIds = [...new Set(allOffers.flatMap((row) => typeof row.virtual_gift_id === "string" && row.virtual_gift_id.trim() ? [row.virtual_gift_id.trim()] : []))];
-    const buyerIds = [...new Set(allOffers.flatMap((row) => typeof row.buyer_profile_id === "string" && row.buyer_profile_id.trim() ? [row.buyer_profile_id.trim()] : []))];
+  try {
+    // seller_profile_id is maintained by the final production migration. It
+    // removes the old O(number_of_owned_gifts) ID collection + huge `.in()`
+    // request and also gives Realtime a player-scoped filter.
+    const [outgoingResult, incomingResult, listingsResult] = await Promise.all([
+      supabase.from("gift_offers")
+        .select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,amount,status,created_at,expires_at", { count: "exact" })
+        .eq("buyer_profile_id", profile.id)
+        .eq("status", "pending")
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        .order("created_at", { ascending: false })
+        .limit(OFFER_LIMIT),
+      supabase.from("gift_offers")
+        .select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,amount,status,created_at,expires_at", { count: "exact" })
+        .eq("seller_profile_id", profile.id)
+        .eq("status", "pending")
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        .order("amount", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(OFFER_LIMIT),
+      supabase.from("gift_market_overview")
+        .select(giftMarketSelect, { count: "exact" })
+        .eq("owner_profile_id", profile.id)
+        .eq("status", "listed")
+        .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
+        .not("telegram_name", "is", null)
+        .order("listing_price", { ascending: true })
+        .limit(LISTING_LIMIT),
+    ]);
+    const firstError = outgoingResult.error || incomingResult.error || listingsResult.error;
+    if (firstError) throw firstError;
+
+    const outgoingRows = (outgoingResult.data || []) as DbRow[];
+    const incomingRows = (incomingResult.data || []) as DbRow[];
+    const allOffers = [...outgoingRows, ...incomingRows];
+    const giftIds = [...new Set(allOffers.map((row) => cleanId(row.virtual_gift_id)).filter(Boolean))];
+    const buyerIds = [...new Set(allOffers.map((row) => cleanId(row.buyer_profile_id)).filter(Boolean))];
+
     const [giftRowsResult, buyersResult] = await Promise.all([
-      giftIds.length ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null) : Promise.resolve({ data: [] as DbRow[], error: null }),
-      buyerIds.length ? supabase.from("profiles").select("id,username,first_name").in("id", buyerIds) : Promise.resolve({ data: [] as DbRow[], error: null }),
+      giftIds.length
+        ? supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", giftIds).not("telegram_name", "is", null)
+        : Promise.resolve({ data: [] as DbRow[], error: null }),
+      buyerIds.length
+        ? supabase.from("profiles").select("id,username,first_name").in("id", buyerIds)
+        : Promise.resolve({ data: [] as DbRow[], error: null }),
     ]);
     if (giftRowsResult.error || buyersResult.error) throw giftRowsResult.error || buyersResult.error;
-    const gifts = new Map<string, GiftAsset>(((giftRowsResult.data || []) as DbRow[]).map((row) => [String(row.virtual_gift_id), mapGift(row)] as [string, GiftAsset]));
-    const names = new Map<string, string>(((buyersResult.data || []) as DbRow[])
-      .map((person): [string, string] | null => {
-        const id = typeof person.id === "string" ? person.id : "";
-        if (!id) return null;
-        const username = typeof person.username === "string" && person.username.trim() ? person.username.trim() : null;
-        const firstName = typeof person.first_name === "string" && person.first_name.trim() ? person.first_name.trim() : null;
-        return [id, username ? `@${username}` : firstName || "Пользователь"];
-      })
-      .filter((entry): entry is [string, string] => entry !== null));
+
+    const gifts = new Map<string, GiftAsset>();
+    for (const row of (giftRowsResult.data || []) as DbRow[]) {
+      const id = cleanId(row.virtual_gift_id);
+      if (!id) continue;
+      const mapped = mapGift(row);
+      if (mapped.virtualGiftId) gifts.set(id, mapped);
+    }
+
+    const names = new Map<string, string>();
+    for (const person of (buyersResult.data || []) as DbRow[]) {
+      const id = cleanId(person.id);
+      if (!id) continue;
+      const username = typeof person.username === "string" && person.username.trim() ? person.username.trim() : null;
+      const firstName = typeof person.first_name === "string" && person.first_name.trim() ? person.first_name.trim() : null;
+      names.set(id, username ? `@${username}` : firstName || "Пользователь");
+    }
+
     const mapOffer = (offer: DbRow) => {
-      const virtualGiftId = typeof offer.virtual_gift_id === "string" ? offer.virtual_gift_id.trim() : "";
-      const id = typeof offer.id === "string" ? offer.id.trim() : "";
-      const buyerId = typeof offer.buyer_profile_id === "string" ? offer.buyer_profile_id.trim() : "";
+      const virtualGiftId = cleanId(offer.virtual_gift_id);
+      const id = cleanId(offer.id);
+      const buyerId = cleanId(offer.buyer_profile_id);
       const gift = virtualGiftId ? gifts.get(virtualGiftId) : null;
       if (!gift || !id || !buyerId) return null;
-      const amount = Number(offer.amount);
-      const createdAt = new Date(typeof offer.created_at === "string" ? offer.created_at : 0);
-      const expiresAt = offer.expires_at ? new Date(String(offer.expires_at)) : null;
+      const expiresAt = typeof offer.expires_at === "string" && Number.isFinite(Date.parse(offer.expires_at))
+        ? new Date(offer.expires_at).toISOString()
+        : null;
       return {
-        id, virtualGiftId, baseName: gift.baseName, number: gift.number,
-        amount: Number.isFinite(amount) ? amount : 0,
+        id,
+        virtualGiftId,
+        baseName: gift.baseName,
+        number: gift.number,
+        amount: Math.max(0, finite(offer.amount)),
         status: typeof offer.status === "string" ? offer.status : "pending",
-        createdAt: Number.isFinite(createdAt.getTime()) ? createdAt.toISOString() : new Date(0).toISOString(),
-        expiresAt: expiresAt && Number.isFinite(expiresAt.getTime()) ? expiresAt.toISOString() : null,
-        buyerId, buyerName: names.get(buyerId) || "Игрок", ownerId: gift.ownerId, ownerName: gift.ownerName, gift,
+        createdAt: safeIso(offer.created_at),
+        expiresAt,
+        buyerId,
+        buyerName: names.get(buyerId) || "Игрок",
+        ownerId: gift.ownerId,
+        ownerName: gift.ownerName,
+        gift,
       };
     };
-    const outgoing = ((outgoingResult.data || []) as DbRow[]).map(mapOffer).filter(Boolean);
-    const incoming = ((incomingResult.data || []) as DbRow[]).map(mapOffer).filter(Boolean);
-    return NextResponse.json({ outgoing, incoming, listings: (listingsResult.data || []).map(mapGift) });
+
+    const outgoing = outgoingRows.map(mapOffer).filter((row): row is NonNullable<typeof row> => row !== null);
+    const incoming = incomingRows.map(mapOffer).filter((row): row is NonNullable<typeof row> => row !== null);
+    const listings = (listingsResult.data || []).map((row) => mapGift(row as DbRow)).filter((gift) => Boolean(gift.virtualGiftId));
+
+    return NextResponse.json({
+      outgoing,
+      incoming,
+      listings,
+      counts: {
+        outgoing: Number(outgoingResult.count || outgoing.length),
+        incoming: Number(incomingResult.count || incoming.length),
+        listings: Number(listingsResult.count || listings.length),
+      },
+      truncated: {
+        outgoing: Number(outgoingResult.count || 0) > outgoing.length,
+        incoming: Number(incomingResult.count || 0) > incoming.length,
+        listings: Number(listingsResult.count || 0) > listings.length,
+      },
+    }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("orders", error);
-    return apiFailure(error, "Не удалось загрузить ордера");
+    return apiFailure(error, "Не удалось загрузить заявки");
   }
 }
+
 export const GET = withApiErrors("app/api/orders/route.ts:GET", GETHandler);

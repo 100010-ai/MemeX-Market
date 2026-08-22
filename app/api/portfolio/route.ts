@@ -1,10 +1,33 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
-import { NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile, getProfileSnapshot } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
 type DbRow = Record<string, unknown>;
+
+const DEFAULT_GIFT_PAGE_SIZE = 180;
+const MAX_GIFT_PAGE_SIZE = 360;
+
+function boundedInt(value: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+}
+
+async function fetchOwnedGifts(profileId: string, offset: number, limit: number) {
+  const supabase = getSupabaseAdmin();
+  const result = await supabase.from("gift_market_overview")
+    .select(giftMarketSelect, { count: "exact" })
+    .eq("owner_profile_id", profileId)
+    .not("telegram_name", "is", null)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (result.error) throw result.error;
+  const total = Math.max(0, Number(result.count || 0));
+  const rows = (result.data || []) as DbRow[];
+  const nextOffset = offset + rows.length < total ? offset + rows.length : null;
+  return { rows, total, nextOffset };
+}
 
 function relationOne(value: unknown): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
@@ -25,20 +48,35 @@ function isoDate(value: unknown) {
   return candidate && Number.isFinite(candidate.getTime()) ? candidate.toISOString() : new Date(0).toISOString();
 }
 
-async function GETHandler() {
+async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   const supabase = getSupabaseAdmin();
+  const giftOffset = boundedInt(request.nextUrl.searchParams.get("giftOffset"), 0, 0, 100_000);
+  const giftLimit = boundedInt(request.nextUrl.searchParams.get("giftLimit"), DEFAULT_GIFT_PAGE_SIZE, 30, MAX_GIFT_PAGE_SIZE);
+  const giftsOnly = request.nextUrl.searchParams.get("giftsOnly") === "1";
   try {
-    const [coinsResult, giftsResult, coinHistoryResult, giftHistoryResult, snapshot] = await Promise.all([
+    if (giftsOnly) {
+      const giftsInventory = await fetchOwnedGifts(String(profile.id), giftOffset, giftLimit);
+      const mappedGifts = giftsInventory.rows.map(mapGift).filter((gift) => Boolean(gift.virtualGiftId));
+      return NextResponse.json({
+        gifts: mappedGifts,
+        inventory: { giftCount: giftsInventory.total, giftsLoaded: mappedGifts.length, nextGiftOffset: giftsInventory.nextOffset },
+      }, { headers: { "cache-control": "private, no-store" } });
+    }
+
+    const [coinsResult, giftsInventory, listedGiftsResult, coinHistoryResult, giftHistoryResult, snapshot, seriesResult] = await Promise.all([
       supabase.from("holdings").select("coin_id,quantity,cost_basis,coins(name,symbol,current_price,image_url)").eq("profile_id", profile.id).gt("quantity", 0),
-      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).not("telegram_name", "is", null).order("created_at", { ascending: false }),
+      fetchOwnedGifts(String(profile.id), giftOffset, giftLimit),
+      supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").not("telegram_name", "is", null).order("listing_price", { ascending: true }).limit(500),
       supabase.from("trades").select("id,coin_id,side,quote_amount,realized_pnl,created_at,coins(symbol)").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(40),
       supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,price,realized_pnl,created_at,gift_assets(base_name,gift_number)").or(`buyer_profile_id.eq.${profile.id},seller_profile_id.eq.${profile.id}`).order("created_at", { ascending: false }).limit(40),
       getProfileSnapshot(profile as Record<string, unknown>),
+      supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: false }).limit(720),
     ]);
-    const firstError = coinsResult.error || giftsResult.error || coinHistoryResult.error || giftHistoryResult.error;
+    const firstError = coinsResult.error || listedGiftsResult.error || coinHistoryResult.error || giftHistoryResult.error || seriesResult.error;
     if (firstError) throw firstError;
+    const listedGifts = ((listedGiftsResult.data || []) as DbRow[]).map(mapGift).filter((gift) => Boolean(gift.virtualGiftId));
     const holdings = ((coinsResult.data || []) as DbRow[]).flatMap((row) => {
       const coinId = text(row.coin_id);
       if (!coinId) return [];
@@ -59,11 +97,12 @@ async function GETHandler() {
         pnl: marketValue - costBasis,
       }];
     });
-    const mappedGifts = (giftsResult.data || []).map(mapGift);
+    const mappedGifts = giftsInventory.rows.map(mapGift).filter((gift) => Boolean(gift.virtualGiftId));
     const unrealizedCoinPnl = holdings.reduce((sum, holding) => sum + holding.pnl, 0);
     const unrealizedGiftPnl = mappedGifts.reduce((sum, gift) => {
-      const current = gift.estimatedValue ?? gift.listingPrice ?? gift.referencePrice ?? gift.lastSalePrice ?? gift.acquiredPrice;
-      return sum + (Number(current) - Number(gift.acquiredPrice));
+      const acquired = finiteNumber(gift.acquiredPrice);
+      const current = finiteNumber(gift.estimatedValue ?? gift.listingPrice ?? gift.referencePrice ?? gift.lastSalePrice, acquired);
+      return sum + (current - acquired);
     }, 0);
     const history = [
       ...((coinHistoryResult.data || []) as DbRow[]).flatMap((row) => {
@@ -83,23 +122,46 @@ async function GETHandler() {
       }),
     ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 50);
     const bucketStart = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();
-    const snapshotWrite = await supabase.from("portfolio_snapshots").upsert({
-      profile_id: profile.id,
-      bucket_start: bucketStart,
-      balance: snapshot.balance,
-      coin_value: snapshot.coinValue,
-      gift_value: snapshot.giftValue,
-      net_worth: snapshot.netWorth,
-      realized_pnl: snapshot.pnl,
-    }, { onConflict: "profile_id,bucket_start" });
-    if (snapshotWrite.error) throw snapshotWrite.error;
-    let portfolioSeries: Array<{ time: string; balance: number; coinValue: number; giftValue: number; netWorth: number; realizedPnl: number }> = [];
-    const seriesResult = await supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: true }).limit(5000);
-    if (seriesResult.error) throw seriesResult.error;
-    portfolioSeries = (seriesResult.data || []).map((row) => ({ time: isoDate(row.bucket_start), balance: finiteNumber(row.balance), coinValue: finiteNumber(row.coin_value), giftValue: finiteNumber(row.gift_value), netWorth: finiteNumber(row.net_worth), realizedPnl: finiteNumber(row.realized_pnl) }));
+    const currentPoint = {
+      time: bucketStart,
+      balance: finiteNumber(snapshot.balance),
+      coinValue: finiteNumber(snapshot.coinValue),
+      giftValue: finiteNumber(snapshot.giftValue),
+      netWorth: finiteNumber(snapshot.netWorth),
+      realizedPnl: finiteNumber(snapshot.pnl),
+    };
+
+    // The old GET path synchronously UPSERTed a portfolio snapshot on every
+    // page/realtime refresh, turning a read into a write-heavy hot path. Read
+    // only the recent chart window for first paint, append the current point in
+    // memory, and persist it after the response has been produced.
+    const portfolioSeries = (seriesResult.data || [])
+      .map((row) => ({ time: isoDate(row.bucket_start), balance: finiteNumber(row.balance), coinValue: finiteNumber(row.coin_value), giftValue: finiteNumber(row.gift_value), netWorth: finiteNumber(row.net_worth), realizedPnl: finiteNumber(row.realized_pnl) }))
+      .reverse();
+    const last = portfolioSeries[portfolioSeries.length - 1];
+    if (last?.time === bucketStart) portfolioSeries[portfolioSeries.length - 1] = currentPoint;
+    else portfolioSeries.push(currentPoint);
+
+    after(async () => {
+      try {
+        const write = await getSupabaseAdmin().from("portfolio_snapshots").upsert({
+          profile_id: profile.id,
+          bucket_start: bucketStart,
+          balance: currentPoint.balance,
+          coin_value: currentPoint.coinValue,
+          gift_value: currentPoint.giftValue,
+          net_worth: currentPoint.netWorth,
+          realized_pnl: currentPoint.realizedPnl,
+        }, { onConflict: "profile_id,bucket_start" });
+        if (write.error) console.error("portfolio snapshot write", write.error);
+      } catch (writeError) {
+        console.error("portfolio snapshot write", writeError);
+      }
+    });
     return NextResponse.json({
       holdings,
       gifts: mappedGifts,
+      listedGifts,
       profile: snapshot,
       analytics: {
         realizedPnl: snapshot.pnl,
@@ -109,7 +171,8 @@ async function GETHandler() {
       },
       history,
       portfolioSeries,
-    });
+      inventory: { giftCount: giftsInventory.total, giftsLoaded: mappedGifts.length, nextGiftOffset: giftsInventory.nextOffset },
+    }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("portfolio", error);
     return apiFailure(error, "Не удалось загрузить хранилище");

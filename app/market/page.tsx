@@ -13,7 +13,6 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 
-const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "gift_listing_events", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
 type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
 type LiquidityState = { mode: "npc_bootstrap" | "player_only"; playerOnly: boolean; playerOwned: number; playerListed: number; activeSellers: number; npcListed: number; playerOwnedThreshold: number; playerListedThreshold: number; activeSellersThreshold: number; ready: boolean; transitionedAt: string | null };
@@ -75,6 +74,12 @@ export default function MarketPage() {
   const [giftSort, setGiftSort] = useState<GiftSort>("random");
   const [giftView, setGiftView] = useState<GiftView>("all");
   const [giftMode, setGiftMode] = useState<GiftMarketMode>("items");
+  const realtimeTables = useMemo(() => {
+    if (tab === "coins") return ["coins", "trades"];
+    if (giftMode === "feed") return ["gift_trades", "gift_listing_events", "market_events"];
+    return ["virtual_gifts", "gift_trades"];
+  }, [tab, giftMode]);
+  const realtimeChannelName = `mxm-market-${tab}-${giftMode}`;
   const [collectionCards, setCollectionCards] = useState<MarketCollectionCard[]>([]);
   const [feedItems, setFeedItems] = useState<ActivityItem[]>([]);
   const [modeLoading, setModeLoading] = useState(false);
@@ -467,7 +472,7 @@ export default function MarketPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <RealtimeRefresh channelName="mxm-market-v09" tables={realtimeTables} onChange={realtimeReload} debounceMs={1500} />
+      <RealtimeRefresh channelName={realtimeChannelName} tables={realtimeTables} onChange={realtimeReload} debounceMs={1800} />
 
       <div className="mxm-market-head mb-4">
         <div className="mxm-segment min-w-0 flex-1">

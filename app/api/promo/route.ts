@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -14,7 +14,7 @@ async function POSTHandler(request: Request) {
   const code = String(body.code || "").trim().toUpperCase().slice(0, 32);
   if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return NextResponse.json({ error: "Некорректный промокод" }, { status: 400 });
   const result = await getSupabaseAdmin().rpc("redeem_promo_code_v047", { p_profile_id: profile.id, p_code: code });
-  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 });
+  if (result.error) { if (String(result.error.code || "") === "42P01") return apiFailure(result.error, "Промокоды временно недоступны"); return NextResponse.json({ error: publicBusinessError(result.error, "Промокод недействителен или больше недоступен") }, { status: 400 }); }
   return NextResponse.json({ ok: true, result: result.data });
 }
 export const POST = withApiErrors("app/api/promo/route.ts:POST", POSTHandler);

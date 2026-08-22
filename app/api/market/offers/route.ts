@@ -80,7 +80,7 @@ async function POSTHandler(request: Request) {
     const amount = Number(body.amount);
     const maxFills = Number(body.maxFills ?? 1);
     const durationHours = Number(body.durationHours ?? 72);
-    if (!baseName || !scopeType || !Number.isFinite(amount) || amount <= 0 || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
+    if (!baseName || !scopeType || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000 || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
       return NextResponse.json({ error: "Некорректные параметры предложения" }, { status: 400 });
     }
     const supabase = getSupabaseAdmin();

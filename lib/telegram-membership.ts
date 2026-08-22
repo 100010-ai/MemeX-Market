@@ -10,7 +10,7 @@ export const MAIN_CHANNEL_CHAT_ID = `@${MAIN_CHANNEL_USERNAME}`;
 export const MAIN_CHANNEL_URL = `https://t.me/${MAIN_CHANNEL_USERNAME}`;
 export const MAIN_CHANNEL_MISSION_KEY = "join_main_channel";
 
-const MEMBERSHIP_TTL_MS = 5 * 60 * 1000;
+const MEMBERSHIP_TTL_MS = 15 * 60 * 1000;
 
 type TelegramChatMember = {
   status?: "creator" | "administrator" | "member" | "restricted" | "left" | "kicked" | string;

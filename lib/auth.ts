@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { readSession } from "@/lib/session";
+import { clearSession, readSession } from "@/lib/session";
+import { headers } from "next/headers";
 
 function safeString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -16,13 +17,41 @@ function safeDate(value: unknown, fallback = new Date(0).toISOString()) {
   return Number.isFinite(time) ? new Date(time).toISOString() : fallback;
 }
 
+
+async function sessionMatchesActiveTelegramUser(telegramId: number) {
+  // Telegram Desktop reuses cookies for the same Mini App origin when the user
+  // switches Telegram accounts. Client requests carry the current signed-init
+  // identity as a hint; reject a stale cookie before touching player data.
+  let raw: string | null = null;
+  try {
+    raw = (await headers()).get("x-mxm-telegram-id");
+  } catch {
+    // Utilities may be called outside a request context (for example tests).
+    // In that case the signed cookie remains the source of truth.
+    return true;
+  }
+  if (!raw) return true;
+  const expected = Number(raw);
+  if (!Number.isSafeInteger(expected) || expected <= 0) return false;
+  if (expected === telegramId) return true;
+  try { await clearSession(); } catch (error) { console.error("clear stale Telegram session", error); }
+  return false;
+}
+
 function banIsActive(row: Record<string, unknown>) {
   const bannedUntil = row.banned_until ? new Date(String(row.banned_until)).getTime() : null;
   return Boolean(row.is_banned) && (bannedUntil == null || bannedUntil > Date.now());
 }
 
-export async function requireProfile() {
+export async function requireSession() {
   const session = await readSession();
+  if (!session) return null;
+  if (!(await sessionMatchesActiveTelegramUser(session.telegramId))) return null;
+  return session;
+}
+
+export async function requireProfile() {
+  const session = await requireSession();
   if (!session) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("profiles").select("id,telegram_id,username,first_name,last_name,photo_url,balance,xp,last_gift_sync_at,is_banned,banned_until,created_at").eq("telegram_id", session.telegramId).maybeSingle();
@@ -132,7 +161,7 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
 
 /** Fast /api/me path: signed Telegram session + profile/finance snapshot in one DB call. */
 export async function getSessionProfileSnapshot() {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return null;
   const supabase = getSupabaseAdmin();
   const result = await supabase.rpc("session_profile_snapshot_v040", { p_telegram_id: session.telegramId });

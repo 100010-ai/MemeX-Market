@@ -1,10 +1,10 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
 async function GETHandler() {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   try {
     return NextResponse.json({ config: await getRuntimeConfig() }, {

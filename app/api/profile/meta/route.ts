@@ -1,5 +1,5 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapProfileBadges } from "@/lib/profile-presentation";
@@ -32,8 +32,6 @@ async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  const refreshed = await supabase.rpc("refresh_profile_meta_v048", { p_profile_id: profile.id });
-  if (refreshed.error) return apiFailure(refreshed.error, "Не удалось выполнить запрос");
   const [reputation, achievements, presentation, verifiedEntitlement, badgeInventory] = await Promise.all([
     supabase.from("profile_reputation").select("score,trade_score,age_score,activity_score,trust_score,updated_at").eq("profile_id", profile.id).maybeSingle(),
     supabase.from("user_achievements").select("achievement_key,unlocked_at,achievements(title,description,icon,xp_reward,sort_order)").eq("profile_id", profile.id).order("unlocked_at", { ascending: false }),
@@ -43,6 +41,17 @@ async function GETHandler() {
   ]);
   const error = reputation.error || achievements.error || presentation.error || verifiedEntitlement.error || badgeInventory.error;
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
+  const reputationUpdatedAt = reputation.data?.updated_at ? Date.parse(String(reputation.data.updated_at)) : 0;
+  const reputationStale = !Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000;
+  if (reputationStale) {
+    after(async () => {
+      try {
+        const refreshed = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: profile.id });
+        if (refreshed.error) console.error("profile meta refresh", refreshed.error);
+      } catch (error) { console.error("profile meta refresh", error); }
+    });
+  }
+
   const verifiedExpiresAt = verifiedEntitlement.data?.expires_at;
   const verifiedExpiry = verifiedExpiresAt ? new Date(verifiedExpiresAt).getTime() : null;
   const creatorVerified = Boolean(verifiedEntitlement.data)

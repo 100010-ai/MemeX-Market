@@ -75,7 +75,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
   const mxmRequestIdsRef = useRef(new Map<string, string>());
 
   const load = useCallback(async () => {
-    const payload = await apiFetch<StorePayload>("/api/store", { cacheMs: 0 });
+    const payload = await apiFetch<StorePayload>("/api/store", { cacheMs: 20_000 });
     setData(payload);
     setCreatorCoinId((current) => current || payload.creatorCoins[0]?.id || "");
   }, []);

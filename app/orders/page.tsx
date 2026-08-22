@@ -10,8 +10,9 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftMedia } from "@/components/gifts/gift-media";
 
-const realtimeTables = ["virtual_gifts", "gift_offers"];
-type Payload = { outgoing: GiftOffer[]; incoming: GiftOffer[]; listings: GiftAsset[] };
+const realtimeGiftTables = ["virtual_gifts"];
+const realtimeOfferTables = ["gift_offers"];
+type Payload = { outgoing: GiftOffer[]; incoming: GiftOffer[]; listings: GiftAsset[]; counts?: { outgoing: number; incoming: number; listings: number }; truncated?: { outgoing: boolean; incoming: boolean; listings: boolean } };
 
 export default function OrdersPage() {
   const [data, setData] = useState<Payload>({ outgoing: [], incoming: [], listings: [] });
@@ -52,21 +53,24 @@ export default function OrdersPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <RealtimeRefresh
-        channelName="mxm-orders"
-        tables={realtimeTables}
+        channelName="mxm-orders-gifts"
+        tables={realtimeGiftTables}
         filters={profile?.id ? { virtual_gifts: `owner_profile_id=eq.${profile.id}` } : undefined}
         onChange={realtimeReload}
-        debounceMs={1000}
+        debounceMs={900}
       />
+      {profile?.id ? <RealtimeRefresh channelName="mxm-orders-offers-out" tables={realtimeOfferTables} filters={{ gift_offers: `buyer_profile_id=eq.${profile.id}` }} onChange={realtimeReload} debounceMs={650} /> : null}
+      {profile?.id ? <RealtimeRefresh channelName="mxm-orders-offers-in" tables={realtimeOfferTables} filters={{ gift_offers: `seller_profile_id=eq.${profile.id}` }} onChange={realtimeReload} debounceMs={650} /> : null}
 
       <div className="mb-3 flex items-end justify-between gap-3"><div><h1 className="text-[15px] font-semibold tracking-[-.02em]">Заявки и лоты</h1><p className="mt-1 text-[10px] text-[var(--muted)]">Предложения и активные лоты</p></div></div>
       <div className="mxm-segment mb-3">
-        <Tab label="Входящие" count={data.incoming.length} active={tab === "incoming"} onClick={() => setTab("incoming")} />
-        <Tab label="Исходящие" count={data.outgoing.length} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
-        <Tab label="Лоты" count={data.listings.length} active={tab === "listings"} onClick={() => setTab("listings")} />
+        <Tab label="Входящие" count={data.counts?.incoming ?? data.incoming.length} active={tab === "incoming"} onClick={() => setTab("incoming")} />
+        <Tab label="Исходящие" count={data.counts?.outgoing ?? data.outgoing.length} active={tab === "outgoing"} onClick={() => setTab("outgoing")} />
+        <Tab label="Лоты" count={data.counts?.listings ?? data.listings.length} active={tab === "listings"} onClick={() => setTab("listings")} />
       </div>
 
       {error ? <div className="mb-3 mxm-alert mxm-alert-error flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={() => { setLoading(true); setError(null); void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить заявки")).finally(() => setLoading(false)); }} className="shrink-0 underline">Повторить</button></div> : null}
+      {!loading && ((tab === "incoming" && data.truncated?.incoming) || (tab === "outgoing" && data.truncated?.outgoing) || (tab === "listings" && data.truncated?.listings)) ? <p className="mb-3 text-[9px] text-[var(--muted-2)]">Показаны самые актуальные записи. Старые данные остаются в истории операций.</p> : null}
 
       {loading ? <div className="space-y-2"><div className="mxm-skeleton h-16 rounded-2xl" /><div className="mxm-skeleton h-16 rounded-2xl" /><div className="mxm-skeleton h-16 rounded-2xl" /></div> : tab === "listings" ? (
         data.listings.length ? <div className="divide-y divide-[var(--border-soft)] border-y border-[var(--border-soft)]">{data.listings.map((gift) => <div key={gift.virtualGiftId} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><Link href={`/gifts/${gift.virtualGiftId}`}><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-[14px]" /></Link><div className="min-w-0"><Link href={`/gifts/${gift.virtualGiftId}`} className="truncate text-xs font-medium">{gift.baseName}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-2"><span className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice)}</span><button disabled={busy !== null} onClick={() => void unlist(gift.virtualGiftId)} aria-label="Снять с продажи" className="mxm-icon-action"><X size={14}/></button></div></div>)}</div> : <Empty text="Нет активных лотов" icon={<Tag />} />

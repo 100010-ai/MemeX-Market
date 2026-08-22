@@ -1,12 +1,26 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSessionProfileSnapshot } from "@/lib/auth";
-import { getSessionConfigStatus } from "@/lib/session";
+import { clearSession, getSessionConfigStatus, readSession } from "@/lib/session";
 import { auditMainChannelRewardIfNeeded } from "@/lib/telegram-membership";
 
-async function GETHandler() {
+async function GETHandler(request: NextRequest) {
+  const expectedRaw = request.nextUrl.searchParams.get("expectedTelegramId");
+  const expectedTelegramId = expectedRaw == null ? null : Number(expectedRaw);
+  if (expectedRaw != null && (!Number.isSafeInteger(expectedTelegramId) || Number(expectedTelegramId) <= 0)) {
+    return NextResponse.json({ error: "Некорректный Telegram ID", code: "INVALID_TELEGRAM_ID" }, { status: 400 });
+  }
   if (!getSessionConfigStatus().configured) return NextResponse.json({ error: "Сессии временно недоступны" }, { status: 503 });
   try {
+    const session = await readSession();
+    if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+    if (expectedTelegramId != null && session.telegramId !== expectedTelegramId) {
+      // Telegram Desktop may reuse this origin across Telegram accounts. Remove
+      // the stale cookie immediately so no later request can observe account A
+      // while account B is active.
+      await clearSession();
+      return NextResponse.json({ error: "Аккаунт Telegram изменился", code: "SESSION_ACCOUNT_MISMATCH" }, { status: 409, headers: { "cache-control": "private, no-store" } });
+    }
     let profile = await getSessionProfileSnapshot();
     if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
     try {

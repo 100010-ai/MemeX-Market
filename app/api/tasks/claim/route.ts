@@ -1,4 +1,4 @@
-import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -39,7 +39,7 @@ async function POSTHandler(request: Request) {
   }
 
   const { data, error } = await supabase.rpc("claim_mission", { p_profile_id: profile.id, p_mission_id: missionId });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return NextResponse.json({ error: publicBusinessError(error, "Не удалось получить награду") }, { status: 400 });
   return NextResponse.json({ result: data });
 }
 export const POST = withApiErrors("app/api/tasks/claim/route.ts:POST", POSTHandler);

@@ -1775,6 +1775,7 @@ a, button, [role="button"] {
 .mxm-shell-content section.bg-\[var\(--panel\)\],
 .mxm-shell-content section.bg-\[var\(--panel-2\)\],
 .mxm-shell-content article.mxm-card,
+.mxm-shell-content section.mxm-card,
 .mxm-shell-content div.mxm-card {
   background: transparent !important;
   box-shadow: none !important;

@@ -3,7 +3,7 @@ import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { readSession } from "@/lib/session";
+import { requireSession } from "@/lib/auth";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 export const runtime = "nodejs";
@@ -124,7 +124,7 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
 }
 
 async function GETHandler(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
-  const session = await readSession();
+  const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { assetId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(assetId)) {

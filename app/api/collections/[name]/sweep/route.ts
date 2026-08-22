@@ -1,4 +1,4 @@
-import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -34,7 +34,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
   const liquidity = await getGiftMarketLiquidityState();
   let systemOwnerIds: string[] = [];
   if (liquidity.playerOnly) {
-    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true);
+    const systemProfiles = await supabase.from("profiles").select("id").eq("is_system", true).limit(100);
     if (systemProfiles.error) return apiFailure(systemProfiles.error, "Не удалось проверить продавцов коллекции");
     systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
   }
@@ -74,7 +74,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
     p_virtual_gift_ids: ids,
     p_request_key: requestKey,
   });
-  if (purchase.error) return NextResponse.json({ error: purchase.error.message }, { status: 409 });
+  if (purchase.error) return NextResponse.json({ error: publicBusinessError(purchase.error, "Не удалось выполнить массовую покупку") }, { status: 409 });
 
   return NextResponse.json({
     sweep: purchase.data,

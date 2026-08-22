@@ -3,6 +3,16 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { finiteNumber, nullableText, safeIsoDate, text } from "@/lib/safe-data";
+
+function partnerLevelLabel(value: unknown) {
+  const level = text(value, "bronze", 32).toLowerCase();
+  if (level === "silver") return "Серебро";
+  if (level === "gold") return "Золото";
+  if (level === "platinum") return "Платина";
+  if (level === "diamond") return "Бриллиант";
+  return "Бронза";
+}
 
 async function GETHandler() {
   const profile = await requireProfile();
@@ -24,9 +34,9 @@ async function GETHandler() {
   const rewards = (rewardsResult.data || []).map((row) => ({
     id: String(row.id),
     sourceKind: String(row.source_kind),
-    sourceAmount: Number(row.source_amount),
-    rewardAmount: Number(row.reward_amount),
-    createdAt: String(row.created_at),
+    sourceAmount: Math.max(0, finiteNumber(row.source_amount)),
+    rewardAmount: Math.max(0, finiteNumber(row.reward_amount)),
+    createdAt: safeIsoDate(row.created_at),
     referred: people.get(String(row.referred_profile_id)) || null,
   }));
   const totalEarned = rewards.reduce((sum, row) => sum + row.rewardAmount, 0);
@@ -39,19 +49,24 @@ async function GETHandler() {
   return NextResponse.json({
     code,
     inviteLink: code ? `https://t.me/${bot}?startapp=ref_${encodeURIComponent(code)}` : null,
-    percent: Number(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps ?? 0) / 100,
+    percent: Math.max(0, finiteNumber(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps)) / 100,
     partner: {
-      level: String(partner.level || "Bronze"),
-      bonusBps: Number(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps ?? 0),
-      invited: Number(partner.invited || referred.length),
-      qualified: Number(partner.qualified || 0),
-      nextQualified: partner.nextQualified == null ? null : Number(partner.nextQualified),
-      earnedVirtualTon: Number(partner.earnedVirtualTon || 0),
-      earnedMxmCoins: Number(partner.earnedMxmCoins || 0),
+      level: partnerLevelLabel(partner.level),
+      bonusBps: Math.max(0, finiteNumber(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps)),
+      invited: Math.max(0, Math.floor(finiteNumber(partner.invited, referred.length))),
+      qualified: Math.max(0, Math.floor(finiteNumber(partner.qualified))),
+      nextQualified: partner.nextQualified == null ? null : Math.max(0, Math.floor(finiteNumber(partner.nextQualified))),
+      earnedVirtualTon: Math.max(0, finiteNumber(partner.earnedVirtualTon)),
+      earnedMxmCoins: Math.max(0, finiteNumber(partner.earnedMxmCoins)),
     },
     invitedCount: referred.length,
     totalEarned,
-    referred: referred.map((row) => ({ id: String(row.id), name: row.username ? `@${row.username}` : String(row.first_name || "Игрок"), photoUrl: row.photo_url, joinedAt: row.created_at })),
+    referred: referred.flatMap((row) => {
+      const id = text(row.id, "", 80);
+      if (!id) return [];
+      const username = nullableText(row.username, 64);
+      return [{ id, name: username ? `@${username}` : text(row.first_name, "Игрок", 120), photoUrl: nullableText(row.photo_url, 2_000), joinedAt: safeIsoDate(row.created_at) }];
+    }),
     rewards,
   }, { headers: { "cache-control": "private, no-store" } });
 }

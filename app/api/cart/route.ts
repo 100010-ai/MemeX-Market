@@ -1,5 +1,5 @@
 import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
@@ -17,7 +17,7 @@ async function GETHandler() {
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
-  const cart = await supabase.from("market_cart_items").select("virtual_gift_id,added_at").eq("profile_id", profile.id).order("added_at", { ascending: false });
+  const cart = await supabase.from("market_cart_items").select("virtual_gift_id,added_at").eq("profile_id", profile.id).order("added_at", { ascending: false }).limit(21);
   if (cart.error) return apiFailure(cart.error, "Не удалось загрузить корзину");
   const ids = (cart.data || []).map((row) => String(row.virtual_gift_id));
   if (!ids.length) return NextResponse.json({ items: [], total: 0, count: 0 });
@@ -27,8 +27,13 @@ async function GETHandler() {
   const items = ids.map((id) => byId.get(id)).filter((gift): gift is GiftAsset => Boolean(gift));
   const stale = ids.filter((id) => !byId.has(id));
   if (stale.length) {
-    const staleCleanup = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).in("virtual_gift_id", stale);
-    if (staleCleanup.error) return apiFailure(staleCleanup.error, "Не удалось очистить устаревшие позиции корзины");
+    const profileId = String(profile.id);
+    after(async () => {
+      try {
+        const staleCleanup = await getSupabaseAdmin().from("market_cart_items").delete().eq("profile_id", profileId).in("virtual_gift_id", stale);
+        if (staleCleanup.error) console.error("cart stale cleanup", staleCleanup.error);
+      } catch (error) { console.error("cart stale cleanup", error); }
+    });
   }
   const total = items.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0);
   return NextResponse.json({ items, total, count: items.length });

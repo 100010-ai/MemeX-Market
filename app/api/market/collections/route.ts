@@ -7,6 +7,10 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
+type CollectionCardsPayload = { collections: Array<Record<string, unknown>> };
+const collectionCardsCache = new Map<number, { expiresAt: number; payload: CollectionCardsPayload }>();
+
+
 type RawPreview = {
   virtualGiftId?: unknown;
   giftNumber?: unknown;
@@ -43,6 +47,10 @@ async function GETHandler(request: NextRequest) {
   const supabase = getSupabaseAdmin();
 
   try {
+    const cached = collectionCardsCache.get(limit);
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json(cached.payload, { headers: { "cache-control": "private, max-age=0, must-revalidate", "x-mxm-cache": "hit" } });
+    }
     const result = await supabase.rpc("gift_market_collection_cards_v210", { p_limit: limit });
     if (result.error) throw result.error;
     const rows = Array.isArray(result.data) ? result.data as RawCollection[] : [];
@@ -79,7 +87,9 @@ async function GETHandler(request: NextRequest) {
         previews,
       }];
     });
-    return NextResponse.json({ collections }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
+    const payload: CollectionCardsPayload = { collections };
+    collectionCardsCache.set(limit, { expiresAt: Date.now() + 3_000, payload });
+    return NextResponse.json(payload, { headers: { "cache-control": "private, max-age=0, must-revalidate", "x-mxm-cache": "miss" } });
   } catch (error) {
     console.error("market collection cards", error);
     return apiFailure(error, "Не удалось загрузить коллекции рынка");

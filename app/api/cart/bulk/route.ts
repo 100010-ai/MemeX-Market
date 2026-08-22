@@ -28,7 +28,7 @@ async function POSTHandler(request: NextRequest) {
   try {
     const [gifts, currentCart, liquidity] = await Promise.all([
       supabase.from("virtual_gifts").select("id,owner_profile_id,status,listing_price,listing_expires_at").in("id", ids),
-      supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
+      supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).limit(21),
       getGiftMarketLiquidityState(),
     ]);
     if (gifts.error) throw gifts.error;

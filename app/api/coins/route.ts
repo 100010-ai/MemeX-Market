@@ -1,10 +1,11 @@
-import { apiFailure, readFormData, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readFormData, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { removeCoinImage, uploadCoinImage } from "@/lib/coin-media";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { finiteNumber, safeIsoDate } from "@/lib/safe-data";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ async function GETHandler() {
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const [coinsResult, settingsResult, monetizationResult] = await Promise.all([
-    supabase.from("coins").select("id,status,created_at").eq("creator_profile_id", profile.id).order("created_at", { ascending: false }),
+    supabase.from("coins").select("id,status,created_at").eq("creator_profile_id", profile.id).order("created_at", { ascending: false }).limit(100),
     supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost").eq("singleton", true).maybeSingle(),
     supabase.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
   ]);
@@ -32,28 +33,29 @@ async function GETHandler() {
   }
   const rows = (coinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
   const active = rows.filter((coin) => coin.status === "active");
-  const launchFee = Number(settingsResult.data.coin_launch_fee);
-  const cooldownHours = Number(settingsResult.data.coin_launch_cooldown_hours);
-  const maxActiveCoins = Number(settingsResult.data.coin_max_active);
+  const launchFee = Math.max(0, finiteNumber(settingsResult.data.coin_launch_fee));
+  const cooldownHours = Math.max(1, finiteNumber(settingsResult.data.coin_launch_cooldown_hours, 12));
+  const maxActiveCoins = Math.max(1, Math.floor(finiteNumber(settingsResult.data.coin_max_active, 2)));
   const wallet = monetizationResult.data && typeof monetizationResult.data === "object" && !Array.isArray(monetizationResult.data)
     ? (monetizationResult.data as { wallet?: { energy?: unknown; maxEnergy?: unknown } }).wallet
     : null;
-  const last = active[0]?.created_at ? new Date(active[0].created_at) : null;
-  const nextLaunchAt = last ? new Date(last.getTime() + cooldownHours * 60 * 60 * 1000) : null;
+  const lastCreatedAt = active[0]?.created_at ? safeIsoDate(active[0].created_at, "") : "";
+  const lastMs = lastCreatedAt ? Date.parse(lastCreatedAt) : Number.NaN;
+  const nextLaunchAt = Number.isFinite(lastMs) ? new Date(lastMs + cooldownHours * 60 * 60 * 1000) : null;
   return NextResponse.json({
     launchFee,
     cooldownHours,
     maxActiveCoins,
     activeCoins: active.length,
     nextLaunchAt: nextLaunchAt?.toISOString() || null,
-    initialBuyMin: Number(settingsResult.data.coin_initial_buy_min),
-    initialBuyMax: Number(settingsResult.data.coin_initial_buy_max),
-    startPriceMin: Number(settingsResult.data.coin_start_price_min),
-    startPriceMax: Number(settingsResult.data.coin_start_price_max),
-    floorMaxBps: Number(settingsResult.data.coin_floor_max_bps),
-    energyCost: Number(settingsResult.data.coin_launch_energy_cost),
-    energy: Number(wallet?.energy ?? 0),
-    maxEnergy: Number(wallet?.maxEnergy ?? 100),
+    initialBuyMin: Math.max(0, finiteNumber(settingsResult.data.coin_initial_buy_min)),
+    initialBuyMax: Math.max(0, finiteNumber(settingsResult.data.coin_initial_buy_max)),
+    startPriceMin: Math.max(0, finiteNumber(settingsResult.data.coin_start_price_min)),
+    startPriceMax: Math.max(0, finiteNumber(settingsResult.data.coin_start_price_max)),
+    floorMaxBps: Math.max(0, finiteNumber(settingsResult.data.coin_floor_max_bps)),
+    energyCost: Math.max(0, finiteNumber(settingsResult.data.coin_launch_energy_cost)),
+    energy: Math.max(0, finiteNumber(wallet?.energy)),
+    maxEnergy: Math.max(1, finiteNumber(wallet?.maxEnergy, 100)),
     economyReady: true,
   }, { headers: { "cache-control": "private, no-store" } });
 }
@@ -150,7 +152,7 @@ async function POSTHandler(request: Request) {
     });
     if (error) {
       await removeCoinImage(uploadedPath);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicBusinessError(error, "Не удалось создать мемкоин с такими параметрами") }, { status: 400 });
     }
     const coinId = data && typeof data === "object" && "id" in data ? String((data as { id: unknown }).id) : "";
     if (!coinId) {

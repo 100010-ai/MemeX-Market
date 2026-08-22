@@ -53,7 +53,21 @@ function localizeApiError(message: string): string {
   return message;
 }
 
-type ApiRequestInit = RequestInit & { timeoutMs?: number; cacheMs?: number; dedupe?: boolean };
+type ApiRequestInit = RequestInit & { timeoutMs?: number; cacheMs?: number; dedupe?: boolean; retries?: number };
+
+export class ApiRequestError extends Error {
+  status: number;
+  code: string | null;
+  requestId: string | null;
+
+  constructor(message: string, status: number, code: string | null, requestId: string | null) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+  }
+}
 
 type ApiPerfState = {
   total: number;
@@ -77,6 +91,8 @@ type MemoryEntry = { expiresAt: number; value: unknown };
 const GET_CACHE_LIMIT = 48;
 const getMemoryCache = new Map<string, MemoryEntry>();
 const getInFlight = new Map<string, Promise<unknown>>();
+let apiCacheNamespace = "anon";
+let apiCacheGeneration = 0;
 
 function rememberGet(key: string, value: unknown, cacheMs: number) {
   if (cacheMs <= 0) return;
@@ -102,11 +118,55 @@ function readRememberedGet<T>(key: string): T | null {
 }
 
 export function clearApiMemoryCache(prefix?: string) {
+  // Bump a generation token on every invalidation so a GET that started before
+  // a successful mutation can never repopulate the cache with stale data after
+  // that mutation completed. This matters on fast buy/list/claim flows where a
+  // previous in-flight request may otherwise win the race.
+  apiCacheGeneration += 1;
   if (!prefix) {
     getMemoryCache.clear();
+    getInFlight.clear();
     return;
   }
   for (const key of getMemoryCache.keys()) if (key.includes(prefix)) getMemoryCache.delete(key);
+  for (const key of getInFlight.keys()) if (key.includes(prefix)) getInFlight.delete(key);
+}
+
+/**
+ * Keep user-scoped GET responses isolated when the same Telegram WebView
+ * origin is opened from another Telegram account. Telegram Desktop reuses
+ * origin cookies/storage between accounts, so URL-only cache keys can leak a
+ * previous player's portfolio/tasks for a few seconds after account switch.
+ */
+export function setApiCacheNamespace(namespace: string | number | null | undefined) {
+  const next = String(namespace ?? "anon").trim() || "anon";
+  if (next === apiCacheNamespace) return;
+  apiCacheNamespace = next;
+  apiCacheGeneration += 1;
+  getMemoryCache.clear();
+  // Do not let a request started for the previous account be deduplicated into
+  // the new account. The underlying fetch may finish, but its promise is no
+  // longer reachable through the dedupe map.
+  getInFlight.clear();
+}
+
+export function getApiCacheNamespace() {
+  return apiCacheNamespace;
+}
+
+function activeTelegramIdForRequest() {
+  if (typeof window === "undefined") return null;
+  const initData = window.Telegram?.WebApp?.initData;
+  if (!initData) return null;
+  try {
+    const raw = new URLSearchParams(initData).get("user");
+    if (!raw) return null;
+    const user = JSON.parse(raw) as { id?: unknown } | null;
+    const id = Number(user?.id);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 function markCompleted(startedAt: number, failed: boolean) {
@@ -126,11 +186,13 @@ export function getApiPerfSnapshot() {
 }
 
 export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise<T> {
-  const { timeoutMs = 55_000, cacheMs, dedupe = true, signal: callerSignal, ...requestInit } = init || {};
+  const { timeoutMs = 55_000, cacheMs, dedupe = true, retries, signal: callerSignal, ...requestInit } = init || {};
   const method = String(requestInit.method || "GET").toUpperCase();
   const isGet = method === "GET" && requestInit.body == null;
   const effectiveCacheMs = cacheMs ?? (isGet ? 2_500 : 0);
-  const requestKey = `${method}:${input}`;
+  const requestKey = `${apiCacheNamespace}:${method}:${input}`;
+  const requestGeneration = apiCacheGeneration;
+  const retryBudget = isGet ? Math.max(0, Math.min(2, retries ?? 1)) : 0;
 
   if (isGet) {
     const remembered = readRememberedGet<T>(requestKey);
@@ -141,37 +203,80 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
 
   const task = (async () => {
     const headers = new Headers(requestInit.headers);
+    const activeTelegramId = activeTelegramIdForRequest();
+    if (activeTelegramId && !headers.has("x-mxm-telegram-id")) headers.set("x-mxm-telegram-id", String(activeTelegramId));
     const isForm = typeof FormData !== "undefined" && requestInit.body instanceof FormData;
     if (requestInit.body && !isForm && !headers.has("content-type")) headers.set("content-type", "application/json");
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.max(1_000, timeoutMs));
-    const abortFromCaller = () => controller.abort();
-    if (callerSignal?.aborted) controller.abort();
-    else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
 
     const startedAt = Date.now();
     apiPerf.inFlight += 1;
     let failed = false;
 
     try {
-      const response = await fetch(input, { ...requestInit, credentials: requestInit.credentials ?? "same-origin", headers, signal: controller.signal, cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const message = typeof payload?.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;
-        throw new Error(localizeApiError(message));
+      for (let attempt = 0; attempt <= retryBudget; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), Math.max(1_000, timeoutMs));
+        const abortFromCaller = () => controller.abort();
+        if (callerSignal?.aborted) controller.abort();
+        else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+
+        try {
+          const response = await fetch(input, {
+            ...requestInit,
+            credentials: requestInit.credentials ?? "same-origin",
+            headers,
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          const payload: Record<string, unknown> = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const rawMessage = typeof payload.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;
+            const code = typeof payload.code === "string" ? payload.code : null;
+            const id = response.headers.get("x-mxm-request-id");
+            if (typeof window !== "undefined" && input !== "/api/auth/telegram" && (response.status === 401 || code === "SESSION_ACCOUNT_MISMATCH")) {
+              clearApiMemoryCache();
+              window.dispatchEvent(new CustomEvent("mxm:auth-invalid", { detail: { status: response.status, code } }));
+            }
+            const transient = [408, 425, 502, 504].includes(response.status);
+            if (transient && attempt < retryBudget && !callerSignal?.aborted) {
+              await new Promise((resolve) => setTimeout(resolve, 140 * (2 ** attempt)));
+              continue;
+            }
+            throw new ApiRequestError(localizeApiError(rawMessage), response.status, code, id);
+          }
+          if (isGet) {
+            // A GET that started under an older account/cache generation may
+            // finish after an account switch or mutation. Never let it cache
+            // stale data, and never let it invalidate the fresh generation.
+            if (requestGeneration === apiCacheGeneration) rememberGet(requestKey, payload, effectiveCacheMs);
+          } else {
+            clearApiMemoryCache();
+          }
+          return payload as T;
+        } catch (error) {
+          const timedOut = controller.signal.aborted && !callerSignal?.aborted;
+          const retryableNetworkError = isGet
+            && attempt < retryBudget
+            && !callerSignal?.aborted
+            && !(error instanceof ApiRequestError)
+            && !timedOut;
+          if (retryableNetworkError) {
+            await new Promise((resolve) => setTimeout(resolve, 140 * (2 ** attempt)));
+            continue;
+          }
+          if (timedOut) throw new Error("Сервер отвечает слишком долго. Повторите запрос.");
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+          callerSignal?.removeEventListener("abort", abortFromCaller);
+        }
       }
-      if (isGet) rememberGet(requestKey, payload, effectiveCacheMs);
-      else clearApiMemoryCache();
-      return payload as T;
+      throw new Error("Запрос не выполнен");
     } catch (error) {
       failed = true;
-      if (controller.signal.aborted && !callerSignal?.aborted) throw new Error("Сервер отвечает слишком долго. Повторите запрос.");
       throw error;
     } finally {
       markCompleted(startedAt, failed);
-      clearTimeout(timeout);
-      callerSignal?.removeEventListener("abort", abortFromCaller);
     }
   })();
 

@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -36,7 +36,7 @@ async function POSTHandler(request: Request) {
     p_floor_offset_bps: Math.round(floorOffsetPct * 100),
     p_duration_days: durationDays,
   });
-  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 });
+  if (result.error) return NextResponse.json({ error: publicBusinessError(result.error, "Не удалось выставить выбранные подарки") }, { status: 400 });
   return NextResponse.json({ result: result.data });
 }
 export const POST = withApiErrors("app/api/portfolio/bulk-list/route.ts:POST", POSTHandler);

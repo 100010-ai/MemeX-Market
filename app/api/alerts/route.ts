@@ -4,6 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { finiteNumber, nullableText, safeIsoDate, text } from "@/lib/safe-data";
 
 const kinds = new Set(["coin", "gift", "gift_collection"]);
 const directions = new Set(["below", "above"]);
@@ -12,9 +13,25 @@ async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("price_alerts").select("id,kind,coin_id,virtual_gift_id,gift_collection,direction,target_price,enabled,last_triggered_at,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("price_alerts").select("id,kind,coin_id,virtual_gift_id,gift_collection,direction,target_price,enabled,last_triggered_at,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(120);
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
-  return NextResponse.json({ alerts: (data || []).map((row) => ({ id: String(row.id), kind: row.kind, coinId: row.coin_id || null, giftId: row.virtual_gift_id || null, giftCollection: row.gift_collection || null, direction: row.direction, targetPrice: Number(row.target_price), enabled: Boolean(row.enabled), lastTriggeredAt: row.last_triggered_at || null, createdAt: row.created_at })) });
+  return NextResponse.json({ alerts: (data || []).flatMap((row) => {
+    const id = text(row.id, "", 80);
+    const kind = text(row.kind, "", 32);
+    const direction = text(row.direction, "", 16);
+    if (!id || !kinds.has(kind) || !directions.has(direction)) return [];
+    return [{
+      id, kind,
+      coinId: nullableText(row.coin_id, 80),
+      giftId: nullableText(row.virtual_gift_id, 80),
+      giftCollection: nullableText(row.gift_collection, 120),
+      direction,
+      targetPrice: Math.max(0, finiteNumber(row.target_price)),
+      enabled: Boolean(row.enabled),
+      lastTriggeredAt: row.last_triggered_at == null ? null : safeIsoDate(row.last_triggered_at),
+      createdAt: safeIsoDate(row.created_at),
+    }];
+  }) });
 }
 
 async function POSTHandler(request: Request) {
@@ -47,12 +64,12 @@ async function POSTHandler(request: Request) {
   const kind = typeof body.kind === "string" && kinds.has(body.kind) ? body.kind : null;
   const direction = typeof body.direction === "string" && directions.has(body.direction) ? body.direction : null;
   const targetPrice = Number(body.targetPrice);
-  if (!kind || !direction || !Number.isFinite(targetPrice) || targetPrice <= 0) return NextResponse.json({ error: "Некорректный алерт" }, { status: 400 });
+  if (!kind || !direction || !Number.isFinite(targetPrice) || targetPrice <= 0 || targetPrice > 1_000_000_000_000) return NextResponse.json({ error: "Некорректный алерт" }, { status: 400 });
 
   const row: Record<string, unknown> = { profile_id: profile.id, kind, direction, target_price: targetPrice, enabled: true };
   if (kind === "coin") row.coin_id = typeof body.coinId === "string" && validUuidLike(body.coinId) ? body.coinId : null;
   if (kind === "gift") row.virtual_gift_id = typeof body.giftId === "string" && validUuidLike(body.giftId) ? body.giftId : null;
-  if (kind === "gift_collection") row.gift_collection = typeof body.giftCollection === "string" ? body.giftCollection.trim() : null;
+  if (kind === "gift_collection") { const value = typeof body.giftCollection === "string" ? body.giftCollection.trim() : ""; row.gift_collection = value && value.length <= 120 ? value : null; }
   if ((kind === "coin" && !row.coin_id) || (kind === "gift" && !row.virtual_gift_id) || (kind === "gift_collection" && !row.gift_collection)) return NextResponse.json({ error: "Не выбран объект алерта" }, { status: 400 });
 
   // Reject alerts for stale/non-existent objects before consuming a slot.
@@ -103,7 +120,10 @@ async function POSTHandler(request: Request) {
   if (Number(alertCount.count || 0) >= config.remoteConfig.maxPriceAlerts) return NextResponse.json({ error: `Лимит активных алертов: ${config.remoteConfig.maxPriceAlerts}` }, { status: 409 });
 
   const { data, error } = await supabase.from("price_alerts").insert(row).select("id").single();
-  if (error) return apiFailure(error, "Не удалось выполнить запрос");
+  if (error) {
+    if (String(error.code || "") === "23505") return NextResponse.json({ error: "Такой активный алерт уже существует", code: "ALERT_ALREADY_EXISTS" }, { status: 409 });
+    return apiFailure(error, "Не удалось создать алерт");
+  }
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
 export const GET = withApiErrors("app/api/alerts/route.ts:GET", GETHandler);

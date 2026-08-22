@@ -15,7 +15,7 @@ export default function SeasonPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/season", { cacheMs: 0 })), []);
+  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/season", { cacheMs: 20_000 })), []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить сезон"));
