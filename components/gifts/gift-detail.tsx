@@ -261,7 +261,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
         <div className="flex items-center gap-1.5"><button onClick={() => void toggleWatch()} disabled={busy !== null} aria-label={data.watched ? "Убрать из избранного" : "В избранное"} className={`grid h-9 w-9 place-items-center rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] ${data.watched ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}><Star size={14} fill={data.watched ? "currentColor" : "none"} /></button><a href={gift.telegramName.startsWith("ton:") ? `https://tonviewer.com/${encodeURIComponent(gift.telegramName.slice(4))}` : `https://t.me/nft/${encodeURIComponent(gift.telegramName)}`} target="_blank" rel="noreferrer" className="flex h-9 items-center gap-1.5 rounded-[18px] border border-[var(--border)] bg-[var(--panel-2)] px-3 text-[11px] text-[var(--muted)]">{gift.telegramName.startsWith("ton:") ? "TON" : "Telegram"} <ExternalLink size={12} /></a></div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <section className="min-w-0">
           <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><GiftMedia gift={gift} className="aspect-square w-full" /></div>
           <div className="mt-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
@@ -285,14 +285,14 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
 
         <section className="min-w-0 space-y-3">
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="mxm-gift-metrics grid grid-cols-2 gap-1.5 sm:grid-cols-5">
               <Metric label="Цена продажи" value={gift.listingPrice == null ? "—" : money(gift.listingPrice)} />
               <Metric label="Мин. цена" value={data.traitStats.collectionFloor == null ? "—" : money(data.traitStats.collectionFloor)} />
               <Metric label="Ориентир" value={gift.referencePrice == null ? "—" : money(gift.referencePrice)} />
               <Metric label="Предложение" value={gift.bestOffer == null ? "—" : money(gift.bestOffer)} />
               <Metric label="24h" value={percent(data.collection.change24h)} tone={data.collection.change24h} />
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
               <SmallMetric label="Объём предмета" value={money(data.itemStats.volume)} />
               <SmallMetric label="Сделки" value={String(data.itemStats.tradeCount)} />
               <SmallMetric label="Макс. продажа" value={data.itemStats.highSale == null ? "—" : money(data.itemStats.highSale)} />
@@ -307,7 +307,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Источник цены</p>
-                <p className="mt-1 text-xs font-medium">{priceBasisLabel(gift)}</p>
+                <p className="mt-1 text-[11px] font-medium">{priceBasisLabel(gift)}</p>
               </div>
               {gift.referencePrice != null ? <p className="flex items-center gap-1 text-sm font-semibold"><Gem size={12} fill="currentColor" />{money(gift.referencePrice)}</p> : null}
             </div>
@@ -326,11 +326,11 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <Trait label="Символ" value={gift.symbolName} rarity={gift.symbolRarityPerMille} floor={data.traitStats.symbolFloor} />
           </div>
 
-          {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие предложения</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">Предложения на коллекцию и характеристики, которые подходят этому подарку.</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
+          {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие предложения</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
 
           {error ? <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
+          <div className="mxm-gift-trade-panel rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
             {gift.isBurned ? (
               <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-3 text-xs text-[#ff9aa4]">Telegram пометил этот подарок как сожжённый. В MXM для него отключены продажа, предложения и покупки.</div>
             ) : data.isOwner ? (
@@ -436,12 +436,12 @@ function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offe
       <select value={offerHours} onChange={(event) => setOfferHours(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={24}>24 ч</option><option value={72}>72 ч</option><option value={168}>7 дн</option></select>
     </div>
     <SecondaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0 || parsed > availableBalance + (myOffer?.amount || 0)} onClick={() => onOffer(parsed)}>{busy === "offer" ? "…" : myOffer ? "Обновить предложение" : "Сделать предложение"}</SecondaryButton>
-    {myOffer && onCancelOffer ? <button disabled={busy !== null} onClick={onCancelOffer} className="mt-2 w-full rounded-[18px] bg-[var(--panel-2)] py-2 text-[11px] text-[var(--muted)]">Отменить мой предложение · {money(myOffer.amount)}</button> : null}
+    {myOffer && onCancelOffer ? <button disabled={busy !== null} onClick={onCancelOffer} className="mt-2 w-full rounded-[18px] bg-[var(--panel-2)] py-2 text-[11px] text-[var(--muted)]">Отменить предложение · {money(myOffer.amount)}</button> : null}
   </>;
 }
 
 function Trait({ label, value, rarity, floor }: { label: string; value: string; rarity: number | null; floor: number | null }) { return <div className="grid grid-cols-[76px_minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--border-soft)] px-3 py-3 text-xs last:border-b-0"><span className="text-[var(--muted)]">{label}</span><div className="min-w-0"><p className="truncate text-white">{value}</p>{floor != null ? <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--muted)]">мин. цена <Gem size={9} fill="currentColor" />{money(floor)}</p> : null}</div>{rarity == null ? <span /> : <span className="rounded bg-[rgba(198,170,88,.10)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">{(rarity / 10).toFixed(rarity % 10 ? 1 : 0)}%</span>}</div>; }
-function Metric({ label, value, tone }: { label: string; value: string; tone?: number }) { return <div className="rounded-[18px] bg-[var(--panel-2)] p-2.5"><p className="text-[10px] text-[var(--muted)]">{label}</p><p className={`mt-1 truncate text-xs font-semibold ${tone == null ? "" : tone >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{value}</p></div>; }
+function Metric({ label, value, tone }: { label: string; value: string; tone?: number }) { return <div className="mxm-gift-metric"><p className="text-[10px] text-[var(--muted)]">{label}</p><p className={`mt-1 truncate text-xs font-semibold ${tone == null ? "" : tone >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{value}</p></div>; }
 function SmallMetric({ label, value }: { label: string; value: string }) { return <div><p className="text-[9px] text-[var(--muted)]">{label}</p><p className="mt-0.5 truncate text-xs">{value}</p></div>; }
 function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) { return <button onClick={onClick} className={`flex shrink-0 items-center justify-center gap-1.5 rounded-[18px] px-4 py-2 text-[11px] whitespace-nowrap ${active ? "bg-[var(--panel-3)] text-white" : "text-[var(--muted)]"}`}>{icon}{label}</button>; }
 
@@ -456,7 +456,7 @@ const activityLabels: Record<GiftActivity["kind"], string> = {
   unlisted: "Снят с продажи",
   expired: "Срок продажи истёк",
   sold: "Продан",
-  offer_accepted: "Предложение принят",
+  offer_accepted: "Предложение принято",
   sale: "Продажа",
   offer: "Предложение",
 };

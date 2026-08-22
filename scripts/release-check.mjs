@@ -130,7 +130,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.2 package version", packageJson.includes('"version": "0.64.2"'));
+check("v0.64.3 package version", packageJson.includes('"version": "0.64.3"'));
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -140,8 +140,8 @@ check("v0.64 progression primitives present", migration100001.includes("account_
 
 // v0.64.2 Existing Systems Polish: every existing player/admin surface touched by the pass.
 check("v0.64.2 cases roulette can skip safely", read("app/cases/page.tsx").includes("skipReveal") && read("app/cases/page.tsx").includes("Пропустить") && read("app/cases/page.tsx").includes("pendingRevealRef"));
-check("v0.64.2 battle pass uses compact horizontal track", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("scrollIntoView") && read("app/season/page.tsx").includes("Забрать всё"));
-check("v0.64.2 store explains unavailable actions", read("components/store-front.tsx").includes("actionReason") && read("components/store-front.tsx").includes("При первом нажатии откроется подтверждение условий"));
+check("v0.64.2 battle pass uses compact horizontal track", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("scrollIntoView") && read("app/season/page.tsx").includes("claimAll"));
+check("v0.64.2 store explains unavailable actions", read("components/store-front.tsx").includes("actionReason") && read("components/store-front.tsx").includes("pendingStarsProduct") && read("components/store-front.tsx").includes("confirmPurchaseConsent"));
 check("v0.64.2 profile frames use shaped silhouettes", read("components/profile-avatar.tsx").includes("mxm-profile-frame-orbit-dot") && read("app/globals.css").includes("mxm-profile-frame-prestige") && read("app/globals.css").includes("clip-path: polygon"));
 check("v0.64.2 profile has achievement showcase", read("app/profile/page.tsx").includes("Витрина достижений") && read("app/profile/page.tsx").includes("mxm-profile-achievement"));
 check("v0.64.2 achievements are filterable", read("app/progression/page.tsx").includes("achievementFilter") && read("app/progression/page.tsx").includes("mxm-filter-chip"));
@@ -156,10 +156,24 @@ check("v0.64.2 notifications prevent duplicate interaction", read("app/notificat
 check("v0.64.2 creator tools expose active entitlements", read("app/creator/page.tsx").includes("Активные инструменты") && read("app/creator/page.tsx").includes("expiresAt"));
 check("v0.64.2 control mutations are guarded", read("app/control/page.tsx").includes("CONTROL_ACTION_LABELS") && read("app/control/page.tsx").includes("window.confirm") && read("app/control/page.tsx").includes("if(busy)return"));
 check("v0.64.2 fixed header + stable native controls", read("components/app-shell.tsx").includes("mxm-topbar-fixed") && read("app/globals.css").includes("input[type=\"checkbox\"]") && read("app/globals.css").includes("-webkit-tap-highlight-color: transparent"));
+
+// v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
+check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));
+check("v0.64.3 gift and coin trade panels are visually unified", read("components/gifts/gift-detail.tsx").includes("mxm-gift-trade-panel") && read("app/coin/[id]/page.tsx").includes("mxm-trade-panel") && read("app/globals.css").includes(".mxm-gift-trade-panel"));
+check("v0.64.3 cases keep authoritative roulette with quieter stage", read("app/cases/page.tsx").includes("mxm-case-stage-compact") && read("app/cases/page.tsx").includes("pendingRevealRef") && !read("app/cases/page.tsx").includes("Результат уже зафиксирован сервером"));
+check("v0.64.3 battle pass XP sources are compact chips", read("app/season/page.tsx").includes("mxm-xp-chip") && read("app/globals.css").includes(".mxm-xp-chip"));
+check("v0.64.3 tasks keep copy compact", read("app/tasks/page.tsx").includes("line-clamp-1") && read("app/tasks/page.tsx").includes("В процессе"));
+check("v0.64.3 notifications clamp long bodies", read("app/notifications/page.tsx").includes("line-clamp-2") && read("app/notifications/page.tsx").includes("mxm-switch"));
+check("v0.64.3 creator dashboard is compact", read("app/creator/page.tsx").includes("mxm-compact-page-head") && read("app/creator/page.tsx").includes("Выбрать инструменты"));
+check("v0.64.3 control audit payloads are collapsed", read("app/control/page.tsx").includes("control-audit-details") && read("app/control/page.tsx").includes("<details"));
+check("v0.64.3 production error UI hides raw backend details", read("app/error.tsx").includes('process.env.NODE_ENV !== "production"') && read("app/error.tsx").includes("error.message"));
+check("v0.64.3 long grids use content visibility", read("app/globals.css").includes("content-visibility: auto") && read("app/globals.css").includes("contain-intrinsic-size"));
+check("v0.64.3 frames keep shaped silhouettes", read("app/globals.css").includes('[data-profile-frame="carbon_frame"] .mxm-profile-frame-mark') && read("app/globals.css").includes("clip-path: polygon"));
+check("v0.64.3 gift listing after-task resolves void", read("app/api/gifts/[id]/list/route.ts").includes("after(async () =>") && read("app/api/gifts/[id]/list/route.ts").includes("await evaluatePlayerMarketHandoff(false)"));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 check("v0.63 expanded store catalogue", migration99999.includes("profile_founder_frame") && migration99999.includes("case_vault") && migration99999.includes("mxm_treasury"));
 check("v0.63 real profile-frame renderer", exists("lib/profile-frames.ts") && read("components/profile-avatar.tsx").includes("getProfileFrameClass") && read("app/globals.css").includes("mxm-profile-frame-founder"));
-check("v0.63 battle pass has claim-all", migration99999.includes("claim_all_season_rewards_v300") && read("app/api/season/route.ts").includes('action === "claim_all"') && read("app/season/page.tsx").includes("Забрать всё"));
+check("v0.63 battle pass has claim-all", migration99999.includes("claim_all_season_rewards_v300") && read("app/api/season/route.ts").includes('action === "claim_all"') && read("app/season/page.tsx").includes("claimAll"));
 check("v0.63 Stars CTA is not consent-disabled", read("components/store-front.tsx").includes("startStarsPurchase") && read("components/store-front.tsx").includes("pendingStarsProduct") && !read("components/store-front.tsx").includes("!termsAccepted || Boolean(unavailable)"));
 
 check("v0.63 abandoned pending Stars invoices expire", migration99999.includes("expiredPending") && migration99999.includes("status='pending'"));

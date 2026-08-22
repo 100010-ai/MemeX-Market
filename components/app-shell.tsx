@@ -141,7 +141,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
             <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
-        <main className="mxm-page-enter min-h-0 px-3 py-3 md:px-5 md:py-4">{children}</main>
+        <main id="mxm-main" className="mxm-page-enter min-h-0 px-3 py-3 md:px-5 md:py-4">{children}</main>
       </div>
 
       <nav className="mxm-bottom-nav safe-bottom fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 lg:hidden">

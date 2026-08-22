@@ -24,7 +24,13 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("list_virtual_gift_v2", { p_profile_id: profile.id, p_virtual_gift_id: id, p_price: price, p_duration_days: durationDays });
   if (error) return NextResponse.json({ error: publicBusinessError(error, "Не удалось выставить подарок") }, { status: 400 });
-  after(() => evaluatePlayerMarketHandoff(false).catch((cause) => console.error("gift market handoff after listing", cause)));
+  after(async () => {
+    try {
+      await evaluatePlayerMarketHandoff(false);
+    } catch (cause) {
+      console.error("gift market handoff after listing", cause);
+    }
+  });
   return NextResponse.json({ listing: data });
 }
 export const POST = withApiErrors("app/api/gifts/[id]/list/route.ts:POST", POSTHandler);

@@ -54,13 +54,13 @@ type StorePayload = {
 
 const categoryOrder: StoreCategory[] = ["currency", "membership", "season", "cases", "energy", "creator", "profile"];
 const categoryCopy: Record<StoreCategory, { title: string; note: string }> = {
-  currency: { title: "Монеты MXM", note: "Внутренняя валюта для игровых предметов, кейсов и оформления" },
-  membership: { title: "Премиум", note: "Больше энергии, ускоренное восстановление и ежедневный бонус" },
-  season: { title: "Боевой пропуск", note: "Премиальная дорожка текущего сезона с 30 уровнями" },
-  cases: { title: "Кейсы", note: "Все вероятности раскрыты до покупки, дубликаты компенсируются MXM" },
-  energy: { title: "Энергия", note: "Ресурс для игровых запусков и событий" },
-  creator: { title: "Инструменты автора", note: "Продвижение, статус автора и расширенная аналитика" },
-  profile: { title: "Рамки профиля", note: "Постоянная косметика с реальным визуальным оформлением профиля" },
+  currency: { title: "Монеты MXM", note: "Для магазина и прогрессии" },
+  membership: { title: "Премиум", note: "Энергия и ежедневные бонусы" },
+  season: { title: "Боевой пропуск", note: "Премиальная дорожка сезона" },
+  cases: { title: "Кейсы", note: "Шансы и лимиты открыты" },
+  energy: { title: "Энергия", note: "Запас для активностей" },
+  creator: { title: "Инструменты автора", note: "Продвижение и аналитика" },
+  profile: { title: "Рамки профиля", note: "Коллекционное оформление" },
 };
 
 const categoryIcon: Record<StoreCategory, React.ReactNode> = {
@@ -86,7 +86,7 @@ function categoryGlyph(category: StoreCategory) {
 function metadataTextList(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => typeof item === "string" && item.trim() ? [item.trim().slice(0, 80)] : []).slice(0, 4);
+  return value.flatMap((item) => typeof item === "string" && item.trim() ? [item.trim().slice(0, 80)] : []).slice(0, 2);
 }
 
 function profileItemKey(product: StoreProduct) {
@@ -329,12 +329,12 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
               || (!data.migrationReady ? "Магазин обновляется — покупки временно недоступны" : null)
               || (!data.starsEnabled && !sink ? "Покупки Stars временно отключены" : null)
               || (insufficientMxm && sink ? `Не хватает ${(sink.mxmPrice - data.wallet.mxmCoins).toLocaleString("ru-RU")} MXM` : null);
-            return <article key={product.sku} className="mxm-card flex min-h-[172px] flex-col py-3">
+            return <article key={product.sku} className="mxm-card mxm-store-product flex min-h-[164px] flex-col py-3">
               <div className="flex items-start gap-3">
                 {frame ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={frame.key} /> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div>}
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}{frame ? <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><BadgeCheck size={9} />{rarityLabel(frame.rarity)}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div>
               </div>
-              <p className="mt-2 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
+              <p className="mt-2 line-clamp-2 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
               {highlights.length ? <div className="mt-2 grid gap-1">{highlights.map((item) => <span key={item} className="flex items-center gap-1.5 text-[8px] text-[var(--muted)]"><CheckCircle2 size={9} className="text-[var(--positive)]" />{item}</span>)}</div> : null}
               {product.metadata.entitlement === "season_pass" && data.currentSeason ? <p className="mt-2 text-[9px] text-[#f3d789]">Действует до конца текущего сезона · осталось {data.currentSeason.daysLeft} дн.</p> : null}
               {product.category === "cases" ? <><CaseOddsSummary odds={odds} /><details className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[9px] text-[var(--muted)]"><summary className="cursor-pointer text-white">Все вероятности наград</summary><div className="mt-2 grid gap-1">{odds.map((odd) => <div key={`${product.sku}:${odd.label}`} className="flex justify-between gap-3"><span>{odd.label} · {rarityLabel(odd.rarity)}</span><span className="shrink-0 text-white">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div>)}</div></details></> : null}
@@ -344,7 +344,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
                   {sink ? <button type="button" title={insufficientMxm ? `Нужно ${sink.mxmPrice.toLocaleString("ru-RU")} MXM` : "Купить за MXM"} disabled={Boolean(busy) || !data.migrationReady || Boolean(unavailable) || insufficientMxm} onClick={() => void buyWithMxm(product)} className="mxm-secondary-action min-w-[92px] flex-1 !text-[10px]"><Gem size={11} />{busy === `mxm:${product.sku}` ? "Покупка…" : sink.mxmPrice.toLocaleString("ru-RU")}</button> : null}
                   <button type="button" title={!data.starsEnabled ? "Покупки Stars отключены в Runtime Config" : unavailable || "Купить за Telegram Stars"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="mxm-primary-action min-w-[104px] flex-1"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : `${product.stars} · Купить`}</button>
                 </div>
-                {actionReason ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />{actionReason}</span> : !termsAccepted && data.starsEnabled && !unavailable ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />При первом нажатии откроется подтверждение условий</span> : null}
+                {actionReason ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />{actionReason}</span> : null}
               </div>
             </article>;
           })}
@@ -369,7 +369,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
             <button type="button" disabled={Boolean(busy)} onClick={closePurchaseConsent} className="min-h-10 rounded-[13px] border border-white/10 px-3 text-[10px] font-semibold text-white disabled:opacity-40">Отмена</button>
             <button type="button" disabled={!termsDraftAccepted || Boolean(busy)} onClick={confirmPurchaseConsent} className="mxm-primary-action min-h-10"><Star size={11} fill="currentColor" />Подтвердить</button>
           </div>
-          <p className="mt-2 text-center text-[8px] text-[var(--muted-2)]">После подтверждения откроется официальный платёжный экран Telegram.</p>
+          
         </section>
       </div> : null}
     </div>

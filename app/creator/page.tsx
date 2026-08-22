@@ -49,7 +49,7 @@ export default function CreatorDashboardPage() {
   if (!data) return <div className="mxm-card mx-auto max-w-xl p-6 text-center"><p className="text-xs text-[var(--negative)]">{error||"Кабинет недоступен"}</p><button type="button" onClick={()=>void load()} className="mxm-secondary-action mt-4"><RefreshCw size={12}/>Повторить</button></div>;
   return <div className="mx-auto max-w-5xl">
     <header className="mxm-compact-page-head">
-      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<BadgeCheck size={16} className="text-[#63a7ff]" aria-label="Проверенный автор"/>:null}</div><p className="mt-1 text-[9px] text-[var(--muted)]">Статус монет, комиссии и активные инструменты — в одном месте.</p></div>
+      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<BadgeCheck size={16} className="text-[#63a7ff]" aria-label="Проверенный автор"/>:null}</div></div>
       <div className="flex shrink-0 gap-2"><Link href="/store?category=creator" className="mxm-compact-link"><ShoppingBag size={12}/>Инструменты</Link><Link href="/create" className="mxm-compact-link"><Rocket size={12}/>Запустить</Link></div>
     </header>
 
@@ -69,10 +69,10 @@ export default function CreatorDashboardPage() {
 
     <section className="mt-3">
       <div className="mxm-compact-section-head"><span>Активные инструменты</span><span>{data.entitlements.length}</span></div>
-      {data.entitlements.length?<div className="flex flex-wrap gap-1.5">{data.entitlements.map((item)=><span key={item.key} className="mxm-creator-entitlement"><Sparkles size={10}/><span>{entitlementLabel(item.key)}</span><small>{item.expiresAt?`до ${new Date(item.expiresAt).toLocaleDateString("ru-RU")}`:"без срока"}</small></span>)}</div>:<p className="text-[9px] text-[var(--muted)]">Активных инструментов нет. Они доступны в магазине MXM.</p>}
+      {data.entitlements.length?<div className="flex flex-wrap gap-1.5">{data.entitlements.map((item)=><span key={item.key} className="mxm-creator-entitlement"><Sparkles size={10}/><span>{entitlementLabel(item.key)}</span><small>{item.expiresAt?`до ${new Date(item.expiresAt).toLocaleDateString("ru-RU")}`:"без срока"}</small></span>)}</div>:<Link href="/store?category=creator" className="text-[9px] text-[var(--accent)]">Выбрать инструменты</Link>}
     </section>
 
-    {!data.analyticsUnlocked?<div className="mxm-card mt-3 flex items-center justify-between gap-3 p-3 text-[9px] text-[var(--muted)]"><span>Расширенные метрики покупателей доступны с аналитикой автора.</span><Link href="/store?category=creator" className="shrink-0 text-[var(--accent)]">Открыть</Link></div>:null}
+    {!data.analyticsUnlocked?<div className="mxm-card mt-3 flex items-center justify-between gap-3 p-3 text-[9px] text-[var(--muted)]"><span>Расширенная аналитика</span><Link href="/store?category=creator" className="shrink-0 text-[var(--accent)]">Открыть</Link></div>:null}
 
     <section className="mt-4 overflow-hidden rounded-[16px] border border-[var(--border)]">
       <div className="mxm-section-head"><span>Мои мемкоины</span><span>{data.coins.length}</span></div>

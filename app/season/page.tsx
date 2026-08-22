@@ -109,9 +109,8 @@ export default function SeasonPage() {
     <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Боевой пропуск · 30 дней</p>
+          <p className="text-[9px] uppercase tracking-[.14em] text-[var(--muted-2)]">Боевой пропуск</p>
           <h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">{data?.season.title || "Сезон MXM"}</h1>
-          <p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Получай XP за реальные действия внутри MXM: сделки, подарки, задания и запуск мемкоинов. Бесплатная ветка доступна всем, премиальная открывается до конца текущего сезона.</p>
         </div>
         <div className="shrink-0 text-right">
           <p className="flex items-center justify-end gap-1 text-[9px] text-[var(--muted)]"><Clock3 size={11} />Осталось</p>
@@ -135,23 +134,20 @@ export default function SeasonPage() {
     {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
 
     <section className="mb-3 border-y border-[var(--border-soft)] py-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><p className="text-[11px] font-semibold">Как получать XP</p><p className="mt-1 text-[8px] text-[var(--muted)]">Прогресс считается сервером из подтверждённых действий, вручную накрутить XP нельзя.</p></div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="mxm-hscroll gap-1.5">{XP_SOURCES.map((source) => <span key={source.label} className="mxm-xp-chip"><b>{source.xp}</b>{source.label}</span>)}</div>
         {claimableCount > 0
-          ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimAll()} className="mxm-primary-action min-h-9"><CheckCheck size={13} />{busy === "all" ? "Получаем…" : `Забрать всё · ${claimableCount}`}</button>
-          : <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Check size={11} />Доступные награды получены</span>}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-        {XP_SOURCES.map((source) => <div key={source.label} className="flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[8px]"><span className="text-[var(--muted)]">{source.label}</span><b className="font-medium text-[var(--accent)]">{source.xp}</b></div>)}
+          ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimAll()} className="mxm-primary-action min-h-9 shrink-0"><CheckCheck size={13} />{busy === "all" ? "Получаем…" : `Забрать · ${claimableCount}`}</button>
+          : <span className="inline-flex shrink-0 items-center gap-1 text-[9px] text-[var(--muted)]"><Check size={11} />Получено</span>}
       </div>
     </section>
 
     {data?.prestige ? <section className="mb-4 overflow-hidden rounded-[18px] border border-[#8f79e8]/20 bg-[linear-gradient(145deg,rgba(115,91,203,.08),rgba(245,196,81,.025),transparent)] p-4">
-      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[.12em] text-[#b9a7ff]"><Trophy size={12} />Prestige</p><h2 className="mt-1 text-sm font-semibold">Прогресс после {maxLevel} уровня</h2><p className="mt-1 max-w-2xl text-[8px] leading-4 text-[var(--muted)]">После основной дорожки каждые {data.prestige.stepXp} сезонного XP открывают новый Prestige-этап. Награды забираются последовательно, поэтому прогресс нельзя перескочить или выдать дважды.</p></div><div className="shrink-0 text-right"><p className="text-[8px] text-[var(--muted)]">Достигнуто</p><p className="mt-1 text-base font-semibold">P{data.prestige.level}</p><p className="text-[7px] text-[var(--muted-2)]">получено {data.prestige.claimed}</p></div></div>
+      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[.12em] text-[#b9a7ff]"><Trophy size={12} />Prestige</p><h2 className="mt-1 text-sm font-semibold">После {maxLevel} уровня</h2><p className="mt-1 text-[8px] text-[var(--muted)]">Новый этап каждые {data.prestige.stepXp} XP</p></div><div className="shrink-0 text-right"><p className="text-[8px] text-[var(--muted)]">Достигнуто</p><p className="mt-1 text-base font-semibold">P{data.prestige.level}</p><p className="text-[7px] text-[var(--muted-2)]">получено {data.prestige.claimed}</p></div></div>
       {data.prestige.unlocked ? <><div className="mt-3"><div className="flex items-center justify-between text-[8px] text-[var(--muted)]"><span>{data.xp.toLocaleString("ru-RU")} XP</span><span>след. {data.prestige.nextRequiredXp.toLocaleString("ru-RU")} XP</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[#9c86ef]" style={{ width: `${Math.min(100, Math.max(0, ((data.xp - (data.prestige.nextRequiredXp - data.prestige.stepXp)) / Math.max(1, data.prestige.stepXp)) * 100))}%` }} /></div></div><div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[.06] pt-3"><div className="min-w-0"><p className="text-[9px] text-[var(--muted)]">Следующая награда · P{data.prestige.nextClaimLevel}</p><p className="mt-0.5 truncate text-[10px] font-medium">{data.prestige.nextReward?.label || "Prestige-награда"}</p></div><button type="button" disabled={data.prestige.claimable < 1 || Boolean(busy)} onClick={() => void claimPrestige()} className="mxm-primary-action shrink-0">{busy === "prestige" ? "Получаем…" : data.prestige.claimable > 0 ? `Забрать P${data.prestige.nextClaimLevel}` : `Нужно ${Math.max(0, data.prestige.nextRequiredXp - data.xp)} XP`}</button></div></> : <div className="mt-3 flex items-center gap-2 border-t border-white/[.06] pt-3 text-[9px] text-[var(--muted)]"><LockKeyhole size={12} />Prestige откроется после завершения основной дорожки.</div>}
     </section> : null}
 
-    <div className="mb-2 flex flex-wrap items-center gap-3 text-[8px] text-[var(--muted)]"><span className="mxm-season-state is-ready">Доступно</span><span className="mxm-season-state is-claimed">Получено</span><span className="mxm-season-state">Закрыто</span><span className="ml-auto">Дорожка центрируется на текущем уровне</span></div>
+    <div className="mb-2 flex items-center gap-3 text-[8px] text-[var(--muted)]"><span className="mxm-season-state is-ready">Доступно</span><span className="mxm-season-state is-claimed">Получено</span><span className="mxm-season-state">Закрыто</span></div>
     <div ref={trackRef} className="mxm-season-track mxm-hscroll pb-2">
       {data?.levels.map((item) => <SeasonLevelCard key={item.level} item={item} currentLevel={data.level} premium={data.premium} busy={busy} claim={claim} />)}
     </div>

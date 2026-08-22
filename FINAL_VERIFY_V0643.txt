@@ -1,0 +1,51 @@
+MemeX Market v0.64.3 — final verification
+========================================
+
+Scope
+-----
+UX & Quality Pass over existing systems. 20 project files differ from v0.64.2.
+No new database migration is introduced.
+
+Checks completed
+----------------
+TS/TSX parser: 181 files, 0 syntax errors.
+Local import scan: 181 source files, 0 broken local imports.
+CSS brace regression: 858 open / 858 close, delta 0.
+Dependency-independent semantic TypeScript smoke check: PASS.
+  - Temporary ambient dependency stubs were used only during verification.
+  - They were removed and are not included in the project.
+Release product/security checks: 136 PASS.
+Release non-dependency failures: 0.
+
+Additional TypeScript risk fixed
+--------------------------------
+app/api/gifts/[id]/list/route.ts:
+The Next `after()` callback now awaits `evaluatePlayerMarketHandoff(false)` inside
+an explicit async block and resolves void. This avoids returning
+Promise<GiftMarketLiquidityState | void> from the post-response callback.
+
+Dependency-backed checks
+------------------------
+The supplied source still does not contain node_modules. Corepack cannot fetch
+pnpm@10.15.0 because registry.npmjs.org is unreachable in this environment
+(getaddrinfo EAI_AGAIN).
+
+Therefore the repository release gate cannot execute its project-local:
+- node_modules/typescript/bin/tsc
+- node_modules/eslint/bin/eslint.js
+
+`pnpm run build` is NOT claimed as green here. Vercel/CI with installed
+dependencies remains the final dependency-backed build gate.
+
+Next.js project instructions
+----------------------------
+AGENTS.md requests consulting node_modules/next/dist/docs before Next-specific
+changes. node_modules is unavailable in this environment, so this pass avoided
+introducing or changing Next.js routing/API conventions; changes are existing
+component/UI logic, CSS, copy, release checks, and one callback return-type fix.
+
+Database
+--------
+v0.64.3 requires no new migration.
+Existing `supabase/migrations/100001_progression_update_v064.sql` must already
+be applied, together with earlier required migrations/hotfixes.

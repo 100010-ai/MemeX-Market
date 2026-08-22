@@ -136,9 +136,9 @@ export default function TasksPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-5 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-4">
-        <div><p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted-2)]">Прогресс</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Задания и награды</h1></div>
-        <div className="text-right"><p className="text-[9px] text-[var(--muted)]">доступно в заданиях</p><p className="mt-1 flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1.5 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать всё · ${claimable.length}`}</button> : null}</div>
+      <div className="mb-4 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-3">
+        <h1 className="text-[20px] font-semibold tracking-[-.035em]">Задания</h1>
+        <div className="text-right"><p className="flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать · ${claimable.length}`}</button> : null}</div>
       </div>
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
@@ -159,7 +159,7 @@ export default function TasksPage() {
           <section key={period} className="mb-7">
             <div className="mb-2 flex items-center justify-between py-1.5">
               <div className="flex items-center gap-2 text-[12px] font-semibold"><Icon size={14} className={period === "daily" ? "text-[#ff855d]" : "text-[var(--muted)]"} />{sectionMeta[period].title}<span className="text-[9px] font-normal text-[var(--muted-2)]">{items.length}</span></div>
-              {period !== "onboarding" ? <span className="flex items-center gap-1 text-[9px] text-[var(--muted-2)]"><Clock3 size={10} />автосброс</span> : null}
+              {period !== "onboarding" ? <Clock3 size={11} className="text-[var(--muted-2)]" aria-label="Автосброс" /> : null}
             </div>
             <div className="mxm-task-list">{items.map((mission) => {
               const done = mission.progress >= mission.target;
@@ -167,7 +167,7 @@ export default function TasksPage() {
               const channelTask = mission.actionType === "telegram_channel_subscription";
               const displayTitle = channelTask ? "Подписка на официальный канал" : mission.title;
               const displayDescription = channelTask
-                ? "Подпишитесь на канал MEMEX MARKET и подтвердите подписку. После получения награды подписка продолжает проверяться."
+                ? "Подпишитесь и подтвердите подписку."
                 : mission.description;
               const StateIcon = channelTask ? RadioTower : mission.claimed ? CircleCheckBig : Gift;
               return (
@@ -176,7 +176,7 @@ export default function TasksPage() {
                     <div className={`mxm-task-card-icon ${mission.claimed ? "is-done" : done ? "is-ready" : ""}`}><StateIcon size={16} /></div>
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold leading-[1.35] tracking-[-.015em] text-white">{displayTitle}</h3><p className="mt-1 text-[9px] leading-[1.5] text-[var(--muted)]">{displayDescription}</p></div>
+                        <div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold leading-[1.35] tracking-[-.015em] text-white">{displayTitle}</h3><p className="mt-1 line-clamp-1 text-[9px] leading-[1.5] text-[var(--muted)]">{displayDescription}</p></div>
                         <span className="mxm-task-reward"><Gem size={10} fill="currentColor" />{money(mission.reward)}</span>
                       </div>
                       <div className="mt-3 flex items-center gap-2.5">
@@ -194,7 +194,7 @@ export default function TasksPage() {
                     ) : done ? (
                       <div className="flex min-w-0 flex-1 items-center gap-2 text-[9px] text-[var(--positive)]"><CircleCheckBig size={12} /><span>Задание выполнено</span></div>
                     ) : (
-                      <div className="min-w-0 flex-1 text-[9px] text-[var(--muted-2)]">Выполните условие, чтобы получить награду</div>
+                      <div className="min-w-0 flex-1 text-[9px] text-[var(--muted-2)]">В процессе</div>
                     )}
 
                     <div className="mxm-task-actions">
@@ -210,7 +210,7 @@ export default function TasksPage() {
         );
       })}
 
-      {claimable.length ? <p className="pb-3 text-[9px] text-[var(--muted-2)]">Готово к получению: {claimable.length} · прогресс обновляется при возвращении в приложение</p> : null}
+      {claimable.length ? <p className="pb-3 text-[9px] text-[var(--muted-2)]">Готово · {claimable.length}</p> : null}
     </div>
   );
 }

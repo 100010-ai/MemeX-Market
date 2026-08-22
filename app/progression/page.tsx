@@ -128,9 +128,7 @@ export default function ProgressionPage() {
     <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="mxm-eyebrow">Долгосрочная прогрессия</p>
-          <h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">Прогресс аккаунта</h1>
-          <p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Уровни, достижения и ежедневная серия считаются по подтверждённым действиям MXM.</p>
+          <h1 className="text-[18px] font-semibold tracking-[-.035em]">Прогресс</h1>
         </div>
         <div className="shrink-0 text-right"><p className="text-[8px] text-[var(--muted)]">Достижения</p><p className="mt-0.5 text-[12px] font-semibold">{unlockedCount}/{data?.achievements.length || 0}</p></div>
       </div>
@@ -172,7 +170,7 @@ export default function ProgressionPage() {
 
     <section className="mt-3 border-y border-[var(--border-soft)] py-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0"><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Flame size={14} />Ежедневная серия</h2><p className="mt-0.5 truncate text-[8px] text-[var(--muted)]">Серия {data?.streak.currentStreak || 0} · рекорд {data?.streak.bestStreak || 0} · получено {data?.streak.totalClaims || 0} · сброс {data?.streak.resetTimezone || "UTC"}</p></div>
+        <div className="min-w-0"><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Flame size={14} />Серия · {data?.streak.currentStreak || 0}</h2><p className="mt-0.5 text-[8px] text-[var(--muted)]">Рекорд {data?.streak.bestStreak || 0}</p></div>
         <button type="button" disabled={!data?.streak.canClaim || Boolean(busy)} onClick={() => void claim("claim_streak")} className="mxm-primary-action shrink-0">{busy === "streak" ? "Получаем…" : data?.streak.claimedToday ? "Сегодня получено" : `Забрать Д${data?.streak.nextDay || 1}`}</button>
       </div>
       <div className="mt-2.5 grid grid-cols-7 gap-1">
@@ -188,7 +186,7 @@ export default function ProgressionPage() {
     </section>
 
     <section className="mt-3">
-      <div className="mb-2 flex items-end justify-between gap-3"><div><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Trophy size={14} />Достижения</h2><p className="mt-0.5 text-[8px] text-[var(--muted)]">XP начисляется один раз при первом выполнении.</p></div><span className="text-[8px] text-[var(--muted)]">{unlockedCount} открыто</span></div>
+      <div className="mb-2 flex items-end justify-between gap-3"><div><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Trophy size={14} />Достижения</h2></div><span className="text-[8px] text-[var(--muted)]">{unlockedCount} открыто</span></div>
       <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
         <button type="button" onClick={() => setAchievementFilter("all")} className={`mxm-filter-chip ${achievementFilter === "all" ? "is-active" : ""}`}>Все <span>{data?.achievements.length || 0}</span></button>
         {categories.map(([category, items]) => <button key={category} type="button" onClick={() => setAchievementFilter(category)} className={`mxm-filter-chip ${achievementFilter === category ? "is-active" : ""}`}>{CATEGORY_LABEL[category] || category}<span>{items.filter((item) => item.unlocked).length}/{items.length}</span></button>)}
@@ -204,7 +202,7 @@ export default function ProgressionPage() {
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-white/[.03] ${RARITY_TEXT[item.rarity] || RARITY_TEXT.common}`}>{item.unlocked ? <Award size={13} /> : <LockKeyhole size={12} />}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2"><p className="text-[9px] font-medium">{item.title}</p><span className={`shrink-0 text-[6.5px] uppercase ${RARITY_TEXT[item.rarity] || RARITY_TEXT.common}`}>{rarityLabel(item.rarity)}</span></div>
-                    <p className="mt-0.5 text-[7.5px] leading-3.5 text-[var(--muted)]">{item.description}</p>
+                    <p className="mt-0.5 line-clamp-1 text-[7.5px] leading-3.5 text-[var(--muted)]">{item.description}</p>
                     <div className="mt-1.5 flex items-center justify-between text-[6.5px] text-[var(--muted)]"><span>{Math.floor(item.progress).toLocaleString("ru-RU")} / {Math.floor(item.target).toLocaleString("ru-RU")}</span><span>+{item.xpReward} XP</span></div>
                     <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.045]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${item.unlocked ? 100 : percent}%` }} /></div>
                   </div>

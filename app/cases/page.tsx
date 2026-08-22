@@ -191,9 +191,7 @@ export default function CasesPage() {
   return <div className="mx-auto max-w-5xl">
     <header className="mxm-compact-page-head">
       <div className="min-w-0">
-        <p className="mxm-eyebrow">Коллекционные серии</p>
-        <div className="mt-1 flex items-center gap-2"><h1 className="mxm-page-title">Кейсы MXM</h1><span className="mxm-status-chip">серверный дроп</span></div>
-        <p className="mt-1 text-[9px] text-[var(--muted)]">Открытые шансы · pity-гарантии · дубликаты компенсируются MXM.</p>
+        <div className="flex items-center gap-2"><h1 className="mxm-page-title">Кейсы MXM</h1><span className="mxm-status-chip">честный дроп</span></div>
       </div>
       <Link href="/store?category=cases" className="mxm-compact-link"><Star size={12} fill="currentColor" />Магазин</Link>
     </header>
@@ -201,9 +199,9 @@ export default function CasesPage() {
     {error ? <div className="mxm-alert mxm-alert-error mb-2.5">{error}</div> : null}
 
     <div className="mxm-case-summary">
-      <span><b>{totalOwned}</b> в инвентаре</span>
-      <span><b>{data?.cases.length || 0}</b> серий</span>
-      <span><b>{data?.history.length || 0}</b> открытий в истории</span>
+      <span><b>{totalOwned}</b><small>кейсов</small></span>
+      <span><b>{data?.cases.length || 0}</b><small>серий</small></span>
+      <span><b>{data?.history.length || 0}</b><small>открытий</small></span>
     </div>
 
     <div className="mxm-hscroll mxm-case-tabs mt-2.5 gap-1.5 pb-1">
@@ -234,23 +232,20 @@ export default function CasesPage() {
                 </div>)}
               </div>
             </div>
-            <div className="mt-3 flex items-center justify-center gap-3">
-              <p className="text-[9px] text-[var(--muted)]">Результат уже зафиксирован сервером</p>
-              <button type="button" onClick={skipReveal} className="mxm-case-skip">Пропустить</button>
-            </div>
+            <div className="mt-3 flex justify-center"><button type="button" onClick={skipReveal} className="mxm-case-skip">Пропустить</button></div>
           </div> : reward ? <div className="mxm-case-reward-compact">
             <span className={`mxm-reward-orb is-${reward.rarity}`}><Sparkles size={23} /></span>
             {reward.pityTriggered ? <span className="mxm-pity-trigger"><ShieldCheck size={9} />Гарантия {rarityLabel(reward.pityRarity || reward.rarity)}</span> : null}
             <p className="mt-2 text-[8px] uppercase tracking-[.15em] text-[var(--muted)]">{rarityLabel(reward.rarity)}</p>
             <p className="mt-1 text-[16px] font-semibold tracking-[-.02em]">{reward.label}</p>
-            <p className="mt-1 text-[8px] text-[var(--muted)]">Награда уже зачислена</p>
+            
             {Number(reward.overflowMxmCoins || 0) > 0 ? <p className="mt-1.5 text-[8px] text-[var(--accent)]">Излишек энергии: +{Number(reward.overflowMxmCoins).toLocaleString("ru-RU")} MXM</p> : null}
           </div> : <div className="mxm-case-idle-compact">
             <div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}><Box size={38} /></div>
             <div className="min-w-0">
               <p className="text-[8px] uppercase tracking-[.13em] text-[var(--muted-2)]">{TIER_LABEL[current?.tier || "starter"] || "Серия MXM"}</p>
               <h2 className="mt-1 text-[15px] font-semibold">{current?.title || "Загрузка…"}</h2>
-              <p className="mt-1 max-w-md text-[9px] leading-4 text-[var(--muted)]">{current?.description}</p>
+              <p className="mt-1 line-clamp-2 max-w-md text-[9px] leading-4 text-[var(--muted)]">{current?.description}</p>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[8px] text-[var(--muted)]">
                 <span>Инвентарь <b className="font-medium text-white">{current?.quantity || 0}</b></span>
                 {current?.remaining != null ? <span>Тираж <b className="font-medium text-white">{current.remaining.toLocaleString("ru-RU")}</b></span> : null}
@@ -265,10 +260,9 @@ export default function CasesPage() {
         </button> : <Link href="/store?category=cases" className="mxm-primary-action mt-2.5 w-full">
           <PackageOpen size={14} />Купить кейс
         </Link>}
-        <p className="mt-1.5 flex items-center justify-center gap-1 text-[7px] text-[var(--muted-2)]"><ShieldCheck size={8} />Idempotency защищает от двойной выдачи при повторном запросе.</p>
 
         <section className="mt-3 border-t border-[var(--border-soft)] pt-2.5">
-          <div className="mb-2 flex items-center justify-between"><p className="text-[9px] font-medium">Персональная гарантия</p><span className="text-[7px] text-[var(--muted-2)]">счётчики по серии</span></div>
+          <div className="mb-2 flex items-center justify-between"><p className="text-[9px] font-medium">Гарантии</p><span className="text-[7px] text-[var(--muted-2)]">pity</span></div>
           <div className="grid grid-cols-3 gap-1.5">
             {(["rare", "epic", "legendary"] as const).map((rarity) => {
               const pity = current?.pity[rarity] || null;

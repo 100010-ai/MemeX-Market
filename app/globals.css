@@ -2515,3 +2515,264 @@ a:focus-visible,
 .mxm-season-reward p { margin-top:2px; overflow:hidden; color:#dfe5eb; font-size:7.5px; font-weight:570; text-overflow:ellipsis; white-space:nowrap; }
 .mxm-season-reward button,.mxm-season-reward > span:last-child:not(.mxm-season-reward-icon) { flex:none; color:var(--accent); font-size:7px; }
 .mxm-season-reward > span.is-claimed { color:var(--positive)!important; }
+
+/* v0.64.3 — UX & quality pass. Dense, quiet surfaces; less copy, stronger visual hierarchy. */
+button,
+input[type="button"],
+input[type="submit"] {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button:disabled { -webkit-text-fill-color: currentColor; }
+
+.mxm-store-product,
+.mxm-season-level-card,
+.mxm-gift-card {
+  content-visibility: auto;
+}
+.mxm-store-product {
+  contain: layout paint style;
+  contain-intrinsic-size: 190px;
+  border-top: 1px solid var(--border-soft) !important;
+  padding-inline: 1px;
+}
+.mxm-store-product:first-child { border-top-color: transparent !important; }
+
+.mxm-market-pulse {
+  position: relative;
+  overflow: hidden;
+}
+.mxm-market-pulse::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 100% at 8% 0%, rgba(139,164,255,.045), transparent 72%);
+  content: "";
+}
+.mxm-active-filters > button {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(139,164,255,.11);
+  border-radius: 999px;
+  background: rgba(139,164,255,.035);
+  color: #cbd5fb;
+  padding: 0 8px;
+  font-size: 7.5px;
+  white-space: nowrap;
+}
+.mxm-active-filters > button:active { transform: scale(.97); }
+
+.mxm-trade-panel,
+.mxm-gift-trade-panel {
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 17px;
+  background: linear-gradient(180deg, rgba(17,21,27,.88), rgba(10,13,17,.9));
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 12px 32px rgba(0,0,0,.10);
+}
+.mxm-trade-panel input,
+.mxm-gift-trade-panel input,
+.mxm-gift-trade-panel select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.mxm-gift-metric {
+  min-width: 0;
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  padding: 8px 9px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035);
+}
+
+.mxm-xp-chip {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 999px;
+  background: rgba(255,255,255,.018);
+  color: var(--muted);
+  padding: 0 8px;
+  font-size: 7px;
+  white-space: nowrap;
+}
+.mxm-xp-chip b { color: var(--accent); font-size: 7.5px; font-weight: 680; }
+
+.mxm-case-summary {
+  gap: 0;
+  overflow: hidden;
+  padding-bottom: 8px;
+}
+.mxm-case-summary > span {
+  display: inline-flex;
+  min-width: 72px;
+  align-items: baseline;
+  gap: 4px;
+  border-right: 1px solid var(--border-soft);
+  padding: 0 10px;
+}
+.mxm-case-summary > span:first-child { padding-left: 0; }
+.mxm-case-summary > span:last-child { border-right: 0; }
+.mxm-case-summary b { font-size: 11px; }
+.mxm-case-summary small { color: var(--muted-2); font-size: 7px; }
+.mxm-case-stage-compact {
+  background:
+    radial-gradient(55% 70% at 50% 20%, rgba(139,164,255,.055), transparent 72%),
+    linear-gradient(180deg, rgba(14,18,23,.9), rgba(8,10,13,.94));
+}
+.mxm-case-stage-compact.is-opening {
+  border-color: rgba(139,164,255,.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 18px 42px rgba(0,0,0,.16);
+}
+.mxm-case-reel-viewport { mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+.mxm-case-reel-item {
+  background: linear-gradient(180deg, rgba(23,29,36,.98), rgba(13,17,22,.98));
+  transform: translateZ(0);
+}
+.mxm-case-reel-item.is-winner { transform: translateZ(0) scale(1.015); }
+.mxm-case-skip {
+  min-height: 28px;
+  border-color: rgba(255,255,255,.09);
+  background: rgba(255,255,255,.03);
+  color: #d5dbe3;
+  padding-inline: 10px;
+  font-size: 7.5px;
+}
+
+.mxm-season-level-card {
+  contain: layout paint style;
+  contain-intrinsic-size: 188px 143px;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.mxm-season-level-card.is-current { transform: translateY(-1px); }
+.mxm-season-level-card.is-milestone {
+  background: radial-gradient(90% 65% at 50% 0%, rgba(139,164,255,.055), rgba(255,255,255,.012));
+}
+.mxm-season-level-card.is-milestone .mxm-season-level-number {
+  box-shadow: 0 0 0 3px rgba(139,164,255,.055);
+}
+
+.mxm-profile-summary {
+  background: radial-gradient(90% 65% at 15% 0%, rgba(139,164,255,.045), transparent 70%) !important;
+}
+.mxm-profile-action {
+  min-height: 49px;
+  gap: 9px;
+  padding-block: 8px;
+}
+.mxm-profile-action small { color: var(--muted-2); }
+
+.mxm-topbar-fixed {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.mxm-bottom-nav {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Keep compact feedback readable without turning every page into a text wall. */
+.mxm-alert { max-width: 100%; }
+.mxm-alert:not(.mxm-alert-error) { background: rgba(139,164,255,.035); border-color: rgba(139,164,255,.10); }
+
+@media (max-width: 640px) {
+  .mxm-trade-panel,
+  .mxm-gift-trade-panel { border-radius: 15px; padding: 10px; }
+  .mxm-case-stage-compact { min-height: 190px; }
+  .mxm-case-idle-compact { grid-template-columns: 74px minmax(0,1fr); gap: 12px; }
+  .mxm-case-idle-compact .mxm-case-art { width: 68px; height: 68px; border-radius: 18px; }
+  .mxm-case-reel-viewport { height: 86px; }
+  .mxm-case-reel-item { width: 90px; height: 72px; flex-basis: 90px; }
+  .mxm-case-reel-track.is-spinning { transform: translate3d(calc(50% - 45px - (var(--mxm-case-stop) * 98px)),0,0); }
+  .mxm-season-level-card { width: 172px; flex-basis: 172px; }
+  .mxm-store-product { min-height: 150px !important; }
+  .mxm-profile-action small { display: none; }
+}
+
+@media (pointer: coarse) {
+  .mxm-store-product,
+  .mxm-season-level-card { box-shadow: none; }
+  .mxm-trade-panel,
+  .mxm-gift-trade-panel { box-shadow: inset 0 1px 0 rgba(255,255,255,.02); }
+}
+
+/* v0.64.3 — final quiet-detail pass. */
+.mxm-gift-metric p:last-child,
+.mxm-case-summary b,
+.mxm-season-level-number,
+.mxm-balance-pill,
+.mxm-creator-metric-pill b,
+.mxm-leader-me-pin b,
+.control-panel input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+.mxm-task-card,
+.mxm-leader-podium-item,
+.mxm-creator-entitlement {
+  transition: background-color .14s ease, border-color .14s ease, transform .14s ease;
+}
+
+.control-audit-details {
+  align-self: start;
+  min-width: 0;
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+  color: var(--muted);
+  font-size: 9px;
+}
+.control-audit-details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 9px;
+  color: var(--muted);
+  user-select: none;
+}
+.control-audit-details > summary::-webkit-details-marker { display: none; }
+.control-audit-details[open] > summary { border-bottom: 1px solid var(--border-soft); }
+.control-audit-details pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  padding: 8px 9px;
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+/* Frame ornaments stay integral and quiet at small sizes instead of reading as stray lines. */
+[data-profile-frame="carbon_frame"] .mxm-profile-frame-mark,
+[data-profile-frame="chrome_frame"] .mxm-profile-frame-mark,
+[data-profile-frame="founder_frame"] .mxm-profile-frame-mark {
+  width: 15px;
+  height: 15px;
+  right: -4px;
+  bottom: 3px;
+  opacity: .86;
+}
+[data-profile-frame="carbon_frame"] .mxm-profile-frame-mark {
+  border-radius: 4px 8px 5px 8px;
+  background: linear-gradient(145deg,#242c35,#0b0f13 70%);
+  color: #8c99a8;
+}
+[data-profile-frame="chrome_frame"] .mxm-profile-frame-mark {
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%,#f7fafc,#697583 54%,#171c22 76%);
+  color: #f3f6f9;
+}
+[data-profile-frame="founder_frame"] .mxm-profile-frame-mark {
+  transform: rotate(8deg);
+  border-radius: 5px 9px 5px 9px;
+  background: linear-gradient(145deg,#d8c28b,#29251c 72%);
+  color: #f0dfad;
+}
+
+@media (max-width: 640px) {
+  .mxm-task-card { border-radius: 14px; }
+  .mxm-profile-frame-mark { transform: scale(.9); transform-origin: center; }
+  .control-audit-details pre { max-height: 140px; }
+}
