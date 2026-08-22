@@ -66,7 +66,7 @@ function rows<T>(value: unknown): T[] {
 export async function getMarketActivity(supabase: SupabaseClient, limit = 30): Promise<ActivityItem[]> {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit || 30), 100));
   const [coinTrades, giftTrades, events, listingEvents] = await Promise.all([
-    supabase.from("trades").select("id,profile_id,coin_id,side,quote_amount,created_at,coins(symbol,image_url),profiles(username,first_name,is_system)").order("created_at", { ascending: false }).limit(safeLimit),
+    supabase.from("trades").select("id,profile_id,coin_id,side,quote_amount,created_at,coins(symbol,image_url),profiles(username,first_name,is_system)").eq("is_launch_seed", false).order("created_at", { ascending: false }).limit(safeLimit),
     supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,price,created_at,gift_assets(base_name,gift_number,model_preview_url,model_media_url,symbol_media_url),profiles!gift_trades_buyer_profile_id_fkey(username,first_name,is_system)").order("created_at", { ascending: false }).limit(safeLimit),
     supabase.from("market_events").select("id,actor_profile_id,kind,coin_id,virtual_gift_id,amount,created_at").order("created_at", { ascending: false }).limit(safeLimit),
     supabase.from("gift_listing_events").select("id,actor_profile_id,virtual_gift_id,kind,price,previous_price,created_at").order("created_at", { ascending: false }).limit(safeLimit),

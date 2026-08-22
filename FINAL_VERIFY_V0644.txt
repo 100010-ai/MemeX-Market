@@ -1,0 +1,39 @@
+MemeX Market v0.64.4 — final verification
+========================================
+
+Scope
+-----
+Memecoin launch-state correction + compact one-screen mobile trading page.
+
+Checks completed
+----------------
+- TS/TSX parser: 181 files, 0 syntax errors.
+- Local import scan: 181 source files, 0 broken local imports.
+- CSS brace regression: 905 open / 905 close, delta 0.
+- SQL migration delimiters: 12 $$ markers (6 functions), balanced parentheses 335 / 335, one BEGIN / one COMMIT.
+- Release product/security checks: 142 PASS.
+- v0.64.4 checks cover launch seed exclusion, compact mobile coin screen, metrics sheet, history/feed filtering and compact chart formatting.
+
+Dependency-backed checks
+------------------------
+The supplied source tree has no node_modules. The repository release gate therefore cannot execute its local TypeScript and ESLint binaries:
+- node_modules/typescript/bin/tsc: unavailable
+- node_modules/eslint/bin/eslint.js: unavailable
+
+This report does NOT claim a successful `pnpm run build` in this container. Vercel/CI with installed dependencies remains the final dependency-backed build gate.
+
+Database
+--------
+`supabase/migrations/100002_memecoin_market_polish_v0644.sql` MUST be applied before this frontend is deployed because application queries use the new `trades.is_launch_seed` column and creation requires schema version 201.
+
+Expected fresh-coin public state
+--------------------------------
+- 0% public change before the first public trade.
+- 0 public volume before the first public trade.
+- 0 public trades before the first public trade.
+- No fake launch candle caused by the creator bootstrap.
+- Creator seed still funds the AMM and still creates the creator holding/lock state.
+
+Additional regression caught before packaging
+--------------------------------------------
+- Removed accidental `is_launch_seed` filters from gift_trades, market_events and gift_listing_events; the filter remains only on memecoin trade queries.

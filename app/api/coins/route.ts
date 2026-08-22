@@ -28,7 +28,7 @@ async function GETHandler() {
   ]);
   const firstError = coinsResult.error || settingsResult.error || monetizationResult.error;
   if (firstError) return apiFailure(firstError, "Не удалось загрузить правила запуска мемкоина");
-  if (!settingsResult.data || Number(settingsResult.data.schema_version || 0) < 200) {
+  if (!settingsResult.data || Number(settingsResult.data.schema_version || 0) < 201) {
     return NextResponse.json({ error: "Схема экономики MXM устарела", code: "DB_SCHEMA_OUTDATED" }, { status: 503 });
   }
   const rows = (coinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
@@ -72,7 +72,7 @@ async function POSTHandler(request: Request) {
 
   const supabase = getSupabaseAdmin();
   const readiness = await supabase.from("economy_settings").select("schema_version,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps").eq("singleton", true).maybeSingle();
-  if (readiness.error || !readiness.data || Number(readiness.data.schema_version || 0) < 200) {
+  if (readiness.error || !readiness.data || Number(readiness.data.schema_version || 0) < 201) {
     if (readiness.error) console.warn("coin create blocked: economy migration required", readiness.error.code);
     return NextResponse.json({ error: "Запуск мемкоинов временно недоступен: экономика обновляется" }, { status: 503 });
   }
@@ -125,7 +125,7 @@ async function POSTHandler(request: Request) {
     const startPriceMax = Number(readiness.data.coin_start_price_max);
     const floorMax = startPrice * Number(readiness.data.coin_floor_max_bps) / 10_000;
     if (!Number.isFinite(initialBuy) || initialBuy < initialBuyMin || initialBuy > initialBuyMax) {
-      return NextResponse.json({ error: `Первичная покупка: от ${initialBuyMin} до ${initialBuyMax} виртуальных TON` }, { status: 400 });
+      return NextResponse.json({ error: `Стартовый резерв: от ${initialBuyMin} до ${initialBuyMax} виртуальных TON` }, { status: 400 });
     }
     if (!Number.isFinite(startPrice) || startPrice < startPriceMin || startPrice > startPriceMax) {
       return NextResponse.json({ error: `Стартовая цена: от ${startPriceMin} до ${startPriceMax}` }, { status: 400 });

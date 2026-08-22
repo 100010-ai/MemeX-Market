@@ -92,6 +92,18 @@ export default function CreatePage() {
     && Number.isFinite(floorPriceValue) && floorPriceValue >= 0 && floorPriceValue <= startPriceValue * rules.floorMaxBps / 10_000;
   const hasBalance = Boolean(profile && profile.availableBalance >= rules.launchFee + (Number.isFinite(initialBuyValue) ? initialBuyValue : 0));
   const hasEnergy = rules.energy >= rules.energyCost;
+  const launchPreview = (() => {
+    if (!Number.isFinite(initialBuyValue) || !Number.isFinite(startPriceValue) || initialBuyValue <= 0 || startPriceValue <= 0) return null;
+    const supply = 1_000_000_000;
+    const initialQuoteReserve = supply * startPriceValue;
+    const initialTokenReserve = supply;
+    const netSeed = initialBuyValue * (1 - COIN_TRADE_FEE_PERCENT / 100);
+    const invariant = initialTokenReserve * initialQuoteReserve;
+    const quoteReserve = initialQuoteReserve + netSeed;
+    const tokenReserve = invariant / quoteReserve;
+    const openingPrice = quoteReserve / tokenReserve;
+    return { openingPrice, marketCap: openingPrice * supply, liquidity: quoteReserve * 2 };
+  })();
   const canLaunch = Boolean(rulesLoaded && rules.economyReady && profile && validEconomy && hasBalance && hasEnergy && hasSlot && !cooldownActive && name.trim().length >= 2 && symbol.length >= 2 && !busy && !imageBusy);
 
   async function create() {
@@ -115,7 +127,7 @@ export default function CreatePage() {
     finally { setBusy(false); }
   }
 
-  const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Экономика рынка ещё не готова" : !validEconomy ? "Проверьте первичную покупку, стартовую и минимальную цену" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных мемкоинов` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasEnergy ? `Нужно ${rules.energyCost} энергии · доступно ${rules.energy}` : !hasBalance ? `Нужно ${money(rules.launchFee + initialBuyValue)} доступного баланса` : null;
+  const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Экономика рынка ещё не готова" : !validEconomy ? "Проверьте стартовую позицию и цены" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных мемкоинов` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasEnergy ? `Нужно ${rules.energyCost} энергии · доступно ${rules.energy}` : !hasBalance ? `Нужно ${money(rules.launchFee + initialBuyValue)} доступного баланса` : null;
 
   return (
     <div className="mx-auto max-w-xl mxm-page-enter">
@@ -142,17 +154,17 @@ export default function CreatePage() {
           <Field label="Тикер" hint={`${symbol.length}/8`}><div className="mxm-input flex items-center"><span className="text-[var(--muted)]">$</span><input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0,8))} placeholder="CAT" className="min-w-0 flex-1 bg-transparent px-1 outline-none" /></div></Field>
           <Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={180} rows={3} placeholder="Идея мемкоина" className="mxm-input min-h-[84px] resize-none" /></Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Первичная покупка" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><input value={initialBuy} onChange={(e) => setInitialBuy(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
+            <Field label="Стартовый резерв" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><input value={initialBuy} onChange={(e) => setInitialBuy(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
             <Field label="Стартовая цена" hint={`${rules.startPriceMin}–${rules.startPriceMax}`}><input value={startPrice} onChange={(e) => setStartPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
             <Field label="Мин. цена на 30 дней" hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(e) => setFloorPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
           </div>
-          <p className="text-[9px] leading-4 text-[var(--muted-2)]">50% токенов первичной покупки линейно разблокируются за 30 дней. Минимальная цена действует только в стартовый 30-дневный период.</p>
+          <p className="text-[9px] leading-4 text-[var(--muted-2)]">50% токенов стартового резерва линейно разблокируются за 30 дней. Минимальная цена действует только в стартовый 30-дневный период.</p>
         </div>
 
         <div className="mt-4 border-y border-[var(--border-soft)] py-3">
           <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-            <Info icon={<Sparkles size={12} />} label="Начальная капитализация" value={Number.isFinite(startPriceValue) ? money(startPriceValue * 1_000_000_000) : "—"} />
-            <Info icon={<ShieldCheck size={12} />} label="Ликвидность AMM" value={Number.isFinite(startPriceValue) ? money(startPriceValue * 1_000_000_000) : "—"} />
+            <Info icon={<Sparkles size={12} />} label="Цена открытия" value={launchPreview ? launchPreview.openingPrice.toExponential(3).replace("e+", "e") : "—"} />
+            <Info icon={<ShieldCheck size={12} />} label="Ликвидность AMM" value={launchPreview ? money(launchPreview.liquidity) : "—"} />
             <Info icon={<Rocket size={12} />} label="Комиссия сделки" value={`${COIN_TRADE_FEE_PERCENT.toLocaleString("ru-RU")}%`} />
             <Info icon={<WalletCards size={12} />} label="Доступный баланс" value={profile ? money(profile.availableBalance) : "—"} />
             <Info icon={<Sparkles size={12} />} label="Энергия запуска" value={`${rules.energyCost} · доступно ${rules.energy}/${rules.maxEnergy}`} />

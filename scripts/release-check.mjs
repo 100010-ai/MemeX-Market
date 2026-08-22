@@ -130,7 +130,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.3 package version", packageJson.includes('"version": "0.64.3"'));
+check("v0.64.4 package version", packageJson.includes('"version": "0.64.4"'));
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -156,6 +156,16 @@ check("v0.64.2 notifications prevent duplicate interaction", read("app/notificat
 check("v0.64.2 creator tools expose active entitlements", read("app/creator/page.tsx").includes("Активные инструменты") && read("app/creator/page.tsx").includes("expiresAt"));
 check("v0.64.2 control mutations are guarded", read("app/control/page.tsx").includes("CONTROL_ACTION_LABELS") && read("app/control/page.tsx").includes("window.confirm") && read("app/control/page.tsx").includes("if(busy)return"));
 check("v0.64.2 fixed header + stable native controls", read("components/app-shell.tsx").includes("mxm-topbar-fixed") && read("app/globals.css").includes("input[type=\"checkbox\"]") && read("app/globals.css").includes("-webkit-tap-highlight-color: transparent"));
+
+
+// v0.64.4 Memecoin Market Polish: neutral launch state + one-screen mobile terminal.
+const migration100002 = read("supabase/migrations/100002_memecoin_market_polish_v0644.sql");
+check("Migration 100002 memecoin polish v0.64.4 present", Boolean(migration100002));
+check("v0.64.4 launch seed is excluded from public market stats", migration100002.includes("is_launch_seed") && migration100002.includes("where is_launch_seed=false") && migration100002.includes("market_open_price"));
+check("v0.64.4 coin page is one-screen on mobile", read("app/coin/[id]/page.tsx").includes("mxm-coin-screen") && read("app/globals.css").includes("var(--mxm-viewport-height)") && read("app/globals.css").includes("overflow: hidden"));
+check("v0.64.4 memecoin metrics moved out of main flow", read("app/coin/[id]/page.tsx").includes("MetricsSheet") && read("app/coin/[id]/page.tsx").includes("setMetricsOpen(true)"));
+check("v0.64.4 launch bootstrap is hidden from feed/history", read("lib/feed.ts").includes('eq("is_launch_seed", false)') && read("app/api/portfolio/route.ts").includes('eq("is_launch_seed", false)') && read("app/api/coins/[id]/route.ts").includes('eq("is_launch_seed", false)'));
+check("v0.64.4 chart has compact small-price formatting", read("components/coin-chart.tsx").includes("axisPrice") && read("components/coin-chart.tsx").includes("emptyLabel") && read("components/coin-chart.tsx").includes("compact = false"));
 
 // v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));

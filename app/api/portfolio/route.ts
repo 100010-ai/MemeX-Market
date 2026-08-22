@@ -69,7 +69,7 @@ async function GETHandler(request: NextRequest) {
       supabase.from("holdings").select("coin_id,quantity,cost_basis,coins(name,symbol,current_price,image_url)").eq("profile_id", profile.id).gt("quantity", 0),
       fetchOwnedGifts(String(profile.id), giftOffset, giftLimit),
       supabase.from("gift_market_overview").select(giftMarketSelect).eq("owner_profile_id", profile.id).eq("status", "listed").not("telegram_name", "is", null).order("listing_price", { ascending: true }).limit(500),
-      supabase.from("trades").select("id,coin_id,side,quote_amount,realized_pnl,created_at,coins(symbol)").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(40),
+      supabase.from("trades").select("id,coin_id,side,quote_amount,realized_pnl,created_at,coins(symbol)").eq("profile_id", profile.id).eq("is_launch_seed", false).order("created_at", { ascending: false }).limit(40),
       supabase.from("gift_trades").select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,price,realized_pnl,created_at,gift_assets(base_name,gift_number)").or(`buyer_profile_id.eq.${profile.id},seller_profile_id.eq.${profile.id}`).order("created_at", { ascending: false }).limit(40),
       getProfileSnapshot(profile as Record<string, unknown>),
       supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: false }).limit(720),

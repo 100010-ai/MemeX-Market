@@ -61,7 +61,15 @@ function compactNumber(value: number) {
 
 function displayPrice(value: number, precision: number) {
   if (!Number.isFinite(value)) return "—";
-  return value.toLocaleString("ru-RU", { maximumFractionDigits: precision, minimumFractionDigits: Math.min(2, precision) });
+  if (value !== 0 && Math.abs(value) < 0.0001) return value.toExponential(3).replace("e+", "e");
+  return value.toLocaleString("ru-RU", { maximumFractionDigits: Math.min(8, precision), minimumFractionDigits: Math.min(2, precision) });
+}
+
+function axisPrice(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  if (value !== 0 && Math.abs(value) < 0.0001) return value.toExponential(3).replace("e+", "e");
+  if (Math.abs(value) < 1) return value.toLocaleString("ru-RU", { maximumFractionDigits: 6 });
+  return value.toLocaleString("ru-RU", { maximumFractionDigits: 4 });
 }
 
 function eventTimestamp(time: Time | undefined) {
@@ -74,7 +82,7 @@ function eventTimestamp(time: Time | undefined) {
   return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000);
 }
 
-export function CoinChart({ candles, height = 330, showTimeframes = true, baseFrame = "15m" }: { candles: Candle[]; height?: number; showTimeframes?: boolean; baseFrame?: Frame["key"] }) {
+export function CoinChart({ candles, height = 330, showTimeframes = true, baseFrame = "15m", compact = false, emptyLabel = "Недостаточно сделок для свечного графика." }: { candles: Candle[]; height?: number; showTimeframes?: boolean; baseFrame?: Frame["key"]; compact?: boolean; emptyLabel?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const priceSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -128,6 +136,7 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
         attributionLogo: false,
         fontSize: 10,
       },
+      localization: { priceFormatter: axisPrice },
       grid: {
         vertLines: { color: "rgba(255,255,255,.028)" },
         horzLines: { color: "rgba(255,255,255,.035)" },
@@ -241,29 +250,31 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
   }
 
   const body = (
-    <div className={fullscreen ? "flex h-full min-h-0 flex-col" : "min-w-0"}>
-      <div className="mb-2 flex min-w-0 items-end justify-between gap-3">
+    <div className={fullscreen ? "flex h-full min-h-0 flex-col" : `min-w-0 ${compact ? "mxm-coin-chart-compact" : ""}`}>
+      <div className={`${compact ? "mb-1" : "mb-2"} flex min-w-0 items-end justify-between gap-3`}>
         <div className="min-w-0">
           {current ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[10px]">
             <span className="font-semibold text-white">{displayPrice(current.close, format.precision)}</span>
             <span className={delta >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>{delta >= 0 ? "+" : ""}{delta.toFixed(2)}%</span>
-            <span className="text-[var(--muted)]">O {displayPrice(current.open, format.precision)}</span>
-            <span className="text-[var(--muted)]">H {displayPrice(current.high, format.precision)}</span>
-            <span className="text-[var(--muted)]">L {displayPrice(current.low, format.precision)}</span>
-            <span className="text-[var(--muted)]">V {compactNumber(current.volume)} TON</span>
+            {!compact ? <>
+              <span className="text-[var(--muted)]">O {displayPrice(current.open, format.precision)}</span>
+              <span className="text-[var(--muted)]">H {displayPrice(current.high, format.precision)}</span>
+              <span className="text-[var(--muted)]">L {displayPrice(current.low, format.precision)}</span>
+              <span className="text-[var(--muted)]">V {compactNumber(current.volume)} TON</span>
+            </> : current.volume > 0 ? <span className="text-[var(--muted)]">V {compactNumber(current.volume)} TON</span> : null}
           </div> : <p className="text-[10px] text-[var(--muted)]">История цены</p>}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {display.length ? <button type="button" onClick={fit} className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title="Вместить данные"><RotateCcw size={12} />Сброс</button> : null}
-          <button type="button" onClick={() => setFullscreen((value) => !value)} className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title={fullscreen ? "Закрыть полный экран" : "Открыть на весь экран"}>{fullscreen ? <X size={13} /> : <Maximize2 size={12} />}{fullscreen ? "Закрыть" : "На весь экран"}</button>
+          {display.length ? <button type="button" onClick={fit} aria-label="Вместить график" className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title="Вместить данные"><RotateCcw size={12} />{compact ? null : "Сброс"}</button> : null}
+          <button type="button" onClick={() => setFullscreen((value) => !value)} aria-label={fullscreen ? "Закрыть полный экран" : "Открыть график на весь экран"} className="inline-flex items-center gap-1 py-1 text-[10px] text-[var(--muted)] transition hover:text-white" title={fullscreen ? "Закрыть полный экран" : "Открыть на весь экран"}>{fullscreen ? <X size={13} /> : <Maximize2 size={12} />}{compact && !fullscreen ? null : fullscreen ? "Закрыть" : "На весь экран"}</button>
         </div>
       </div>
 
-      {showTimeframes ? <div className="mxm-hscroll mb-2 gap-4 border-b border-[var(--border-soft)] pb-1">
+      {showTimeframes ? <div className={`mxm-hscroll ${compact ? "mb-1 gap-3" : "mb-2 gap-4 border-b border-[var(--border-soft)]"} pb-1`}>
         {timeframes.map((item) => <button key={item.key} type="button" onClick={() => { setFrame(item); setInspect(null); }} className={`relative shrink-0 py-1.5 text-[10px] transition ${frame.key === item.key ? "text-white" : "text-[var(--muted)] hover:text-white"}`}>{item.key}{frame.key === item.key ? <span className="absolute inset-x-0 -bottom-[5px] h-px bg-[var(--accent)]" /> : null}</button>)}
       </div> : null}
 
-      {display.length ? <div ref={containerRef} className="w-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: chartHeight }} /> : <div style={{ height: chartHeight }} className="grid place-items-center border-y border-[var(--border-soft)] text-xs text-[var(--muted)]">Недостаточно сделок для свечного графика.</div>}
+      {display.length ? <div ref={containerRef} className="w-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: chartHeight }} /> : <div style={{ height: chartHeight }} className="grid place-items-center rounded-[12px] bg-white/[.012] text-[9px] text-[var(--muted)]">{emptyLabel}</div>}
     </div>
   );
 
