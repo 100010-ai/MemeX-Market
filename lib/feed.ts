@@ -47,9 +47,8 @@ function displayName(profile: ProfileRef | null | undefined) {
   return "Удалённый игрок";
 }
 
-function rows<T>(value: unknown, label: string): T[] {
-  if (!Array.isArray(value)) throw new Error(`${label} query returned invalid data`);
-  return value as T[];
+function rows<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
 }
 
 export async function getMarketActivity(supabase: SupabaseClient, limit = 30): Promise<ActivityItem[]> {
@@ -62,9 +61,9 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
   const error = coinTrades.error || giftTrades.error || events.error;
   if (error) throw error;
 
-  const coinTradeRows = rows<CoinTradeRow>(coinTrades.data, "Coin trades");
-  const giftTradeRows = rows<GiftTradeRow>(giftTrades.data, "Gift trades");
-  const eventRows = rows<MarketEventRow>(events.data, "Market events");
+  const coinTradeRows = rows<CoinTradeRow>(coinTrades.data);
+  const giftTradeRows = rows<GiftTradeRow>(giftTrades.data);
+  const eventRows = rows<MarketEventRow>(events.data);
   const actorIds = [...new Set(eventRows.flatMap((row) => row.actor_profile_id ? [row.actor_profile_id] : []))];
   const coinIds = [...new Set(eventRows.flatMap((row) => row.coin_id ? [row.coin_id] : []))];
   const giftIds = [...new Set(eventRows.flatMap((row) => row.virtual_gift_id ? [row.virtual_gift_id] : []))];
@@ -77,9 +76,9 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
   const lookupError = actorsResult.error || eventCoinsResult.error || eventGiftsResult.error;
   if (lookupError) throw lookupError;
 
-  const actors = new Map(rows<ActivityActorRow>(actorsResult.data, "Activity actors").map((row) => [String(row.id), displayName(row)]));
-  const eventCoins = new Map(rows<ActivityCoinRow>(eventCoinsResult.data, "Activity coins").map((row) => [String(row.id), row]));
-  const eventGifts = new Map(rows<ActivityGiftRow>(eventGiftsResult.data, "Activity Gifts").map((row) => [String(row.virtual_gift_id), row]));
+  const actors = new Map(rows<ActivityActorRow>(actorsResult.data).map((row) => [String(row.id), displayName(row)]));
+  const eventCoins = new Map(rows<ActivityCoinRow>(eventCoinsResult.data).map((row) => [String(row.id), row]));
+  const eventGifts = new Map(rows<ActivityGiftRow>(eventGiftsResult.data).map((row) => [String(row.virtual_gift_id), row]));
 
   const items: ActivityItem[] = [];
   for (const row of coinTradeRows) {

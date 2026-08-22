@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -13,7 +14,7 @@ function rarityPoints(row: OwnedGift) {
   return 1;
 }
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -33,8 +34,7 @@ export async function GET() {
     supabase.from("collection_bonus_claims").select("base_name,claimed_at").eq("profile_id", profile.id),
   ]);
   if (overviewResult.error) return NextResponse.json({ error: "Не удалось загрузить серии Gifts" }, { status: 500 });
-  const claimsMissing = claimsResult.error && (claimsResult.error.code === "42P01" || /collection_bonus_claims|schema cache|does not exist/i.test(claimsResult.error.message || ""));
-  if (claimsResult.error && !claimsMissing) return NextResponse.json({ error: "Не удалось загрузить бонусы коллекций" }, { status: 500 });
+  if (claimsResult.error) return NextResponse.json({ error: "Не удалось загрузить бонусы коллекций" }, { status: 500 });
   const claimed = new Set((claimsResult.data || []).map((row) => String(row.base_name)));
   const overview = new Map((overviewResult.data || []).map((row) => [String(row.base_name), row]));
   const groups = new Map<string, OwnedGift[]>();
@@ -49,10 +49,10 @@ export async function GET() {
   const level = Math.max(1, Math.floor(Math.sqrt(totalPoints / 5)) + 1);
   const levelStart = 5 * Math.pow(level - 1, 2);
   const nextLevel = 5 * Math.pow(level, 2);
-  return NextResponse.json({ level, totalPoints, nextLevel, progress: Math.max(0, Math.min(1, (totalPoints - levelStart) / Math.max(1, nextLevel - levelStart))), giftCount: owned.length, completed: collections.filter((item) => item.complete).length, collections, claimsReady: !claimsMissing }, { headers: { "cache-control": "private, no-store" } });
+  return NextResponse.json({ level, totalPoints, nextLevel, progress: Math.max(0, Math.min(1, (totalPoints - levelStart) / Math.max(1, nextLevel - levelStart))), giftCount: owned.length, completed: collections.filter((item) => item.complete).length, collections, claimsReady: true }, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -70,3 +70,5 @@ export async function POST(request: Request) {
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }
+export const GET = withApiErrors("app/api/collections/progress/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/collections/progress/route.ts:POST", POSTHandler);

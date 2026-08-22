@@ -1,9 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const runtimeConfig = await getRuntimeConfig();
@@ -65,3 +66,4 @@ export async function GET() {
     rewards,
   }, { headers: { "cache-control": "private, no-store" } });
 }
+export const GET = withApiErrors("app/api/referrals/route.ts:GET", GETHandler);

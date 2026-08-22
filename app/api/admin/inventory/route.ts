@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -6,7 +7,7 @@ export const runtime = "nodejs";
 
 // Lists system-owned, unlisted Gifts that came from a real Telegram catalog
 // sync and are waiting on an admin to set a real price and publish them.
-export async function GET() {
+async function GETHandler() {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -49,3 +50,4 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить каталог" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/admin/inventory/route.ts:GET", GETHandler);

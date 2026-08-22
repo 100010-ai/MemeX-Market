@@ -1,8 +1,9 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function GETHandler() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -24,3 +25,4 @@ export async function GET() {
     headers: { "Cache-Control": "no-store, max-age=0" },
   });
 }
+export const GET = withApiErrors("app/api/realtime/config/route.ts:GET", GETHandler);

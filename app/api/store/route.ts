@@ -1,7 +1,8 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { normalizeStoreProduct, STORE_PRODUCTS } from "@/lib/store";
+import { normalizeStoreProduct } from "@/lib/store";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
 function schemaMissing(error: { code?: string; message?: string } | null | undefined) {
@@ -32,7 +33,7 @@ const emptySnapshot = {
   currentSeason: null as null | { id: string; title: string; startsAt: string; endsAt: string; daysLeft: number },
 };
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const runtimeConfig = await getRuntimeConfig().catch((error) => {
@@ -48,7 +49,7 @@ export async function GET() {
   const cleanupResult = await supabase
     .rpc("release_expired_star_authorizations_v200", { p_limit: 25 })
     .abortSignal(AbortSignal.timeout(1_500));
-  if (cleanupResult.error && !schemaMissing(cleanupResult.error)) console.error("store reservation cleanup", cleanupResult.error);
+  if (cleanupResult.error) console.error("store reservation cleanup", cleanupResult.error);
   const [productsResult, snapshotResult, caseLootResult, caseDefinitionsResult, seasonResult] = await Promise.all([
     supabase
       .from("store_products")
@@ -68,13 +69,8 @@ export async function GET() {
   ]);
 
   if (schemaMissing(productsResult.error) || schemaMissing(snapshotResult.error) || schemaMissing(caseLootResult.error) || schemaMissing(caseDefinitionsResult.error) || schemaMissing(seasonResult.error)) {
-    return NextResponse.json({
-      products: STORE_PRODUCTS.filter((product) => runtimeConfig.featureFlags.memecoins || product.metadata.creatorTool !== "boost"),
-      ...emptySnapshot,
-      starsEnabled: runtimeConfig.featureFlags.stars,
-      migrationReady: false,
-      migration: "027_market_economy_2.sql",
-    }, { headers: { "cache-control": "private, no-store" } });
+    console.error("store schema is not production-ready", productsResult.error || snapshotResult.error || caseLootResult.error || caseDefinitionsResult.error || seasonResult.error);
+    return NextResponse.json({ error: "Схема MXM Store не соответствует production-миграциям" }, { status: 503, headers: { "cache-control": "private, no-store" } });
   }
   if (productsResult.error) {
     console.error("store products", productsResult.error);
@@ -113,7 +109,10 @@ export async function GET() {
       });
     }
     const products = (productsResult.data || [])
-      .map((row) => normalizeStoreProduct(row as Record<string, unknown>))
+      .flatMap((row) => {
+        const product = normalizeStoreProduct(row as Record<string, unknown>);
+        return product ? [product] : [];
+      })
       .filter((product) => runtimeConfig.featureFlags.memecoins || product.metadata.creatorTool !== "boost");
     return NextResponse.json({
       products,
@@ -136,3 +135,4 @@ export async function GET() {
     return NextResponse.json({ error: "Каталог магазина повреждён" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/store/route.ts:GET", GETHandler);

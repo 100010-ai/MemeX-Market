@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
@@ -111,7 +112,7 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
   return null;
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
+async function GETHandler(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { assetId } = await params;
@@ -218,3 +219,4 @@ export async function GET(request: Request, { params }: { params: Promise<{ asse
     clearTimeout(timeout);
   }
 }
+export const GET = withApiErrors("app/api/gifts/media/[assetId]/route.ts:GET", GETHandler);

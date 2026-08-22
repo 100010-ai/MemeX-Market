@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -5,7 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -21,3 +22,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
   return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
 }
+export const POST = withApiErrors("app/api/gifts/[id]/buy/route.ts:POST", POSTHandler);

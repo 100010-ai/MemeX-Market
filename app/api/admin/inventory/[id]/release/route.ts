@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -8,7 +9,7 @@ export const runtime = "nodejs";
 // Publishes one system-owned catalog item to the public market at an explicit
 // admin-set price, via the same list_virtual_gift RPC every player listing
 // goes through. The price is always a deliberate human decision.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -35,3 +36,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ listing: data });
 }
+export const POST = withApiErrors("app/api/admin/inventory/[id]/release/route.ts:POST", POSTHandler);

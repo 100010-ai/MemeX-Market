@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -28,7 +29,7 @@ function relationRecord(value: unknown): Record<string, unknown> {
   return candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : {};
 }
 
-export async function GET() {
+async function GETHandler() {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   const supabase = getSupabaseAdmin();
@@ -130,3 +131,4 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить админ-панель" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/admin/overview/route.ts:GET", GETHandler);

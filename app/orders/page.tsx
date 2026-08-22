@@ -17,16 +17,21 @@ export default function OrdersPage() {
   const [data, setData] = useState<Payload>({ outgoing: [], incoming: [], listings: [] });
   const [tab, setTab] = useState<"incoming" | "outgoing" | "listings">("incoming");
   const [busy, setBusy] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { refreshProfile, haptic } = useTelegramProfile();
   const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/orders", { cacheMs: 2_000 })); }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера"));
+      setLoading(true);
+      setError(null);
+      void load()
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера"))
+        .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  const realtimeReload = useCallback(() => { void load(); }, [load]);
+  const realtimeReload = useCallback(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось обновить ордера")); }, [load]);
 
   async function act(id: string, action: "accept" | "reject" | "cancel") {
     setBusy(id + action); setError(null); haptic("medium");
@@ -55,9 +60,9 @@ export default function OrdersPage() {
         <Tab label="Лоты" count={data.listings.length} active={tab === "listings"} onClick={() => setTab("listings")} />
       </div>
 
-      {error ? <div className="mb-3 mxm-alert mxm-alert-error">{error}</div> : null}
+      {error ? <div className="mb-3 mxm-alert mxm-alert-error flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={() => { setLoading(true); setError(null); void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить ордера")).finally(() => setLoading(false)); }} className="shrink-0 underline">Повторить</button></div> : null}
 
-      {tab === "listings" ? (
+      {loading ? <div className="space-y-2"><div className="mxm-skeleton h-16 rounded-2xl" /><div className="mxm-skeleton h-16 rounded-2xl" /><div className="mxm-skeleton h-16 rounded-2xl" /></div> : tab === "listings" ? (
         data.listings.length ? <div className="divide-y divide-[var(--border-soft)] border-y border-[var(--border-soft)]">{data.listings.map((gift) => <div key={gift.virtualGiftId} className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><Link href={`/gifts/${gift.virtualGiftId}`}><GiftMedia gift={gift} compact className="h-[46px] w-[46px] rounded-[14px]" /></Link><div className="min-w-0"><Link href={`/gifts/${gift.virtualGiftId}`} className="truncate text-xs font-medium">{gift.baseName}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">#{gift.number} · {gift.modelName}</p></div><div className="flex items-center gap-2"><span className="flex items-center gap-1 text-xs font-medium"><Gem size={11} fill="currentColor" />{gift.listingPrice == null ? "—" : money(gift.listingPrice)}</span><button disabled={busy !== null} onClick={() => void unlist(gift.virtualGiftId)} aria-label="Снять с продажи" className="mxm-icon-action"><X size={14}/></button></div></div>)}</div> : <Empty text="Нет активных лотов" icon={<Tag />} />
       ) : current.length ? (
         <div className="mxm-card overflow-hidden px-3">{current.map((offer) => <div key={offer.id} className="border-b border-[var(--border-soft)] py-2.5"><div className="grid grid-cols-[46px_minmax(0,1fr)_auto] items-center gap-2.5"><Link href={`/gifts/${offer.virtualGiftId}`}><GiftMedia gift={offer.gift} compact className="h-[46px] w-[46px] rounded-2xl" /></Link><div className="min-w-0"><Link href={`/gifts/${offer.virtualGiftId}`} className="block truncate text-xs font-medium">{offer.baseName} #{offer.number}</Link><p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">{tab === "incoming" ? `от ${offer.buyerName}` : `владелец ${offer.ownerName}`} · {ago(offer.createdAt)}{offer.expiresAt ? ` · до ${new Date(offer.expiresAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}` : ""}</p></div><p className="flex items-center gap-1 text-xs font-semibold"><Gem size={11} fill="currentColor" />{money(offer.amount)}</p></div><div className="mt-2 flex gap-2">{tab === "incoming" ? <><button disabled={busy !== null} onClick={() => act(offer.id, "reject")} className="flex-1 rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отклонить</button><button disabled={busy !== null} onClick={() => act(offer.id, "accept")} className="flex-1 rounded-[13px] bg-[var(--accent)] py-2.5 text-[10px] font-semibold text-[#0b0d10]">Принять</button></> : <button disabled={busy !== null} onClick={() => act(offer.id, "cancel")} className="w-full rounded-[13px] border border-[var(--border)] bg-[var(--panel-2)] py-2.5 text-[10px]">Отменить оффер</button>}</div></div>)}</div>

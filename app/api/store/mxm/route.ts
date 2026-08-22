@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -7,7 +8,7 @@ function migrationMissing(error: { code?: string; message?: string } | null | un
   return Boolean(error && (error.code === "42883" || /purchase_with_mxm_v200|schema cache|could not find the function/i.test(error.message || "")));
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -35,3 +36,4 @@ export async function POST(request: Request) {
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }
+export const POST = withApiErrors("app/api/store/mxm/route.ts:POST", POSTHandler);

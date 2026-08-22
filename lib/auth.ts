@@ -3,13 +3,22 @@ import { readSession } from "@/lib/session";
 
 function requiredString(value: unknown, field: string) {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(`Profile field ${field} is missing`);
-  return value;
+  return value.trim();
 }
 
-function requiredNumber(value: unknown, field: string) {
+function safeString(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function safeNumber(value: unknown, fallback = 0) {
   const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Profile field ${field} is invalid`);
-  return number;
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function safeDate(value: unknown, fallback = new Date(0).toISOString()) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : fallback;
 }
 
 function banIsActive(row: Record<string, unknown>) {
@@ -21,9 +30,9 @@ export async function requireProfile() {
   const session = await readSession();
   if (!session) return null;
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("profiles").select("id,telegram_id,username,first_name,last_name,photo_url,balance,xp,last_gift_sync_at,is_banned,banned_until,created_at").eq("telegram_id", session.telegramId).single();
+  const { data, error } = await supabase.from("profiles").select("id,telegram_id,username,first_name,last_name,photo_url,balance,xp,last_gift_sync_at,is_banned,banned_until,created_at").eq("telegram_id", session.telegramId).maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Authenticated Telegram profile is missing");
+  if (!data) return null;
   if (banIsActive(data as Record<string, unknown>)) return null;
   return data;
 }
@@ -64,29 +73,31 @@ type FinanceSnapshot = {
 
 function formatProfileSnapshot(profileRow: Record<string, unknown>, finance: FinanceSnapshot) {
   const id = requiredString(profileRow.id, "id");
-  const balance = finance.balance;
-  const availableBalance = Math.max(0, balance - finance.reservedBalance);
-  const firstName = requiredString(profileRow.first_name, "first_name");
-  const joinedAt = requiredString(profileRow.created_at, "created_at");
-  const progression = progressionForXp(requiredNumber(profileRow.xp ?? 0, "xp"));
+  const balance = safeNumber(finance.balance);
+  const reservedBalance = Math.max(0, safeNumber(finance.reservedBalance));
+  const availableBalance = Math.max(0, balance - reservedBalance);
+  const username = safeString(profileRow.username) || null;
+  const firstName = safeString(profileRow.first_name, username ? username.replace(/^@/, "") : "Telegram User");
+  const joinedAt = safeDate(profileRow.created_at);
+  const progression = progressionForXp(safeNumber(profileRow.xp));
 
   return {
     id,
-    telegramId: requiredNumber(profileRow.telegram_id, "telegram_id"),
-    username: profileRow.username == null ? null : String(profileRow.username),
+    telegramId: safeNumber(profileRow.telegram_id),
+    username,
     firstName,
-    lastName: profileRow.last_name == null ? null : String(profileRow.last_name),
-    photoUrl: profileRow.photo_url == null ? null : String(profileRow.photo_url),
+    lastName: safeString(profileRow.last_name) || null,
+    photoUrl: safeString(profileRow.photo_url) || null,
     balance,
-    reservedBalance: finance.reservedBalance,
+    reservedBalance,
     availableBalance,
-    coinValue: finance.coinValue,
-    giftValue: finance.giftValue,
-    netWorth: finance.netWorth,
-    pnl: finance.realizedPnl,
-    tier: tierForWorth(finance.netWorth),
+    coinValue: safeNumber(finance.coinValue),
+    giftValue: safeNumber(finance.giftValue),
+    netWorth: safeNumber(finance.netWorth, balance),
+    pnl: safeNumber(finance.realizedPnl),
+    tier: tierForWorth(safeNumber(finance.netWorth, balance)),
     joinedAt,
-    lastGiftSyncAt: profileRow.last_gift_sync_at == null ? null : String(profileRow.last_gift_sync_at),
+    lastGiftSyncAt: profileRow.last_gift_sync_at == null ? null : safeDate(profileRow.last_gift_sync_at),
     ...progression,
   };
 }
@@ -96,57 +107,28 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
   const supabase = getSupabaseAdmin();
 
   let finance: FinanceSnapshot = {
-    balance: requiredNumber(profileRow.balance, "balance"),
+    balance: safeNumber(profileRow.balance),
     reservedBalance: 0,
     coinValue: 0,
     giftValue: 0,
-    netWorth: requiredNumber(profileRow.balance, "balance"),
+    netWorth: safeNumber(profileRow.balance),
     realizedPnl: 0,
   };
 
   const fastSnapshot = await supabase.rpc("profile_snapshot_v040", { p_profile_id: id });
-  if (!fastSnapshot.error && fastSnapshot.data) {
+  if (fastSnapshot.error) throw fastSnapshot.error;
+  if (fastSnapshot.data) {
     const row = fastSnapshot.data as Record<string, unknown>;
     finance = {
-      balance: requiredNumber(row.balance, "balance"),
-      reservedBalance: requiredNumber(row.reservedBalance ?? 0, "reserved balance"),
-      coinValue: requiredNumber(row.coinValue ?? 0, "coin value"),
-      giftValue: requiredNumber(row.giftValue ?? 0, "gift value"),
-      netWorth: requiredNumber(row.netWorth ?? row.balance, "net worth"),
-      realizedPnl: requiredNumber(row.realizedPnl ?? 0, "realized pnl"),
+      balance: safeNumber(row.balance),
+      reservedBalance: safeNumber(row.reservedBalance),
+      coinValue: safeNumber(row.coinValue),
+      giftValue: safeNumber(row.giftValue),
+      netWorth: safeNumber(row.netWorth, safeNumber(row.balance)),
+      realizedPnl: safeNumber(row.realizedPnl),
     };
-  } else {
-    const missingFastRpc = fastSnapshot.error && (fastSnapshot.error.code === "42883" || /profile_snapshot_v040|schema cache|could not find the function/i.test(fastSnapshot.error.message || ""));
-    if (fastSnapshot.error && !missingFastRpc) throw fastSnapshot.error;
-    const [leaderboardResult, reservedResult] = await Promise.all([
-      supabase.from("profile_financial_overview").select("coin_value,gift_value,net_worth,realized_pnl").eq("id", id).single(),
-      supabase.rpc("pending_gift_offer_total", { p_profile_id: id, p_exclude_virtual_gift_id: null }),
-    ]);
-    if (leaderboardResult.error) {
-      // Keep Telegram login alive if an old database deployment is missing the financial view.
-      if (leaderboardResult.error.code !== "42P01") throw leaderboardResult.error;
-    }
-    if (reservedResult.error) throw reservedResult.error;
-    if (!leaderboardResult.data) {
-      finance = {
-        balance: requiredNumber(profileRow.balance, "balance"),
-        reservedBalance: 0,
-        coinValue: 0,
-        giftValue: 0,
-        netWorth: requiredNumber(profileRow.balance, "balance"),
-        realizedPnl: 0,
-      };
-    } else {
-    finance = {
-      balance: requiredNumber(profileRow.balance, "balance"),
-      reservedBalance: requiredNumber(reservedResult.data ?? 0, "reserved balance"),
-      coinValue: requiredNumber(leaderboardResult.data.coin_value, "coin_value"),
-      giftValue: requiredNumber(leaderboardResult.data.gift_value, "gift_value"),
-      netWorth: requiredNumber(leaderboardResult.data.net_worth, "net_worth"),
-      realizedPnl: requiredNumber(leaderboardResult.data.realized_pnl ?? 0, "realized_pnl"),
-    };
-    }
   }
+
 
   return formatProfileSnapshot(profileRow, finance);
 }
@@ -157,25 +139,16 @@ export async function getSessionProfileSnapshot() {
   if (!session) return null;
   const supabase = getSupabaseAdmin();
   const result = await supabase.rpc("session_profile_snapshot_v040", { p_telegram_id: session.telegramId });
-
-  if (!result.error && result.data) {
-    const row = result.data as Record<string, unknown>;
-    if (banIsActive(row)) return null;
-    return formatProfileSnapshot(row, {
-      balance: requiredNumber(row.balance, "balance"),
-      reservedBalance: requiredNumber(row.reserved_balance ?? 0, "reserved balance"),
-      coinValue: requiredNumber(row.coin_value ?? 0, "coin value"),
-      giftValue: requiredNumber(row.gift_value ?? 0, "gift value"),
-      netWorth: requiredNumber(row.net_worth ?? row.balance, "net worth"),
-      realizedPnl: requiredNumber(row.realized_pnl ?? 0, "realized pnl"),
-    });
-  }
-
-  const missingRpc = result.error && (result.error.code === "42883" || /session_profile_snapshot_v040|schema cache|could not find the function/i.test(result.error.message || ""));
-  if (result.error && !missingRpc) throw result.error;
-
-  // Rolling deploy compatibility: old database + new frontend keeps working
-  // until migration 018 is applied.
-  const profile = await requireProfile();
-  return profile ? getProfileSnapshot(profile as Record<string, unknown>) : null;
+  if (result.error) throw result.error;
+  if (!result.data) return null;
+  const row = result.data as Record<string, unknown>;
+  if (banIsActive(row)) return null;
+  return formatProfileSnapshot(row, {
+    balance: safeNumber(row.balance),
+    reservedBalance: safeNumber(row.reserved_balance),
+    coinValue: safeNumber(row.coin_value),
+    giftValue: safeNumber(row.gift_value),
+    netWorth: safeNumber(row.net_worth, safeNumber(row.balance)),
+    realizedPnl: safeNumber(row.realized_pnl),
+  });
 }

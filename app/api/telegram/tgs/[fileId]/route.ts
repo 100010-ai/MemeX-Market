@@ -1,10 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getTelegramTgsJson, isKnownGiftFile } from "@/lib/gifts";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
   if (!(await readSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   try {
     const { fileId } = await params;
@@ -15,3 +16,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
     return NextResponse.json({ error: "Анимация подарка временно недоступна" }, { status: 404 });
   }
 }
+export const GET = withApiErrors("app/api/telegram/tgs/[fileId]/route.ts:GET", GETHandler);

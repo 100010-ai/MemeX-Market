@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -7,7 +8,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 const kinds = new Set(["coin", "gift", "gift_collection"]);
 const directions = new Set(["below", "above"]);
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -16,7 +17,7 @@ export async function GET() {
   return NextResponse.json({ alerts: (data || []).map((row) => ({ id: String(row.id), kind: row.kind, coinId: row.coin_id || null, giftId: row.virtual_gift_id || null, giftCollection: row.gift_collection || null, direction: row.direction, targetPrice: Number(row.target_price), enabled: Boolean(row.enabled), lastTriggeredAt: row.last_triggered_at || null, createdAt: row.created_at })) });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -98,3 +99,5 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
+export const GET = withApiErrors("app/api/alerts/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/alerts/route.ts:POST", POSTHandler);

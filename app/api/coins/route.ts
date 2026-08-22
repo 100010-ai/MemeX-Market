@@ -1,3 +1,4 @@
+import { readFormData, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -16,7 +17,7 @@ function validate(name: string, symbol: string, description: string) {
 }
 
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -59,7 +60,7 @@ export async function GET() {
   }, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
     let floorPrice = Number.NaN;
 
     if (contentType.includes("multipart/form-data")) {
-      const form = await request.formData();
+      const form = await readFormData(request);
+      if (!form) return NextResponse.json({ error: "Некорректные multipart-данные" }, { status: 400 });
       name = String(form.get("name") || "").trim();
       symbol = String(form.get("symbol") || "").trim().toUpperCase();
       description = String(form.get("description") || "").trim();
@@ -103,7 +105,8 @@ export async function POST(request: Request) {
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
       if (image instanceof File && image.size > 0) imageFile = image;
     } else {
-      const body = await request.json();
+      const body = await readJsonObject(request);
+      if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
       name = String(body.name || "").trim();
       symbol = String(body.symbol || "").trim().toUpperCase();
       description = String(body.description || "").trim();
@@ -167,3 +170,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось создать мемкоин" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/coins/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/coins/route.ts:POST", POSTHandler);

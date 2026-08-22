@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -5,7 +6,7 @@ import { tonApiHealth } from "@/lib/providers/tonapi-client";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+async function GETHandler() {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -41,3 +42,4 @@ export async function GET() {
     databaseErrors: errors.map((error) => error?.message || "database error").slice(0, 4),
   }, { headers: { "cache-control": "private, no-store" } });
 }
+export const GET = withApiErrors("app/api/system/market-health/route.ts:GET", GETHandler);

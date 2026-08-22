@@ -1,7 +1,9 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
+import { giftMarketSelect, mapCoin, mapGift, mapGiftCollection } from "@/lib/mappers";
+import { nonEmptyId, nullableText, text } from "@/lib/safe-data";
 import { enforceRateLimit } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
@@ -17,7 +19,7 @@ function profileName(row: { username?: unknown; first_name?: unknown }) {
   return "Игрок";
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await enforceRateLimit(request, "market-search", String(session.telegramId), 80, 60))) return NextResponse.json({ error: "Слишком много поисковых запросов" }, { status: 429 });
@@ -83,12 +85,14 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    gifts: runtimeConfig.featureFlags.gifts ? [...unique.values()].map(mapGift) : [],
-    coins: runtimeConfig.featureFlags.memecoins ? (coinsResult.data || []).map(mapCoin) : [],
-    collections: runtimeConfig.featureFlags.gifts ? (collectionsResult.data || []).map((row) => ({
-      baseName: String(row.base_name), itemCount: Number(row.item_count), holderCount: Number(row.holder_count), listedCount: Number(row.listed_count),
-      floorPrice: row.floor_price == null ? null : Number(row.floor_price), volume24h: Number(row.volume_24h), change24h: Number(row.change_24h), tradeCount24h: Number(row.trade_count_24h),
-    })) : [],
-    users: (usersResult.data || []).map((row) => ({ id: String(row.id), name: profileName(row), username: row.username || null, firstName: row.first_name, photoUrl: row.photo_url || null })),
+    gifts: runtimeConfig.featureFlags.gifts ? [...unique.values()].map(mapGift).filter((gift) => Boolean(gift.virtualGiftId)) : [],
+    coins: runtimeConfig.featureFlags.memecoins ? (coinsResult.data || []).map(mapCoin).filter((coin) => Boolean(coin.id)) : [],
+    collections: runtimeConfig.featureFlags.gifts ? (collectionsResult.data || []).map((row) => mapGiftCollection(row as unknown as Record<string, unknown>)).filter((collection) => Boolean(collection.baseName)) : [],
+    users: (usersResult.data || []).flatMap((row) => {
+      const id = nonEmptyId(row.id);
+      if (!id) return [];
+      return [{ id, name: profileName(row), username: nullableText(row.username, 64), firstName: text(row.first_name, "Игрок", 120), photoUrl: nullableText(row.photo_url, 2_000) }];
+    }),
   }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
 }
+export const GET = withApiErrors("app/api/market/search/route.ts:GET", GETHandler);

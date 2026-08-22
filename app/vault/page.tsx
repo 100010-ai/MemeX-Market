@@ -18,6 +18,8 @@ type TabKey = "gifts" | "coins" | "listed" | "history";
 
 export default function VaultPage() {
   const [data, setData] = useState<Payload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("gifts");
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -26,14 +28,21 @@ export default function VaultPage() {
   const [fixedPrice, setFixedPrice] = useState("");
   const [floorOffset, setFloorOffset] = useState("-3");
   const [bulkBusy, setBulkBusy] = useState(false);
-  const load = useCallback(async () => { setData(await apiFetch<Payload>("/api/portfolio")); }, []);
+  const load = useCallback(async () => {
+    const next = await apiFetch<Payload>("/api/portfolio");
+    setData(next);
+    setLoadError(null);
+  }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void load().catch((cause) => setMessage(cause instanceof Error ? cause.message : "Не удалось загрузить хранилище"));
+      setLoading(true);
+      void load()
+        .catch((cause) => setLoadError(cause instanceof Error ? cause.message : "Не удалось загрузить хранилище"))
+        .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  const realtimeReload = useCallback(() => { void load(); }, [load]);
+  const realtimeReload = useCallback(() => { void load().catch((cause) => setLoadError(cause instanceof Error ? cause.message : "Не удалось обновить хранилище")); }, [load]);
 
   function toggleSelected(id: string) {
     setSelected((current) => {
@@ -70,7 +79,10 @@ export default function VaultPage() {
   }
 
   const listed = useMemo(() => data?.gifts.filter((gift) => gift.status === "listed") || [], [data]);
-  if (!data) return <div className="mx-auto max-w-5xl"><div className="mxm-skeleton h-40 rounded-[22px]" /><div className="mxm-skeleton mt-3 h-72 rounded-[22px]" />{message ? <p className="mt-3 text-xs text-[var(--negative)]">{message}</p> : null}</div>;
+  if (!data) {
+    if (loadError && !loading) return <div className="mx-auto max-w-5xl"><div className="mxm-card p-6 text-center"><p className="text-xs text-[var(--negative)]">{loadError}</p><button type="button" onClick={() => { setLoading(true); setLoadError(null); void load().catch((cause) => setLoadError(cause instanceof Error ? cause.message : "Не удалось загрузить хранилище")).finally(() => setLoading(false)); }} className="mt-4 rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Повторить</button></div></div>;
+    return <div className="mx-auto max-w-5xl"><div className="mxm-skeleton h-40 rounded-[22px]" /><div className="mxm-skeleton mt-3 h-72 rounded-[22px]" /></div>;
+  }
 
   const giftPct = data.profile.netWorth > 0 ? data.profile.giftValue / data.profile.netWorth * 100 : 0;
   const coinPct = data.profile.netWorth > 0 ? data.profile.coinValue / data.profile.netWorth * 100 : 0;
@@ -92,6 +104,7 @@ export default function VaultPage() {
 
       <section className="mb-4"><PortfolioChart points={data.portfolioSeries || []} /></section>
 
+      {loadError ? <div className="mb-3 mxm-alert mxm-alert-error">{loadError}</div> : null}
       {message ? <div className="mb-3 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">{message}</div> : null}
 
       <div className="mxm-segment mb-3 overflow-x-auto">

@@ -8,6 +8,11 @@ type SessionPayload = {
   issuedAt: number;
 };
 
+export function getSessionConfigStatus() {
+  const value = process.env.SESSION_SECRET;
+  return { configured: Boolean(value && value.length >= 32) };
+}
+
 function secret() {
   const value = process.env.SESSION_SECRET;
   if (!value || value.length < 32) throw new Error("SESSION_SECRET must contain at least 32 characters");
@@ -25,7 +30,7 @@ export async function setSession(telegramId: number) {
   const store = await cookies();
   store.set(COOKIE_NAME, value, {
     httpOnly: true,
-    sameSite: "none",
+    sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
@@ -47,7 +52,9 @@ export async function readSession(): Promise<SessionPayload | null> {
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as SessionPayload;
     const now = Math.floor(Date.now() / 1000);
-    if (!payload.telegramId || now - payload.issuedAt > 60 * 60 * 24 * 7) return null;
+    if (!Number.isSafeInteger(payload.telegramId) || payload.telegramId <= 0) return null;
+    if (!Number.isFinite(payload.issuedAt) || payload.issuedAt <= 0 || payload.issuedAt > now + 300) return null;
+    if (now - payload.issuedAt > 60 * 60 * 24 * 7) return null;
     return payload;
   } catch {
     return null;

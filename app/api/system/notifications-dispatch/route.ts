@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
@@ -31,7 +32,7 @@ async function evaluatePriceAlerts() {
   const collections = [...new Set(rows.filter((r) => r.kind === "gift_collection" && r.gift_collection).map((r) => String(r.gift_collection)))];
   const [coinResult, giftResult, collectionResult] = await Promise.all([
     coinIds.length ? supabase.from("coins").select("id,current_price").in("id", coinIds) : Promise.resolve({ data: [], error: null }),
-    giftIds.length ? supabase.from("gift_market_overview").select("virtual_gift_id,listing_price,reference_price,collection_floor").in("virtual_gift_id", giftIds) : Promise.resolve({ data: [], error: null }),
+    giftIds.length ? supabase.from("gift_market_overview").select("virtual_gift_id,listing_price,reference_price_ton,collection_floor").in("virtual_gift_id", giftIds) : Promise.resolve({ data: [], error: null }),
     collections.length ? supabase.from("gift_collection_overview").select("base_name,floor_price").in("base_name", collections) : Promise.resolve({ data: [], error: null }),
   ]);
   const error = coinResult.error || giftResult.error || collectionResult.error;
@@ -41,7 +42,7 @@ async function evaluatePriceAlerts() {
   const collectionRows = (collectionResult.data || []) as DbRow[];
   const maps = {
     coins: new Map(coinRows.map((row) => [String(row.id), Number(row.current_price)])),
-    gifts: new Map(giftRows.flatMap((row) => { const raw = row.listing_price ?? row.reference_price ?? row.collection_floor; return raw == null ? [] : [[String(row.virtual_gift_id), Number(raw)] as [string, number]]; })),
+    gifts: new Map(giftRows.flatMap((row) => { const raw = row.listing_price ?? row.reference_price_ton ?? row.collection_floor; return raw == null ? [] : [[String(row.virtual_gift_id), Number(raw)] as [string, number]]; })),
     collections: new Map(collectionRows.filter((row) => row.floor_price != null).map((row) => [String(row.base_name), Number(row.floor_price)])),
   };
   let triggered = 0;
@@ -116,5 +117,5 @@ async function handler(request: Request) {
   }
 }
 
-export const GET = handler;
-export const POST = handler;
+export const GET = withApiErrors("app/api/system/notifications-dispatch/route.ts:GET", handler);
+export const POST = withApiErrors("app/api/system/notifications-dispatch/route.ts:POST", handler);

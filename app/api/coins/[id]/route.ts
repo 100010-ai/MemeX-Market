@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -17,7 +18,7 @@ function profileName(row: DbRow) {
   return "Пользователь";
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -72,3 +73,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load coin" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/coins/[id]/route.ts:GET", GETHandler);

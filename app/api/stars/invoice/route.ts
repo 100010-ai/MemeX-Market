@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -20,7 +21,7 @@ const eligibilityMessages: Record<string, string> = {
   stars_disabled: "Покупки за Stars временно отключены",
 };
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -135,3 +136,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось открыть оплату Stars" }, { status: 502 });
   }
 }
+export const POST = withApiErrors("app/api/stars/invoice/route.ts:POST", POSTHandler);

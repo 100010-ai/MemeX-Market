@@ -42,13 +42,14 @@ export default function LeaderboardPage() {
   const [meRank, setMeRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError(null);
-      void apiFetch<{ players: LeaderboardPlayer[]; meRank: number }>(`/api/leaderboard?board=${board}`, { signal: controller.signal })
+      void apiFetch<{ players: LeaderboardPlayer[]; meRank: number | null }>(`/api/leaderboard?board=${board}`, { signal: controller.signal })
         .then((result) => {
           if (!controller.signal.aborted) {
             setPlayers(result.players);
@@ -66,7 +67,7 @@ export default function LeaderboardPage() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [board]);
+  }, [board, retryKey]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -82,7 +83,7 @@ export default function LeaderboardPage() {
         })}
       </div>
 
-      {error ? <div className="mb-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[#5a3035] bg-[#25191b] px-3 py-2 text-xs text-[#ff9aa4]"><span>{error}</span><button type="button" className="shrink-0 underline" onClick={() => setRetryKey((value) => value + 1)}>Повторить</button></div> : null}
 
       <div>
         {loading ? <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div> : players.length ? (

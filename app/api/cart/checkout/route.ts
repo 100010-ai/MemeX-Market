@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -7,7 +8,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -27,3 +28,4 @@ export async function POST(request: NextRequest) {
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 409 });
   return NextResponse.json(result.data, { headers: { "cache-control": "no-store" } });
 }
+export const POST = withApiErrors("app/api/cart/checkout/route.ts:POST", POSTHandler);

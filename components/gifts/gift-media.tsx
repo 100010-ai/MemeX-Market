@@ -231,7 +231,8 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
     let destroyed = false;
     let animation: LottieAnimation | null = null;
     let unsubscribeMotion: (() => void) | null = null;
-    const source = mediaUrl || (fileId ? `/api/telegram/tgs/${encodeURIComponent(fileId)}` : null);
+    const safeFileId = fileId && !fileId.startsWith("tonapi:") ? fileId : null;
+    const source = mediaUrl || (safeFileId ? `/api/telegram/tgs/${encodeURIComponent(safeFileId)}` : null);
     if (!source) return;
 
     Promise.all([loadLottieModule(), loadLottieJson(source)]).then(([module, animationData]) => {
@@ -355,7 +356,7 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
     };
   }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
-  const storedPreview = gift.modelPreviewUrl || (gift.mediaKind === "static" ? gift.modelMediaUrl : null);
+  const storedPreview = gift.modelPreviewUrl || gift.modelMediaUrl || gift.symbolMediaUrl || gift.imageUrl;
   const showAnimation = wantsAnimation && permitted && !animationFailed;
 
   return (

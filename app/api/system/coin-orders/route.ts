@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { recordAppError } from "@/lib/error-inbox";
@@ -18,5 +19,7 @@ async function processOrders(request: Request) {
   return NextResponse.json({ ok: true, result: data }, { headers: { "cache-control": "no-store" } });
 }
 
-export async function GET(request: Request) { return processOrders(request); }
-export async function POST(request: Request) { return processOrders(request); }
+async function GETHandler(request: Request) { return processOrders(request); }
+async function POSTHandler(request: Request) { return processOrders(request); }
+export const GET = withApiErrors("app/api/system/coin-orders/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/system/coin-orders/route.ts:POST", POSTHandler);

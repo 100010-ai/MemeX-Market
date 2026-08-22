@@ -1,8 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { finiteNumber, nonEmptyId, nullableText, text } from "@/lib/safe-data";
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -19,17 +21,23 @@ export async function GET() {
   if (missionResult.error) return NextResponse.json({ error: missionResult.error.message }, { status: 500 });
 
   return NextResponse.json({
-    missions: (missionResult.data || []).map((mission) => ({
-      id: mission.mission_id,
-      key: mission.key,
-      period: mission.period,
-      title: mission.title,
-      description: mission.description,
-      reward: Number(mission.reward),
-      target: Number(mission.target),
-      progress: Number(mission.progress),
-      claimed: Boolean(mission.claimed),
-      actionType: mission.action_type,
-    })),
+    missions: (missionResult.data || []).flatMap((mission) => {
+      const id = nonEmptyId(mission.mission_id);
+      const key = text(mission.key, "", 100);
+      if (!id || !key) return [];
+      return [{
+        id,
+        key,
+        period: text(mission.period, "daily", 32),
+        title: text(mission.title, "Задание", 160),
+        description: text(mission.description, "", 500),
+        reward: finiteNumber(mission.reward),
+        target: Math.max(0, finiteNumber(mission.target)),
+        progress: Math.max(0, finiteNumber(mission.progress)),
+        claimed: Boolean(mission.claimed),
+        actionType: nullableText(mission.action_type, 64),
+      }];
+    }),
   });
 }
+export const GET = withApiErrors("app/api/tasks/route.ts:GET", GETHandler);

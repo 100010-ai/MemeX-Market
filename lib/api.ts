@@ -134,7 +134,7 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
     let failed = false;
 
     try {
-      const response = await fetch(input, { ...requestInit, headers, signal: controller.signal, cache: "no-store" });
+      const response = await fetch(input, { ...requestInit, credentials: requestInit.credentials ?? "same-origin", headers, signal: controller.signal, cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         const message = typeof payload?.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;

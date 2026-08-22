@@ -1,56 +1,42 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { giftMarketSelect, mapGift } from "@/lib/mappers";
+import { giftMarketSelect, mapGift, mapGiftCollection } from "@/lib/mappers";
+import { finiteNumber, nonEmptyId, nullableNumber, safeIsoDate, safeUnixSeconds, text } from "@/lib/safe-data";
 
 const INITIAL_LISTING_LIMIT = 36;
 
 function displayName(row: { username?: unknown; first_name?: unknown } | undefined) {
-  if (row && typeof row.username === "string" && row.username.length) return `@${row.username}`;
-  if (row && typeof row.first_name === "string" && row.first_name.length) return row.first_name;
-  return "Пользователь";
-}
-
-function mapCollection(row: Record<string, unknown>) {
-  return {
-    baseName: String(row.base_name),
-    itemCount: Number(row.item_count),
-    holderCount: Number(row.holder_count),
-    listedCount: Number(row.listed_count),
-    floorPrice: row.floor_price == null ? null : Number(row.floor_price),
-    lastSalePrice: row.last_sale_price == null ? null : Number(row.last_sale_price),
-    volume24h: Number(row.volume_24h),
-    change24h: Number(row.change_24h),
-    tradeCount24h: Number(row.trade_count_24h),
-    volume7d: Number(row.volume_7d || 0),
-    tradeCount7d: Number(row.trade_count_7d || 0),
-    listedPct: Number(row.listed_pct || 0),
-    allTimeVolume: Number(row.all_time_volume || 0),
-    totalSales: Number(row.total_sales || 0),
-    highSale: row.high_sale == null ? null : Number(row.high_sale),
-    externalFloor: row.external_floor == null ? null : Number(row.external_floor),
-  };
+  const username = text(row?.username, "", 64);
+  if (username) return `@${username}`;
+  return text(row?.first_name, "Пользователь", 120);
 }
 
 function mapTraitStats(rows: Record<string, unknown>[], type: "model" | "backdrop" | "symbol") {
-  return rows
-    .filter((row) => row.trait_type === type)
-    .map((row) => ({
-      name: String(row.name),
-      count: Number(row.item_count || 0),
-      listedCount: Number(row.listed_count || 0),
-      floorPrice: row.floor_price == null ? null : Number(row.floor_price),
-      rarityPerMille: row.rarity_per_mille == null ? null : Number(row.rarity_per_mille),
-    }));
+  return rows.flatMap((row) => {
+    if (row.trait_type !== type) return [];
+    const name = text(row.name, "", 160);
+    if (!name) return [];
+    return [{
+      name,
+      count: finiteNumber(row.item_count),
+      listedCount: finiteNumber(row.listed_count),
+      floorPrice: nullableNumber(row.floor_price),
+      rarityPerMille: nullableNumber(row.rarity_per_mille),
+    }];
+  });
 }
 
 
-export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { name } = await params;
-  const baseName = decodeURIComponent(name).trim();
+  let baseName = "";
+  try { baseName = decodeURIComponent(name).trim().slice(0, 180); }
+  catch { return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 }); }
   if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
@@ -82,39 +68,50 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
 
     const traitRows = (traitStatsResult.data || []) as Record<string, unknown>[];
     return NextResponse.json({
-      collection: mapCollection(collectionResult.data),
-      gifts: (listedResult.data || []).map(mapGift),
+      collection: mapGiftCollection(collectionResult.data as Record<string, unknown>),
+      gifts: (listedResult.data || []).map(mapGift).filter((gift) => Boolean(gift.virtualGiftId)),
       nextOffset: (listedResult.data || []).length < (listedResult.count || 0) ? (listedResult.data || []).length : null,
-      candles: [...(candlesResult.data || [])].reverse().map((candle) => ({
-        time: Math.floor(new Date(candle.bucket_start).getTime() / 1000),
-        open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close), volume: Number(candle.volume),
-      })),
+      candles: [...(candlesResult.data || [])].reverse().flatMap((candle) => {
+        const time = safeUnixSeconds(candle.bucket_start);
+        if (time == null) return [];
+        return [{ time, open: finiteNumber(candle.open), high: finiteNumber(candle.high), low: finiteNumber(candle.low), close: finiteNumber(candle.close), volume: finiteNumber(candle.volume) }];
+      }),
       models: mapTraitStats(traitRows, "model"),
       backdrops: mapTraitStats(traitRows, "backdrop"),
       symbols: mapTraitStats(traitRows, "symbol"),
-      activity: activityRows.map((event) => {
+      activity: activityRows.flatMap((event) => {
+        const eventId = nonEmptyId(event.id);
+        const virtualGiftId = nonEmptyId(event.virtual_gift_id);
+        if (!eventId || !virtualGiftId) return [];
         const asset = Array.isArray(event.gift_assets) ? event.gift_assets[0] : event.gift_assets;
-        return {
-          id: String(event.id),
-          virtualGiftId: String(event.virtual_gift_id),
-          giftNumber: Number(asset?.gift_number || 0),
-          kind: event.kind,
-          price: event.price == null ? null : Number(event.price),
-          previousPrice: event.previous_price == null ? null : Number(event.previous_price),
-          actorId: event.actor_profile_id ? String(event.actor_profile_id) : null,
-          actorName: event.actor_profile_id ? names.get(String(event.actor_profile_id)) || "Пользователь" : null,
-          createdAt: String(event.created_at),
-        };
+        const actorId = nonEmptyId(event.actor_profile_id);
+        return [{
+          id: eventId,
+          virtualGiftId,
+          giftNumber: finiteNumber(asset?.gift_number),
+          kind: text(event.kind, "listed", 40),
+          price: nullableNumber(event.price),
+          previousPrice: nullableNumber(event.previous_price),
+          actorId,
+          actorName: actorId ? names.get(actorId) || "Пользователь" : null,
+          createdAt: safeIsoDate(event.created_at),
+        }];
       }),
-      recentSales: tradeRows.map((trade) => ({
-        id: String(trade.id),
-        price: Number(trade.price),
-        createdAt: String(trade.created_at),
-        buyerId: String(trade.buyer_profile_id),
-        buyerName: names.get(String(trade.buyer_profile_id)) || "Пользователь",
-        sellerId: trade.seller_profile_id == null ? null : String(trade.seller_profile_id),
-        sellerName: trade.seller_profile_id == null ? null : names.get(String(trade.seller_profile_id)) || "Пользователь",
-      })),
+      recentSales: tradeRows.flatMap((trade) => {
+        const tradeId = nonEmptyId(trade.id);
+        const buyerId = nonEmptyId(trade.buyer_profile_id);
+        if (!tradeId || !buyerId) return [];
+        const sellerId = nonEmptyId(trade.seller_profile_id);
+        return [{
+          id: tradeId,
+          price: finiteNumber(trade.price),
+          createdAt: safeIsoDate(trade.created_at),
+          buyerId,
+          buyerName: names.get(buyerId) || "Пользователь",
+          sellerId,
+          sellerName: sellerId ? names.get(sellerId) || "Пользователь" : null,
+        }];
+      }),
       watched: Boolean(watchedResult.data),
     }, { headers: { "server-timing": `collection;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {
@@ -122,3 +119,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nam
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить коллекцию" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/collections/[name]/route.ts:GET", GETHandler);

@@ -1,3 +1,4 @@
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -5,7 +6,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { recordAppError } from "@/lib/error-inbox";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const { id } = await params;
@@ -23,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   })) }, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -33,7 +34,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const config = await getRuntimeConfig();
     if (!config.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
-    const body = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const kind = ["limit_buy", "limit_sell", "take_profit", "stop_loss"].includes(body.kind) ? String(body.kind) : "";
     const triggerPrice = Number(body.triggerPrice);
     const inputAmount = Number(body.inputAmount);
@@ -58,3 +60,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось создать ордер" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/coins/[id]/orders/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/coins/[id]/orders/route.ts:POST", POSTHandler);

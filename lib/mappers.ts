@@ -1,5 +1,5 @@
 import { rgbIntToHex } from "@/lib/format";
-import type { Coin, GiftAsset, GiftMediaKind } from "@/lib/types";
+import type { Coin, GiftAsset, GiftCollection, GiftMediaKind } from "@/lib/types";
 
 function requiredString(value: unknown, _name: string, fallback = "") {
   return typeof value === "string" && value.length > 0 ? value : fallback;
@@ -15,7 +15,15 @@ function requiredNumber(value: unknown, _name: string, fallback = 0) {
 }
 
 function nullableString(value: unknown) {
-  return value == null ? null : String(value);
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function safeIsoDate(value: unknown, fallback: string | null = null) {
+  if (typeof value !== "string" && !(value instanceof Date)) return fallback;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : fallback;
 }
 
 function nullableNumber(value: unknown, name: string) {
@@ -27,6 +35,32 @@ function nullableNumber(value: unknown, name: string) {
 function safeColor(value: unknown, fallback = 16777215) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function safeMediaUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  const url = value.trim();
+  if (!url || /^tonapi:.*:symbol$/i.test(url) || /^tonapi:/i.test(url)) return null;
+  if (/^(?:https?:\/\/|data:image\/|\/api\/)/i.test(url)) return url;
+  return null;
+}
+
+function telegramFileUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  const fileId = value.trim();
+  if (!fileId || /^tonapi:/i.test(fileId)) return null;
+  return `/api/telegram/file/${encodeURIComponent(fileId)}`;
+}
+
+/** Canonical Gift image contract used by every API mapper. */
+export function resolveGiftImageUrl(row: Record<string, unknown>) {
+  return safeMediaUrl(row.model_preview_url)
+    || safeMediaUrl(row.model_media_url)
+    || safeMediaUrl(row.symbol_media_url)
+    || telegramFileUrl(row.model_thumb_file_id)
+    || telegramFileUrl(row.model_file_id)
+    || telegramFileUrl(row.symbol_thumb_file_id)
+    || telegramFileUrl(row.symbol_file_id);
 }
 
 function mediaKind(animated: unknown, video: unknown, _label: string): GiftMediaKind {
@@ -52,9 +86,9 @@ export function mapCoin(row: Record<string, unknown>): Coin {
   return {
     id: requiredString(row.id, "coin id"),
     creatorId: nullableString(row.creator_profile_id),
-    name: requiredString(row.name, "coin name"),
-    symbol: requiredString(row.symbol, "coin symbol"),
-    imageUrl: nullableString(row.image_url),
+    name: requiredString(row.name, "coin name", "Мемкоин"),
+    symbol: requiredString(row.symbol, "coin symbol", "UNKNOWN"),
+    imageUrl: safeMediaUrl(row.image_url),
     description: stringValue(row.description, "coin description"),
     currentPrice: requiredNumber(row.current_price, "coin current price"),
     marketCap: requiredNumber(row.market_cap, "coin market cap"),
@@ -62,7 +96,7 @@ export function mapCoin(row: Record<string, unknown>): Coin {
     change24h: requiredNumber(row.change_24h, "coin 24h change"),
     holderCount: requiredNumber(row.holder_count, "coin holder count"),
     tradeCount24h: requiredNumber(row.trade_count_24h, "coin trade count"),
-    createdAt: requiredString(row.created_at, "coin created_at"),
+    createdAt: safeIsoDate(row.created_at, new Date(0).toISOString()) || new Date(0).toISOString(),
     creatorName: nullableString(row.creator_name),
     liquidity: requiredNumber(row.liquidity, "coin liquidity"),
     allTimeVolume: requiredNumber(row.all_time_volume, "coin all-time volume"),
@@ -82,9 +116,9 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
   return {
     id: requiredString(row.asset_id, "gift asset id"),
     virtualGiftId: requiredString(row.virtual_gift_id, "virtual gift id"),
-    telegramName: requiredString(row.telegram_name, "Telegram gift name"),
+    telegramName: requiredString(row.telegram_name, "Telegram gift name", requiredString(row.base_name, "gift base name", "Gift")),
     giftId: nullableString(row.gift_id),
-    baseName: requiredString(row.base_name, "gift base name"),
+    baseName: requiredString(row.base_name, "gift base name", "Gift"),
     number: requiredNumber(row.gift_number, "gift number"),
     modelName: nullableString(row.model_name) || "Unknown",
     modelRarityPerMille: requiredNumber(row.model_rarity_per_mille, "model rarity"),
@@ -99,29 +133,30 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     backdropText: rgbIntToHex(safeColor(row.backdrop_text_color)),
     modelFileId: nullableString(row.model_file_id),
     modelThumbFileId: nullableString(row.model_thumb_file_id),
-    modelMediaUrl: nullableString(row.model_media_url),
-    modelPreviewUrl: nullableString(row.model_preview_url),
+    modelMediaUrl: safeMediaUrl(row.model_media_url),
+    modelPreviewUrl: safeMediaUrl(row.model_preview_url),
+    imageUrl: resolveGiftImageUrl(row),
     symbolFileId: nullableString(row.symbol_file_id),
     symbolThumbFileId: nullableString(row.symbol_thumb_file_id),
-    symbolMediaUrl: nullableString(row.symbol_media_url),
+    symbolMediaUrl: safeMediaUrl(row.symbol_media_url),
     symbolMediaKind: mediaKind(row.symbol_is_animated, row.symbol_is_video, "Gift symbol"),
     mediaKind: mediaKind(row.model_is_animated, row.model_is_video, "Gift model"),
     isPremium: Boolean(row.is_premium),
     isBurned: Boolean(row.is_burned),
     isFromBlockchain: Boolean(row.is_from_blockchain),
-    lastSeenAt: nullableString(row.last_seen_at) || nullableString(row.updated_at) || new Date(0).toISOString(),
+    lastSeenAt: safeIsoDate(row.last_seen_at) || safeIsoDate(row.updated_at) || new Date(0).toISOString(),
     catalogSource: row.catalog_source === "tonapi" ? "tonapi" : row.catalog_source === "bot_catalog" ? "bot_catalog" : "profile_sync",
     bestOffer: nullableNumber(row.best_offer, "gift best offer"),
     offerCount: requiredNumber(row.offer_count, "gift offer count"),
-    ownerId: nullableString(row.owner_profile_id) || "unknown",
-    ownerName: nullableString(row.owner_name) || "MXM Liquidity",
+    ownerId: nullableString(row.owner_profile_id) || "",
+    ownerName: nullableString(row.owner_name) || "Пользователь",
     acquiredPrice: nullableNumber(row.acquired_price, "gift acquisition price") ?? 0,
     listingPrice: nullableNumber(row.listing_price, "gift listing price"),
     lastSalePrice: nullableNumber(row.last_sale_price, "gift last sale price"),
     estimatedValue: nullableNumber(row.estimated_value, "gift estimated value"),
     externalListingPrice: nullableNumber(row.external_listing_price_ton, "external listing price"),
     externalPriceSource: nullableString(row.external_price_source),
-    externalPriceSeenAt: nullableString(row.external_price_seen_at),
+    externalPriceSeenAt: safeIsoDate(row.external_price_seen_at),
     referencePrice: nullableNumber(row.reference_price_ton, "gift reference price"),
     priceBasis: row.price_basis === "mxm_listing" || row.price_basis === "tonapi_listing" || row.price_basis === "item_last_sale" || row.price_basis === "collection_last_sale" ? row.price_basis : null,
     collectionFloor: nullableNumber(row.collection_floor, "collection floor"),
@@ -131,10 +166,32 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     chainNftAddress: nullableString(row.chain_nft_address),
     chainCollectionAddress: nullableString(row.chain_collection_address),
     chainVerified: Boolean(row.chain_verified),
-    listedAt: nullableString(row.listed_at),
-    listingUpdatedAt: nullableString(row.listing_updated_at),
-    listingExpiresAt: nullableString(row.listing_expires_at),
+    listedAt: safeIsoDate(row.listed_at),
+    listingUpdatedAt: safeIsoDate(row.listing_updated_at),
+    listingExpiresAt: safeIsoDate(row.listing_expires_at),
     status: safeStatus,
-    createdAt: requiredString(row.created_at, "gift created_at"),
+    createdAt: safeIsoDate(row.created_at, new Date(0).toISOString()) || new Date(0).toISOString(),
+  };
+}
+
+
+export function mapGiftCollection(row: Record<string, unknown>): GiftCollection {
+  return {
+    baseName: requiredString(row.base_name, "collection name", "Gift"),
+    itemCount: requiredNumber(row.item_count, "collection item count"),
+    holderCount: requiredNumber(row.holder_count, "collection holder count"),
+    listedCount: requiredNumber(row.listed_count, "collection listed count"),
+    floorPrice: nullableNumber(row.floor_price, "collection floor"),
+    lastSalePrice: nullableNumber(row.last_sale_price, "collection last sale"),
+    volume24h: requiredNumber(row.volume_24h, "collection 24h volume"),
+    change24h: requiredNumber(row.change_24h, "collection 24h change"),
+    tradeCount24h: requiredNumber(row.trade_count_24h, "collection 24h trade count"),
+    volume7d: requiredNumber(row.volume_7d, "collection 7d volume"),
+    tradeCount7d: requiredNumber(row.trade_count_7d, "collection 7d trade count"),
+    listedPct: requiredNumber(row.listed_pct, "collection listed percentage"),
+    allTimeVolume: requiredNumber(row.all_time_volume, "collection all-time volume"),
+    totalSales: requiredNumber(row.total_sales, "collection total sales"),
+    highSale: nullableNumber(row.high_sale, "collection high sale"),
+    externalFloor: nullableNumber(row.external_floor, "collection external floor"),
   };
 }

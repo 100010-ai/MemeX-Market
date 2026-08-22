@@ -40,8 +40,19 @@ export function validateTelegramInitData(initData: string, botToken: string, max
   if (!rawUser) return { ok: false as const, reason: "Missing user" };
 
   try {
-    const user = JSON.parse(rawUser) as TelegramUser;
-    if (!user.id || !user.first_name) return { ok: false as const, reason: "Invalid user" };
+    const parsed = JSON.parse(rawUser) as Partial<TelegramUser> | null;
+    const id = Number(parsed?.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return { ok: false as const, reason: "Invalid user" };
+    const clean = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : undefined;
+    const user: TelegramUser = {
+      id,
+      first_name: clean(parsed?.first_name) || "Telegram User",
+      ...(typeof parsed?.is_bot === "boolean" ? { is_bot: parsed.is_bot } : {}),
+      ...(clean(parsed?.last_name) ? { last_name: clean(parsed?.last_name) } : {}),
+      ...(clean(parsed?.username) ? { username: clean(parsed?.username) } : {}),
+      ...(clean(parsed?.language_code) ? { language_code: clean(parsed?.language_code) } : {}),
+      ...(clean(parsed?.photo_url) ? { photo_url: clean(parsed?.photo_url) } : {}),
+    };
     return { ok: true as const, user, authDate, startParam: params.get("start_param") };
   } catch {
     return { ok: false as const, reason: "Invalid user payload" };

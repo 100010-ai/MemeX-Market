@@ -1,20 +1,17 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapGift } from "@/lib/mappers";
 import { resolveGiftAlias } from "@/lib/gifts/resolver";
+import { finiteNumber, nonEmptyId, nullableNumber, safeIsoDate, text } from "@/lib/safe-data";
 
 function personName(names: Map<string, string>, id: string) {
   return names.get(id) || "Пользователь";
 }
 
-function numberOrNull(value: unknown) {
-  if (value == null) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,8 +22,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const giftRow = await resolveGiftAlias(id);
     if (!giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
 
-    const virtualGiftId = String(giftRow.virtual_gift_id);
-    const baseName = String(giftRow.base_name || "Unknown Gift");
+    const virtualGiftId = nonEmptyId(giftRow.virtual_gift_id);
+    if (!virtualGiftId) return NextResponse.json({ error: "Gift record is invalid" }, { status: 422 });
+    const baseName = text(giftRow.base_name, "Gift", 180);
     const nowIso = new Date().toISOString();
 
     const [tradesResult, offersResult, advancedOffersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
@@ -84,35 +82,53 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const itemStats = itemStatsResult.error ? null : itemStatsResult.data as unknown as Record<string, unknown> | null;
     const gift = mapGift(giftRow);
 
-    const collectionFloor = numberOrNull(collection?.floor_price) ?? gift.collectionFloor;
-    const collectionLastSale = numberOrNull(collection?.last_sale_price);
+    const collectionFloor = nullableNumber(collection?.floor_price) ?? gift.collectionFloor;
+    const collectionLastSale = nullableNumber(collection?.last_sale_price);
 
-    const saleActivity = trades.map((trade) => ({
-      id: `sale:${trade.id}`,
-      kind: "sale" as const,
-      price: Number(trade.price),
-      previousPrice: null,
-      actorId: trade.buyer_profile_id ? String(trade.buyer_profile_id) : null,
-      actorName: trade.buyer_profile_id ? personName(names, String(trade.buyer_profile_id)) : null,
-      createdAt: String(trade.created_at),
-    }));
+    const saleActivity = trades.flatMap((trade) => {
+      const tradeId = nonEmptyId(trade.id);
+      if (!tradeId) return [];
+      const actorId = nonEmptyId(trade.buyer_profile_id);
+      return [{
+        id: `sale:${tradeId}`,
+        kind: "sale" as const,
+        price: finiteNumber(trade.price),
+        previousPrice: null,
+        actorId,
+        actorName: actorId ? personName(names, actorId) : null,
+        createdAt: safeIsoDate(trade.created_at),
+      }];
+    });
     const listingActivity = listingEvents
       .filter((event) => event.kind !== "sold" && event.kind !== "offer_accepted")
-      .map((event) => ({
-        id: `listing:${event.id}`,
-        kind: event.kind as "listed" | "repriced" | "unlisted" | "expired",
-        price: numberOrNull(event.price),
-        previousPrice: numberOrNull(event.previous_price),
-        actorId: event.actor_profile_id ? String(event.actor_profile_id) : null,
-        actorName: event.actor_profile_id ? personName(names, String(event.actor_profile_id)) : null,
-        createdAt: String(event.created_at),
-      }));
+      .flatMap((event) => {
+        const eventId = nonEmptyId(event.id);
+        if (!eventId) return [];
+        const actorId = nonEmptyId(event.actor_profile_id);
+        const kind = text(event.kind, "", 32);
+        if (!(["listed", "repriced", "unlisted", "expired"] as string[]).includes(kind)) return [];
+        return [{
+          id: `listing:${eventId}`,
+          kind: kind as "listed" | "repriced" | "unlisted" | "expired",
+          price: nullableNumber(event.price),
+          previousPrice: nullableNumber(event.previous_price),
+          actorId,
+          actorName: actorId ? personName(names, actorId) : null,
+          createdAt: safeIsoDate(event.created_at),
+        }];
+      });
     const activity = [...saleActivity, ...listingActivity]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 60);
 
+    const warnings = [
+      ["trades", tradesResult.error], ["offers", offersResult.error], ["advancedOffers", advancedOffersResult.error],
+      ["collection", collectionResult.error], ["itemStats", itemStatsResult.error], ["listingEvents", listingEventsResult.error], ["cart", cartResult.error], ["watchlist", watchedResult.error],
+    ].flatMap(([section, error]) => error ? [{ section: String(section), code: String((error as { code?: unknown }).code || "QUERY_ERROR") }] : []);
+
     return NextResponse.json({
       gift,
+      warnings,
       resolvedVirtualGiftId: virtualGiftId,
       isOwner: gift.ownerId === String(profile.id),
       inCart: Boolean(cartResult.data),
@@ -120,26 +136,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       balance: snapshot.balance,
       availableBalance: snapshot.availableBalance,
       reservedBalance: snapshot.reservedBalance,
-      trades: trades.map((trade) => ({
-        id: String(trade.id), price: Number(trade.price), createdAt: String(trade.created_at),
-        buyerId: String(trade.buyer_profile_id), buyerName: personName(names, String(trade.buyer_profile_id)),
-        sellerId: trade.seller_profile_id ? String(trade.seller_profile_id) : null,
-        sellerName: trade.seller_profile_id ? personName(names, String(trade.seller_profile_id)) : null,
-      })),
+      trades: trades.flatMap((trade) => {
+        const tradeId = nonEmptyId(trade.id);
+        const buyerId = nonEmptyId(trade.buyer_profile_id);
+        if (!tradeId || !buyerId) return [];
+        const sellerId = nonEmptyId(trade.seller_profile_id);
+        return [{ id: tradeId, price: finiteNumber(trade.price), createdAt: safeIsoDate(trade.created_at), buyerId, buyerName: personName(names, buyerId), sellerId, sellerName: sellerId ? personName(names, sellerId) : null }];
+      }),
       activity,
       candles: [],
       itemStats: {
-        tradeCount: Number(itemStats?.trade_count || 0),
-        volume: Number(itemStats?.volume || 0),
-        highSale: numberOrNull(itemStats?.high_sale),
-        lowSale: numberOrNull(itemStats?.low_sale),
+        tradeCount: finiteNumber(itemStats?.trade_count),
+        volume: finiteNumber(itemStats?.volume),
+        highSale: nullableNumber(itemStats?.high_sale),
+        lowSale: nullableNumber(itemStats?.low_sale),
       },
       collection: {
         baseName,
-        itemCount: Number(collection?.item_count || 0), holderCount: Number(collection?.holder_count || 0), listedCount: Number(collection?.listed_count || 0),
-        floorPrice: collectionFloor, lastSalePrice: collectionLastSale, volume24h: Number(collection?.volume_24h || 0), change24h: Number(collection?.change_24h || 0), tradeCount24h: Number(collection?.trade_count_24h || 0),
-        volume7d: Number(collection?.volume_7d || 0), tradeCount7d: Number(collection?.trade_count_7d || 0), listedPct: Number(collection?.listed_pct || 0),
-        allTimeVolume: Number(collection?.all_time_volume || 0), totalSales: Number(collection?.total_sales || 0), highSale: numberOrNull(collection?.high_sale), externalFloor: numberOrNull(collection?.external_floor),
+        itemCount: finiteNumber(collection?.item_count), holderCount: finiteNumber(collection?.holder_count), listedCount: finiteNumber(collection?.listed_count),
+        floorPrice: collectionFloor, lastSalePrice: collectionLastSale, volume24h: finiteNumber(collection?.volume_24h), change24h: finiteNumber(collection?.change_24h), tradeCount24h: finiteNumber(collection?.trade_count_24h),
+        volume7d: finiteNumber(collection?.volume_7d), tradeCount7d: finiteNumber(collection?.trade_count_7d), listedPct: finiteNumber(collection?.listed_pct),
+        allTimeVolume: finiteNumber(collection?.all_time_volume), totalSales: finiteNumber(collection?.total_sales), highSale: nullableNumber(collection?.high_sale), externalFloor: nullableNumber(collection?.external_floor),
       },
       traitStats: {
         collectionFloor,
@@ -151,18 +168,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         referencePrice: gift.referencePrice,
         priceBasis: gift.priceBasis,
       },
-      offers: offers.map((offer) => ({
-        id: String(offer.id), amount: Number(offer.amount), status: offer.status, createdAt: String(offer.created_at), expiresAt: offer.expires_at ? String(offer.expires_at) : null,
-        buyerId: String(offer.buyer_profile_id), buyerName: personName(names, String(offer.buyer_profile_id)), isMine: String(offer.buyer_profile_id) === String(profile.id),
-      })),
-      advancedOffers: advancedOffers.map((offer) => ({
-        id: String(offer.id), buyerId: String(offer.buyer_profile_id), buyerName: personName(names, String(offer.buyer_profile_id)),
-        scopeType: String(offer.scope_type), traitValue: offer.trait_value == null ? null : String(offer.trait_value), amount: Number(offer.amount),
-        maxFills: Number(offer.max_fills), filledCount: Number(offer.filled_count), expiresAt: String(offer.expires_at), createdAt: String(offer.created_at),
-      })),
+      offers: offers.flatMap((offer) => {
+        const offerId = nonEmptyId(offer.id);
+        const buyerId = nonEmptyId(offer.buyer_profile_id);
+        if (!offerId || !buyerId) return [];
+        return [{ id: offerId, amount: finiteNumber(offer.amount), status: text(offer.status, "pending", 32), createdAt: safeIsoDate(offer.created_at), expiresAt: offer.expires_at ? safeIsoDate(offer.expires_at) : null, buyerId, buyerName: personName(names, buyerId), isMine: buyerId === String(profile.id) }];
+      }),
+      advancedOffers: advancedOffers.flatMap((offer) => {
+        const offerId = nonEmptyId(offer.id);
+        const buyerId = nonEmptyId(offer.buyer_profile_id);
+        if (!offerId || !buyerId) return [];
+        return [{ id: offerId, buyerId, buyerName: personName(names, buyerId), scopeType: text(offer.scope_type, "collection", 32), traitValue: offer.trait_value == null ? null : text(offer.trait_value, "", 160) || null, amount: finiteNumber(offer.amount), maxFills: finiteNumber(offer.max_fills), filledCount: finiteNumber(offer.filled_count), expiresAt: safeIsoDate(offer.expires_at), createdAt: safeIsoDate(offer.created_at) }];
+      }),
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `gift-detail;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     console.error("gift detail", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load Gift" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/gifts/[id]/route.ts:GET", GETHandler);

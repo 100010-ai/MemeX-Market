@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
@@ -8,7 +9,7 @@ function intParam(value: string | null, fallback: number, min: number, max: numb
   return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
+async function GETHandler(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { name } = await params;
@@ -39,3 +40,4 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     nextOffset: hasMore ? offset + pageRows.length : null,
   }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });
 }
+export const GET = withApiErrors("app/api/collections/[name]/listings/route.ts:GET", GETHandler);

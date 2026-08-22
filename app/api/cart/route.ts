@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
 
 type CartBody = { virtualGiftId?: string; action?: "add" | "remove" | "clear" };
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -29,7 +30,7 @@ export async function GET() {
   return NextResponse.json({ items, total, count: items.length });
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -67,3 +68,5 @@ export async function POST(request: NextRequest) {
   if (added.error) return NextResponse.json({ error: added.error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+export const GET = withApiErrors("app/api/cart/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/cart/route.ts:POST", POSTHandler);

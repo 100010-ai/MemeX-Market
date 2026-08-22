@@ -110,6 +110,7 @@ export type GiftAsset = {
   modelThumbFileId: string | null;
   modelMediaUrl: string | null;
   modelPreviewUrl: string | null;
+  imageUrl: string | null;
   symbolFileId: string | null;
   symbolThumbFileId: string | null;
   symbolMediaUrl: string | null;

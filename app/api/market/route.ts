@@ -1,11 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { mapCoin, mapGift } from "@/lib/mappers";
+import { mapCoin, mapGift, mapGiftCollection } from "@/lib/mappers";
 import { maybeMaintainGiftMarket } from "@/lib/market/maintenance";
-import type { GiftCollection } from "@/lib/types";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
@@ -46,28 +46,8 @@ function parseGiftMarketPage(value: unknown): Required<GiftMarketPage> {
   };
 }
 
-function mapCollection(row: Record<string, unknown>): GiftCollection {
-  return {
-    baseName: String(row.base_name),
-    itemCount: Number(row.item_count),
-    holderCount: Number(row.holder_count),
-    listedCount: Number(row.listed_count),
-    floorPrice: row.floor_price == null ? null : Number(row.floor_price),
-    lastSalePrice: row.last_sale_price == null ? null : Number(row.last_sale_price),
-    volume24h: Number(row.volume_24h),
-    change24h: Number(row.change_24h),
-    tradeCount24h: Number(row.trade_count_24h),
-    volume7d: Number(row.volume_7d || 0),
-    tradeCount7d: Number(row.trade_count_7d || 0),
-    listedPct: Number(row.listed_pct || 0),
-    allTimeVolume: Number(row.all_time_volume || 0),
-    totalSales: Number(row.total_sales || 0),
-    highSale: row.high_sale == null ? null : Number(row.high_sale),
-    externalFloor: row.external_floor == null ? null : Number(row.external_floor),
-  };
-}
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const startedAt = Date.now();
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,10 +75,9 @@ export async function GET(request: NextRequest) {
         supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id),
         supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       ]);
-      const boostViewMissing = boostsResult.error && (["42P01", "PGRST205"].includes(String(boostsResult.error.code || "")) || /active_coin_boosts_v200|schema cache|relation .* does not exist/i.test(boostsResult.error.message || ""));
-      const firstError = coinsResult.error || newCoinsResult.error || (boostViewMissing ? null : boostsResult.error) || watchlistResult.error || cartResult.error;
+      const firstError = coinsResult.error || newCoinsResult.error || boostsResult.error || watchlistResult.error || cartResult.error;
       if (firstError) throw firstError;
-      const boostRows = boostViewMissing ? [] : boostsResult.data || [];
+      const boostRows = boostsResult.data || [];
       const boostByCoin = new Map(boostRows.map((row) => [String(row.coin_id), String(row.boosted_until)]));
       const boostedCoinIds = [...boostByCoin.keys()];
       let boostedCoinRows: Record<string, unknown>[] = [];
@@ -190,7 +169,7 @@ export async function GET(request: NextRequest) {
       coins: [],
       newCoins: [],
       gifts: page.gifts.map(mapGift),
-      collections: (collectionsResult.data || []).map((row) => mapCollection(row as Record<string, unknown>)),
+      collections: (collectionsResult.data || []).map((row) => mapGiftCollection(row as Record<string, unknown>)),
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
@@ -209,3 +188,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Не удалось загрузить рынок" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/market/route.ts:GET", GETHandler);

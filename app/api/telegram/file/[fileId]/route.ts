@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getTelegramFile, isKnownGiftFile } from "@/lib/gifts";
@@ -14,7 +15,7 @@ function contentType(path: string) {
   return "application/octet-stream";
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ fileId: string }> }) {
   // Media requests are numerous; verifying the signed Telegram session cookie is
   // enough here and avoids a Supabase profile query for every image tile.
   if (!(await readSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
@@ -35,3 +36,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ fil
     return NextResponse.json({ error: "Медиа подарка временно недоступно" }, { status: 404 });
   }
 }
+export const GET = withApiErrors("app/api/telegram/file/[fileId]/route.ts:GET", GETHandler);

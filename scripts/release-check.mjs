@@ -219,7 +219,7 @@ check("Paid Coin Boost is visible in New Coins",
 check("Referral link auth binding", read("app/api/auth/telegram/route.ts").includes("attach_referrer_v046"));
 check("Promo codes", migration022.includes("promo_codes") && exists("app/api/promo/route.ts"));
 
-check("PnL uses realized trading PnL", auth.includes("pnl: finance.realizedPnl") && !auth.includes("netWorth - 100"));
+check("PnL uses realized trading PnL", /pnl:\s*(?:safeNumber\()?finance\.realizedPnl/.test(auth) && !auth.includes("netWorth - 100"));
 check("Economy audit ledger", migration020.includes("create table if not exists public.economy_events") && migration028.includes("economyEmissionToday") && read("app/api/admin/overview/route.ts").includes("admin_dashboard_metrics_v028"));
 check("AMM trade fee sink is audited", migration020.includes("log_coin_trade_fee_v045") && migration028.includes("tradeFeeSinkToday") && read("app/api/admin/overview/route.ts").includes("admin_dashboard_metrics_v028"));
 check("Admin economy update excludes retired settings", adminAction.includes('.from("economy_settings")') && !/rewardedAd|rewarded_ad/.test(adminAction));

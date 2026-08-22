@@ -1,3 +1,4 @@
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -9,7 +10,7 @@ function cleanText(value: unknown, max = 120) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const baseName = cleanText(request.nextUrl.searchParams.get("baseName"));
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -70,7 +71,8 @@ export async function POST(request: Request) {
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
   try {
-    const body = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const baseName = cleanText(body.baseName);
     const scopeType = ["collection", "model", "backdrop", "symbol"].includes(body.scopeType) ? body.scopeType : null;
     const traitValue = cleanText(body.traitValue) || null;
@@ -98,3 +100,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Не удалось создать оффер" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/market/offers/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/market/offers/route.ts:POST", POSTHandler);

@@ -1,9 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -26,3 +27,4 @@ export async function POST(request: Request) {
     : {};
   return NextResponse.json({ reward: { mxmCoins: Number(reward.mxmCoins || 0), energy: Number(reward.energy || 0) }, mxmCoins: Number(payload.mxmCoins || 0), energy: Number(payload.energy || 0) }, { headers: { "cache-control": "no-store" } });
 }
+export const POST = withApiErrors("app/api/store/daily/route.ts:POST", POSTHandler);

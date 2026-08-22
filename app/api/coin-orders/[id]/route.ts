@@ -1,9 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sameOriginMutation, validUuidLike } from "@/lib/security";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -16,3 +17,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ result: data });
 }
+export const POST = withApiErrors("app/api/coin-orders/[id]/route.ts:POST", POSTHandler);

@@ -1,8 +1,9 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function GET() {
+async function GETHandler() {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
@@ -14,3 +15,4 @@ export async function GET() {
     return NextResponse.json({ error: "Не удалось загрузить конфигурацию приложения" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/runtime-config/route.ts:GET", GETHandler);

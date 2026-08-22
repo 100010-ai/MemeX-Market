@@ -1,9 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getMarketActivity } from "@/lib/feed";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   const requested = Number(request.nextUrl.searchParams.get("limit") || 30);
@@ -16,3 +17,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить ленту рынка" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/feed/route.ts:GET", GETHandler);

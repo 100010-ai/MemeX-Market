@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
@@ -7,7 +8,7 @@ function missing(error: { code?: string; message?: string } | null | undefined) 
   return Boolean(error && (error.code === "42883" || /case_snapshot_v200|open_case_v200|schema cache|could not find the function/i.test(error.message || "")));
 }
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { data, error } = await getSupabaseAdmin().rpc("case_snapshot_v200", { p_profile_id: profile.id });
@@ -15,7 +16,7 @@ export async function GET() {
   return NextResponse.json(data, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -34,3 +35,5 @@ export async function POST(request: Request) {
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }
+export const GET = withApiErrors("app/api/cases/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/cases/route.ts:POST", POSTHandler);

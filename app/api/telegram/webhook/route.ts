@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { safeSecretEquals } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -17,7 +18,7 @@ type TelegramUpdate = {
   };
 };
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
   const provided = String(request.headers.get("x-telegram-bot-api-secret-token") || "").trim();
   if (process.env.NODE_ENV === "production" && (!expected || expected.length < 16)) return NextResponse.json({ error: "Webhook secret is not configured" }, { status: 503 });
@@ -132,3 +133,4 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+export const POST = withApiErrors("app/api/telegram/webhook/route.ts:POST", POSTHandler);

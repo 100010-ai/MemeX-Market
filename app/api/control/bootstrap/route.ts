@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -19,7 +20,7 @@ async function fetchAll<T>(makePage: (from: number, to: number) => PromiseLike<P
   return rows;
 }
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const supabase = getSupabaseAdmin();
   try {
@@ -120,3 +121,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить локальную админку" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/control/bootstrap/route.ts:GET", GETHandler);

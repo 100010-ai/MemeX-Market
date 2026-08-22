@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { uploadCoinImage } from "@/lib/coin-media";
@@ -5,7 +6,7 @@ import { sameOriginMutation } from "@/lib/security";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   try {
@@ -18,3 +19,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить изображение" }, { status: 400 });
   }
 }
+export const POST = withApiErrors("app/api/control/upload/route.ts:POST", POSTHandler);

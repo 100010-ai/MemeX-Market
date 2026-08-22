@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { setSession } from "@/lib/session";
@@ -5,7 +6,7 @@ import { getProfileSnapshot } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+async function POSTHandler() {
   if (process.env.NODE_ENV === "production" || process.env.DEV_AUTH_ENABLED !== "true") {
     return NextResponse.json({ error: "Dev auth is disabled" }, { status: 403 });
   }
@@ -27,3 +28,4 @@ export async function POST() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Dev auth failed" }, { status: 500 });
   }
 }
+export const POST = withApiErrors("app/api/auth/dev/route.ts:POST", POSTHandler);

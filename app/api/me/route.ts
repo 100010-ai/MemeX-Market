@@ -1,7 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSessionProfileSnapshot } from "@/lib/auth";
+import { getSessionConfigStatus } from "@/lib/session";
 
-export async function GET() {
+async function GETHandler() {
+  if (!getSessionConfigStatus().configured) return NextResponse.json({ error: "Сессии временно недоступны" }, { status: 503 });
   try {
     const profile = await getSessionProfileSnapshot();
     if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,3 +14,4 @@ export async function GET() {
     return NextResponse.json({ error: "Could not load profile" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/me/route.ts:GET", GETHandler);

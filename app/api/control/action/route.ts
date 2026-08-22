@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -17,7 +18,7 @@ async function audit(action: string, targetType?: string, targetId?: string, pay
   if (error) console.error("local control audit", error);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   const body = await request.json().catch(() => ({}));
@@ -224,3 +225,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Операция не выполнена" }, { status: 400 });
   }
 }
+export const POST = withApiErrors("app/api/control/action/route.ts:POST", POSTHandler);

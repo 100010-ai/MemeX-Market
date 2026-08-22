@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -12,7 +13,7 @@ function objectPayload(value: unknown): ActivityPayload {
   return value && typeof value === "object" && !Array.isArray(value) ? value as ActivityPayload : {};
 }
 
-export async function GET() {
+async function GETHandler() {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   const supabase = getSupabaseAdmin();
@@ -58,3 +59,4 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось собрать Economy & Risk" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/admin/economy-risk/route.ts:GET", GETHandler);

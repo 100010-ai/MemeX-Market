@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -7,7 +8,7 @@ import { ensureNpcMarketLiquidity } from "@/lib/npc-market";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -23,3 +24,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось обновить каталог" }, { status: 500 });
   }
 }
+export const POST = withApiErrors("app/api/admin/catalog-sync/route.ts:POST", POSTHandler);

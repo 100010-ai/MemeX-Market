@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { syncTelegramGifts } from "@/lib/gifts";
@@ -5,7 +6,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
@@ -18,3 +19,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось синхронизировать Telegram Gifts" }, { status: 502 });
   }
 }
+export const POST = withApiErrors("app/api/gifts/sync/route.ts:POST", POSTHandler);

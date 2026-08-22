@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -26,7 +27,7 @@ function mapCollection(row: Record<string, unknown>) {
   };
 }
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -41,8 +42,7 @@ export async function GET() {
     getRuntimeConfig(),
     supabase.from("profiles").select("premium_until").eq("id", profile.id).maybeSingle(),
   ]);
-  const premiumMissing = premiumResult.error && (premiumResult.error.code === "42703" || /premium_until|schema cache|column .* does not exist/i.test(premiumResult.error.message || ""));
-  if (premiumResult.error && !premiumMissing) {
+  if (premiumResult.error) {
     console.error("watchlist capacity", premiumResult.error);
     return NextResponse.json({ error: "Не удалось загрузить лимит избранного" }, { status: 500 });
   }
@@ -72,7 +72,7 @@ export async function GET() {
   });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const profileId = String(profile.id);
@@ -86,8 +86,7 @@ export async function POST(request: Request) {
   const config = await getRuntimeConfig();
   let watchlistLimit = config.remoteConfig.maxWatchlistItems;
   const premium = await supabase.from("profiles").select("premium_until").eq("id", profileId).maybeSingle();
-  const missingPremiumColumn = premium.error && (premium.error.code === "42703" || /premium_until|schema cache|column .* does not exist/i.test(premium.error.message || ""));
-  if (premium.error && !missingPremiumColumn) {
+  if (premium.error) {
     console.error("watchlist premium", premium.error);
     return NextResponse.json({ error: "Не удалось проверить лимит избранного" }, { status: 500 });
   }
@@ -118,3 +117,5 @@ export async function POST(request: Request) {
   }
   return NextResponse.json(data || { enabled });
 }
+export const GET = withApiErrors("app/api/watchlist/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/watchlist/route.ts:POST", POSTHandler);

@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -7,7 +8,7 @@ function missing(error: { code?: string; message?: string } | null | undefined) 
   return Boolean(error && (["42883", "42703", "PGRST204"].includes(String(error.code || "")) || /monetization_snapshot_v200|equip_profile_item_v200|equipped_profile_frame|schema cache|could not find the function/i.test(error.message || "")));
 }
 
-export async function GET() {
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { data, error } = await getSupabaseAdmin().rpc("monetization_snapshot_v200", { p_profile_id: profile.id });
@@ -16,7 +17,7 @@ export async function GET() {
   return NextResponse.json({ wallet: payload.wallet || {}, items: Array.isArray(payload.profileItems) ? payload.profileItems : [] }, { headers: { "cache-control": "private, no-store" } });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -38,3 +39,5 @@ export async function POST(request: Request) {
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }
+export const GET = withApiErrors("app/api/profile/customize/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/profile/customize/route.ts:POST", POSTHandler);

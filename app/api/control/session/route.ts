@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { clearLocalControlSession, consumeLocalControlLoginAttempt, createLocalControlSession, ensureLocalControlKey, hasLocalControlSession, localControlAvailable, verifyLocalToken } from "@/lib/local-admin";
 import { sameOriginMutation } from "@/lib/security";
@@ -5,7 +6,7 @@ import { getSupabaseAdminConfigStatus } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const available = localControlAvailable(request);
   if (available) ensureLocalControlKey();
   return NextResponse.json({
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   });
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   if (!localControlAvailable(request)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!consumeLocalControlLoginAttempt("localhost")) return NextResponse.json({ error: "Слишком много попыток входа." }, { status: 429 });
@@ -31,9 +32,12 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+async function DELETEHandler(request: Request) {
   if (!localControlAvailable(request)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   await clearLocalControlSession();
   return NextResponse.json({ ok: true });
 }
+export const GET = withApiErrors("app/api/control/session/route.ts:GET", GETHandler);
+export const POST = withApiErrors("app/api/control/session/route.ts:POST", POSTHandler);
+export const DELETE = withApiErrors("app/api/control/session/route.ts:DELETE", DELETEHandler);

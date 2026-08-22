@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { uploadCoinImage } from "@/lib/coin-media";
@@ -5,7 +6,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -22,3 +23,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить изображение" }, { status: 400 });
   }
 }
+export const POST = withApiErrors("app/api/admin/upload/route.ts:POST", POSTHandler);

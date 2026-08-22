@@ -1,10 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { calculateCoinQuote } from "@/lib/amm";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -30,3 +31,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!quote) return NextResponse.json({ error: "Trade is too small" }, { status: 400 });
   return NextResponse.json({ quote });
 }
+export const POST = withApiErrors("app/api/coins/[id]/quote/route.ts:POST", POSTHandler);

@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -7,7 +8,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 const allowedCounts = new Set([2, 5, 10]);
 
-export async function POST(request: Request, { params }: { params: Promise<{ name: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -59,3 +60,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
     quotedTotal,
   }, { headers: { "cache-control": "no-store" } });
 }
+export const POST = withApiErrors("app/api/collections/[name]/sweep/route.ts:POST", POSTHandler);

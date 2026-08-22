@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -53,7 +54,7 @@ async function waitForConcurrentBootstrap(maxWaitMs = 18_000) {
   return 0;
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -106,3 +107,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: friendlyBootstrapError(error) }, { status: 502 });
   }
 }
+export const POST = withApiErrors("app/api/gifts/bootstrap/route.ts:POST", POSTHandler);

@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -6,7 +7,7 @@ function status(ok: boolean, detail: string, latencyMs?: number) {
   return { status: ok ? "ok" as const : "warning" as const, detail, latencyMs: latencyMs ?? null };
 }
 
-export async function GET() {
+async function GETHandler() {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -49,3 +50,4 @@ export async function GET() {
     checkedAt: new Date().toISOString(),
   }, { headers: { "cache-control": "private, no-store" } });
 }
+export const GET = withApiErrors("app/api/admin/health/route.ts:GET", GETHandler);

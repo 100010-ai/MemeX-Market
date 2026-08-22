@@ -1,10 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -37,3 +38,4 @@ export async function POST(request: Request) {
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 });
   return NextResponse.json({ result: result.data });
 }
+export const POST = withApiErrors("app/api/portfolio/bulk-list/route.ts:POST", POSTHandler);

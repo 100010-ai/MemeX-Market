@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile, getProfileSnapshot } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -5,13 +6,26 @@ import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
 type DbRow = Record<string, unknown>;
 
-function relationOne(value: unknown, label: string): DbRow {
+function relationOne(value: unknown): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
-  if (!row || typeof row !== "object") return {};
-  return row as DbRow;
+  return row && typeof row === "object" ? row as DbRow : {};
 }
 
-export async function GET() {
+function finiteNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function text(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function isoDate(value: unknown) {
+  const candidate = typeof value === "string" || value instanceof Date ? new Date(value) : null;
+  return candidate && Number.isFinite(candidate.getTime()) ? candidate.toISOString() : new Date(0).toISOString();
+}
+
+async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   const supabase = getSupabaseAdmin();
@@ -25,13 +39,25 @@ export async function GET() {
     ]);
     const firstError = coinsResult.error || giftsResult.error || coinHistoryResult.error || giftHistoryResult.error;
     if (firstError) throw firstError;
-    const holdings = ((coinsResult.data || []) as DbRow[]).map((row) => {
-      const coin = relationOne(row.coins, "Portfolio coin");
-      const quantity = Number(row.quantity);
-      const currentPrice = Number(coin.current_price);
+    const holdings = ((coinsResult.data || []) as DbRow[]).flatMap((row) => {
+      const coinId = text(row.coin_id);
+      if (!coinId) return [];
+      const coin = relationOne(row.coins);
+      const quantity = finiteNumber(row.quantity);
+      const currentPrice = finiteNumber(coin.current_price);
       const marketValue = quantity * currentPrice;
-      const costBasis = Number(row.cost_basis);
-      return { coinId: String(row.coin_id), name: coin.name, symbol: coin.symbol, imageUrl: typeof coin.image_url === "string" ? coin.image_url : null, quantity, currentPrice, marketValue, costBasis, pnl: marketValue - costBasis };
+      const costBasis = finiteNumber(row.cost_basis);
+      return [{
+        coinId,
+        name: text(coin.name, "Мемкоин"),
+        symbol: text(coin.symbol, "UNKNOWN"),
+        imageUrl: typeof coin.image_url === "string" && coin.image_url.trim() ? coin.image_url.trim() : null,
+        quantity,
+        currentPrice,
+        marketValue,
+        costBasis,
+        pnl: marketValue - costBasis,
+      }];
     });
     const mappedGifts = (giftsResult.data || []).map(mapGift);
     const unrealizedCoinPnl = holdings.reduce((sum, holding) => sum + holding.pnl, 0);
@@ -40,16 +66,20 @@ export async function GET() {
       return sum + (Number(current) - Number(gift.acquiredPrice));
     }, 0);
     const history = [
-      ...((coinHistoryResult.data || []) as DbRow[]).map((row) => {
-        const coin = relationOne(row.coins, "Coin history");
-        if (typeof coin.symbol !== "string" || !coin.symbol) coin.symbol = "UNKNOWN";
-        return { id: `coin-${String(row.id)}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${coin.symbol}`, amount: Number(row.quote_amount), pnl: Number(row.realized_pnl), createdAt: String(row.created_at), href: `/coin/${String(row.coin_id)}` };
+      ...((coinHistoryResult.data || []) as DbRow[]).flatMap((row) => {
+        const id = text(row.id);
+        const coinId = text(row.coin_id);
+        if (!id || !coinId) return [];
+        const coin = relationOne(row.coins);
+        return [{ id: `coin-${id}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${text(coin.symbol, "UNKNOWN")}`, amount: finiteNumber(row.quote_amount), pnl: finiteNumber(row.realized_pnl), createdAt: isoDate(row.created_at), href: `/coin/${coinId}` }];
       }),
-      ...((giftHistoryResult.data || []) as DbRow[]).map((row) => {
-        const gift = relationOne(row.gift_assets, "Gift history");
-        if (typeof gift.base_name !== "string" || !gift.base_name) gift.base_name = "Gift";
-        const sold = String(row.seller_profile_id) === String(profile.id);
-        return { id: `gift-${String(row.id)}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.price), pnl: sold ? Number(row.realized_pnl) : 0, createdAt: String(row.created_at), href: `/gifts/${String(row.virtual_gift_id)}` };
+      ...((giftHistoryResult.data || []) as DbRow[]).flatMap((row) => {
+        const id = text(row.id);
+        const virtualGiftId = text(row.virtual_gift_id);
+        if (!id || !virtualGiftId) return [];
+        const gift = relationOne(row.gift_assets);
+        const sold = text(row.seller_profile_id) === String(profile.id);
+        return [{ id: `gift-${id}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${text(gift.base_name, "Gift")} #${finiteNumber(gift.gift_number)}`, amount: finiteNumber(row.price), pnl: sold ? finiteNumber(row.realized_pnl) : 0, createdAt: isoDate(row.created_at), href: `/gifts/${virtualGiftId}` }];
       }),
     ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 50);
     const bucketStart = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();
@@ -65,7 +95,7 @@ export async function GET() {
     if (snapshotWrite.error && !/portfolio_snapshots|schema cache|does not exist/i.test(snapshotWrite.error.message || "")) throw snapshotWrite.error;
     let portfolioSeries: Array<{ time: string; balance: number; coinValue: number; giftValue: number; netWorth: number; realizedPnl: number }> = [];
     const seriesResult = await supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: true }).limit(5000);
-    if (!seriesResult.error) portfolioSeries = (seriesResult.data || []).map((row) => ({ time: String(row.bucket_start), balance: Number(row.balance), coinValue: Number(row.coin_value), giftValue: Number(row.gift_value), netWorth: Number(row.net_worth), realizedPnl: Number(row.realized_pnl) }));
+    if (!seriesResult.error) portfolioSeries = (seriesResult.data || []).map((row) => ({ time: isoDate(row.bucket_start), balance: finiteNumber(row.balance), coinValue: finiteNumber(row.coin_value), giftValue: finiteNumber(row.gift_value), netWorth: finiteNumber(row.net_worth), realizedPnl: finiteNumber(row.realized_pnl) }));
     return NextResponse.json({
       holdings,
       gifts: mappedGifts,
@@ -84,3 +114,4 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить хранилище" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/portfolio/route.ts:GET", GETHandler);

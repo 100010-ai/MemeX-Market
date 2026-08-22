@@ -1,9 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { progressionForXp, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
 import { validUuidLike } from "@/lib/security";
-import { mapProfileBadges, missingProfilePresentationSchema } from "@/lib/profile-presentation";
+import { mapProfileBadges } from "@/lib/profile-presentation";
+import { finiteNumber, nonEmptyId, nullableText, safeIsoDate, text } from "@/lib/safe-data";
 
 type AchievementRow = {
   achievement_key: string;
@@ -17,7 +19,7 @@ function mapAchievement(raw: unknown) {
   return { key: row.achievement_key, unlockedAt: row.unlocked_at, title: joined?.title || row.achievement_key, description: joined?.description || "", icon: joined?.icon || "award", xpReward: Number(joined?.xp_reward || 0) };
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireProfile();
   if (!viewer) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   const { id } = await params;
@@ -36,44 +38,42 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       supabase.from("profiles").select("equipped_profile_frame").eq("id", id).maybeSingle(),
       supabase.from("profile_item_inventory").select("item_key,acquired_at,profile_items!inner(title,rarity,item_type,active)").eq("profile_id", id).eq("profile_items.item_type", "badge").eq("profile_items.active", true).order("acquired_at", { ascending: false }).limit(12),
     ]);
-    const optionalError = [verifiedEntitlementResult.error, presentationResult.error, badgeInventoryResult.error]
-      .find((error) => error && !missingProfilePresentationSchema(error));
-    const error = profileResult.error || coinsResult.error || giftsResult.error || statsResult.error || optionalError;
+    const error = profileResult.error || coinsResult.error || giftsResult.error || reputationResult.error || achievementsResult.error || statsResult.error || verifiedEntitlementResult.error || presentationResult.error || badgeInventoryResult.error;
     if (error) throw error;
     if (!profileResult.data) return NextResponse.json({ error: "Игрок не найден" }, { status: 404 });
     const person = profileResult.data;
     const stats = statsResult.data && typeof statsResult.data === "object" && !Array.isArray(statsResult.data)
       ? statsResult.data as Record<string, unknown>
       : {};
-    const progression = progressionForXp(Number(person.xp || 0));
-    const giftSales = Number(stats.giftSales || 0);
-    const coinTradeCount = Number(stats.coinTradeCount || 0);
+    const progression = progressionForXp(finiteNumber(person.xp));
+    const giftSales = finiteNumber(stats.giftSales);
+    const coinTradeCount = finiteNumber(stats.coinTradeCount);
     const verifiedExpiresAt = verifiedEntitlementResult.data?.expires_at;
     const creatorVerified = Boolean(verifiedEntitlementResult.data)
       && (!verifiedExpiresAt || new Date(verifiedExpiresAt).getTime() > Date.now());
     return NextResponse.json({
       profile: {
-        id: String(person.id),
-        name: person.username ? `@${person.username}` : person.first_name,
-        username: person.username || null,
-        firstName: person.first_name,
-        photoUrl: person.photo_url || null,
-        equippedProfileFrame: presentationResult.error ? null : presentationResult.data?.equipped_profile_frame || null,
-        creatorVerified: verifiedEntitlementResult.error ? false : creatorVerified,
-        profileBadges: badgeInventoryResult.error ? [] : mapProfileBadges(badgeInventoryResult.data),
-        joinedAt: person.created_at,
+        id: nonEmptyId(person.id) || id,
+        name: person.username ? `@${text(person.username, "Игрок", 64)}` : text(person.first_name, "Пользователь", 120),
+        username: nullableText(person.username, 64),
+        firstName: text(person.first_name, "Пользователь", 120),
+        photoUrl: nullableText(person.photo_url, 2_000),
+        equippedProfileFrame: text(presentationResult.data?.equipped_profile_frame, "", 120) || null,
+        creatorVerified,
+        profileBadges: mapProfileBadges(badgeInventoryResult.data),
+        joinedAt: safeIsoDate(person.created_at),
         xp: progression.xp,
         level: progression.level,
         tradeCount: coinTradeCount + giftSales,
-        giftCount: Number(stats.giftCount || 0),
+        giftCount: finiteNumber(stats.giftCount),
         giftSales,
-        giftTradeVolume: Number(stats.giftTradeVolume || 0),
+        giftTradeVolume: finiteNumber(stats.giftTradeVolume),
         coinTradeCount,
-        coinTradeVolume: Number(stats.coinTradeVolume || 0),
-        createdCoinCount: Number(stats.createdCoinCount || 0),
-        createdCoins: (coinsResult.data || []).map(mapCoin),
-        showcase: (giftsResult.data || []).map(mapGift),
-        reputation: reputationResult.data ? { score: Number(reputationResult.data.score), tradeScore: Number(reputationResult.data.trade_score), ageScore: Number(reputationResult.data.age_score), activityScore: Number(reputationResult.data.activity_score), trustScore: Number(reputationResult.data.trust_score), updatedAt: String(reputationResult.data.updated_at) } : null,
+        coinTradeVolume: finiteNumber(stats.coinTradeVolume),
+        createdCoinCount: finiteNumber(stats.createdCoinCount),
+        createdCoins: (coinsResult.data || []).map(mapCoin).filter((coin) => Boolean(coin.id)),
+        showcase: (giftsResult.data || []).map(mapGift).filter((gift) => Boolean(gift.virtualGiftId)),
+        reputation: reputationResult.data ? { score: finiteNumber(reputationResult.data.score, 50), tradeScore: finiteNumber(reputationResult.data.trade_score), ageScore: finiteNumber(reputationResult.data.age_score), activityScore: finiteNumber(reputationResult.data.activity_score), trustScore: finiteNumber(reputationResult.data.trust_score, 50), updatedAt: safeIsoDate(reputationResult.data.updated_at) } : null,
         achievements: (achievementsResult.data || []).map(mapAchievement),
       },
     }, { headers: { "cache-control": "private, no-store" } });
@@ -82,3 +82,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить игрока" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/users/[id]/route.ts:GET", GETHandler);

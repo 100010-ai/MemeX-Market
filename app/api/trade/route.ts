@@ -1,3 +1,4 @@
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -5,7 +6,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { recordAppError } from "@/lib/error-inbox";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -14,7 +15,8 @@ export async function POST(request: Request) {
   if (!runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
 
   try {
-    const body = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const requestId = String(body.requestId || "");
     const coinId = String(body.coinId || "");
     const side = body.side === "sell" ? "sell" : body.side === "buy" ? "buy" : null;
@@ -50,3 +52,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Сделка не выполнена" }, { status: 500 });
   }
 }
+export const POST = withApiErrors("app/api/trade/route.ts:POST", POSTHandler);

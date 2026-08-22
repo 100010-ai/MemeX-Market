@@ -1,6 +1,7 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+async function GETHandler() {
   const realtimeUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const realtimeKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -18,3 +19,4 @@ export async function GET() {
     realtimeConfigured: Boolean(realtimeUrl && realtimeKey),
   });
 }
+export const GET = withApiErrors("app/api/health/route.ts:GET", GETHandler);

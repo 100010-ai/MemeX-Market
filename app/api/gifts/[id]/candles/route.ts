@@ -1,9 +1,10 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { resolveGiftAlias } from "@/lib/gifts/resolver";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,3 +41,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load chart" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/gifts/[id]/candles/route.ts:GET", GETHandler);

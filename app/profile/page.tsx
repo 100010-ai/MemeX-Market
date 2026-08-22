@@ -14,10 +14,19 @@ type Meta = { reputation: Reputation; achievements: Achievement[]; appearance: {
 export default function ProfilePage() {
   const { profile } = useTelegramProfile();
   const [meta, setMeta] = useState<Meta | null>(null);
-  useEffect(() => { if (profile) apiFetch<Meta>("/api/profile/meta", { cacheMs: 20_000 }).then(setMeta).catch(() => undefined); }, [profile]);
+  const [metaError, setMetaError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  useEffect(() => {
+    if (!profile) return;
+    setMetaError(null);
+    void apiFetch<Meta>("/api/profile/meta", { cacheMs: 20_000 })
+      .then(setMeta)
+      .catch((cause) => setMetaError(cause instanceof Error ? cause.message : "Не удалось загрузить данные профиля"));
+  }, [profile, retryKey]);
   if (!profile) return null;
 
   return <div className="mx-auto max-w-2xl">
+    {metaError ? <div className="mb-3 flex items-center justify-between gap-3 mxm-alert mxm-alert-error"><span>{metaError}</span><button type="button" className="shrink-0 underline" onClick={() => setRetryKey((value) => value + 1)}>Повторить</button></div> : null}
     <section className="mxm-summary-card p-4">
       <div className="flex items-center gap-3"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={meta?.appearance.equippedProfileFrame || null} /><div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold">{profile.firstName} {profile.lastName || ""}</h1><p className="mt-0.5 text-[11px] text-[var(--muted)]">{profile.username ? `@${profile.username}` : `Telegram ${profile.telegramId}`}</p><div className="mt-1.5 flex flex-wrap gap-1.5"><span className="inline-flex rounded-[10px] bg-[rgba(139,164,255,.10)] px-2 py-1 text-[9px] text-[var(--accent)] ring-1 ring-[rgba(139,164,255,.12)]">{profile.tier}</span>{meta ? <span className="inline-flex items-center gap-1 rounded-[10px] bg-white/[.04] px-2 py-1 text-[9px]"><ShieldCheck size={10} />Репутация {meta.reputation.score}</span> : null}{meta?.appearance.creatorVerified ? <span className="inline-flex items-center gap-1 rounded-[10px] bg-[rgba(85,225,190,.10)] px-2 py-1 text-[9px] text-[var(--positive)] ring-1 ring-[rgba(85,225,190,.16)]"><BadgeCheck size={10} />Проверенный автор</span> : null}</div></div>
       </div>

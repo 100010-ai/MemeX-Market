@@ -1,10 +1,11 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
@@ -22,3 +23,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ offer: data });
 }
+export const POST = withApiErrors("app/api/gifts/[id]/offer/route.ts:POST", POSTHandler);

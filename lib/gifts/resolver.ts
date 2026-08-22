@@ -3,8 +3,6 @@ import { giftMarketSelect } from "@/lib/mappers";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TON_ADDRESS_RE = /^(?:EQ|UQ)[A-Za-z0-9_-]{40,64}$/;
-const legacyGiftMarketSelect = giftMarketSelect.split(",").filter((column) => column !== "model_preview_url").join(",");
-
 export type ResolvedGiftRow = Record<string, unknown> & {
   asset_id: string;
   virtual_gift_id: string;
@@ -16,31 +14,17 @@ export type ResolvedGiftRow = Record<string, unknown> & {
   model_preview_url: string | null;
 };
 
-function isLegacyPreviewColumnError(error: { code?: string; message?: string } | null) {
-  if (!error) return false;
-  return error.code === "42703" || /model_preview_url/i.test(error.message || "");
-}
-
 async function lookup(column: string, value: string) {
   const supabase = getSupabaseAdmin();
-  const run = (select: string) => supabase
+  const { data, error } = await supabase
     .from("gift_market_overview")
-    .select(select)
+    .select(giftMarketSelect)
     .eq(column, value)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  const primary = await run(giftMarketSelect);
-  let data = primary.data as unknown as Record<string, unknown> | null;
-  let error = primary.error;
-  if (error && isLegacyPreviewColumnError(error)) {
-    const legacy = await run(legacyGiftMarketSelect);
-    data = legacy.data as unknown as Record<string, unknown> | null;
-    error = legacy.error;
-  }
   if (error) throw error;
-  return data ? ({ model_preview_url: null, ...data } as ResolvedGiftRow) : null;
+  return data ? (data as unknown as ResolvedGiftRow) : null;
 }
 
 export async function resolveGiftAlias(routeId: string): Promise<ResolvedGiftRow | null> {

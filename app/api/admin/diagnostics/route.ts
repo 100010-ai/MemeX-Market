@@ -1,3 +1,4 @@
+import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -33,7 +34,7 @@ async function countRows(table: string, filter?: CountFilter) {
   return Number(count || 0);
 }
 
-export async function GET() {
+async function GETHandler() {
   const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const supabase = getSupabaseAdmin();
@@ -112,3 +113,4 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Diagnostics failed" }, { status: 500 });
   }
 }
+export const GET = withApiErrors("app/api/admin/diagnostics/route.ts:GET", GETHandler);
