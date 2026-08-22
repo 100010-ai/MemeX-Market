@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "admin": "next dev -H 127.0.0.1 -p 3000",
     "env:check": "node scripts/check-env.mjs",
-    "release:check": "node scripts/release-check.mjs"
+    "release:check": "node scripts/release-check.mjs",
+    "cleanup:retired": "node scripts/cleanup-retired-source.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

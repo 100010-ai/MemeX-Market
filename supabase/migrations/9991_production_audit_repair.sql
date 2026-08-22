@@ -11,6 +11,9 @@ alter table public.profiles
   add column if not exists last_gift_sync_at timestamptz;
 
 alter table public.gift_assets
+  add column if not exists is_burned boolean not null default false,
+  add column if not exists telegram_resale_price_ton numeric(24,9),
+  add column if not exists resale_seen_at timestamptz,
   add column if not exists model_media_url text,
   add column if not exists model_preview_url text,
   add column if not exists symbol_media_url text;
@@ -26,10 +29,17 @@ with holding_value as (
   from public.holdings h join public.coins c on c.id=h.coin_id
   where h.quantity>0 group by h.profile_id
 ), gift_value as (
-  select owner_profile_id as profile_id,coalesce(sum(coalesce(estimated_value,0)),0) as gift_value
-  from public.gift_market_overview
-  where coalesce(is_burned,false)=false
-  group by owner_profile_id
+  select vg.owner_profile_id as profile_id,
+    coalesce(sum(coalesce(
+      case when ga.telegram_resale_price_ton is not null and ga.telegram_resale_price_ton>0
+        and (ga.resale_seen_at is null or ga.resale_seen_at>=now()-interval '24 hours')
+        then ga.telegram_resale_price_ton end,
+      vg.last_sale_price,vg.acquired_price,0
+    )),0) as gift_value
+  from public.virtual_gifts vg
+  join public.gift_assets ga on ga.id=vg.asset_id
+  where coalesce(ga.is_burned,false)=false
+  group by vg.owner_profile_id
 ), coin_stats as (
   select profile_id,coalesce(sum(realized_pnl),0) as coin_realized_pnl,count(*)::bigint as coin_trade_count
   from public.trades group by profile_id

@@ -6,10 +6,6 @@ export const INITIAL_COIN_MARKET_CAP_TON = 100;
 export const INITIAL_COIN_AMM_LIQUIDITY_TON = 200;
 export const COIN_TRADE_FEE_PERCENT = 0.5;
 
-// Games are disabled in the current product, but these are kept for rolling-deploy compatibility.
-export const GAME_MIN_BET_TON = 0.1;
-export const GAME_MAX_BET_TON = 100;
-
 export const REFERRAL_BONUS_PERCENT = 5;
 
 export const STAR_PACKAGES = [

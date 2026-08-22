@@ -157,25 +157,17 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     .eq("id", assetId)
     .maybeSingle();
 
-  let queryError = primary.error;
-  let row = primary.data as unknown as GiftMediaRow | null;
+  const queryError = primary.error;
+  const row = primary.data as unknown as GiftMediaRow | null;
 
-  // Backward-compatible read for deployments that have not applied the v0.14
-  // model_preview_url column yet. Fragment media can be derived from the Gift
-  // slug, so the preview/animation endpoint does not actually need that column.
-  if (queryError && (queryError.code === "42703" || /model_preview_url/i.test(queryError.message || ""))) {
-    const legacy = await supabase
-      .from("gift_assets")
-      .select("model_media_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
-      .eq("id", assetId)
-      .maybeSingle();
-    queryError = legacy.error;
-    row = legacy.data
-      ? { ...(legacy.data as unknown as Omit<GiftMediaRow, "model_preview_url">), model_preview_url: null }
-      : null;
+  if (queryError) {
+    console.error("gift media asset lookup", { code: queryError.code, message: queryError.message });
+    const schemaMismatch = queryError.code === "42P01" || queryError.code === "42703" || queryError.code === "PGRST204";
+    return NextResponse.json(
+      { error: schemaMismatch ? "Gift media schema is not production-ready" : "Gift media lookup failed" },
+      { status: schemaMismatch ? 503 : 500, headers: { "cache-control": "no-store" } },
+    );
   }
-
-  if (queryError) return NextResponse.json({ error: queryError.message }, { status: 500 });
   if (!row || row.is_burned || row.catalog_source !== "tonapi") {
     return NextResponse.json({ error: "Gift media not found" }, { status: 404 });
   }
