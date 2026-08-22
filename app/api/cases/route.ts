@@ -1,4 +1,4 @@
-import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, errorCode, errorMessage, isDatabaseSchemaError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
@@ -46,7 +46,15 @@ async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { data, error } = await getSupabaseAdmin().rpc("case_snapshot_v200", { p_profile_id: profile.id });
-  if (error) return apiFailure(error, "Не удалось загрузить кейсы");
+  if (error) {
+    console.error("[cases:snapshot]", {
+      code: errorCode(error),
+      message: errorMessage(error),
+      schemaMismatch: isDatabaseSchemaError(error),
+      profileId: profile.id,
+    });
+    return apiFailure(error, "Не удалось загрузить кейсы");
+  }
   return NextResponse.json(caseSnapshot(data), { headers: { "cache-control": "private, no-store" } });
 }
 
@@ -63,9 +71,17 @@ async function POSTHandler(request: Request) {
   if (!validUuidLike(requestId)) return NextResponse.json({ error: "Некорректный идентификатор открытия" }, { status: 400 });
   const { data, error } = await getSupabaseAdmin().rpc("open_case_v200", { p_profile_id: profile.id, p_case_sku: caseSku, p_request_id: requestId });
   if (error) {
-    console.error("case open", error);
-    const empty = /inventory|no case|case.*empty/i.test(error.message || "");
-    const unavailable = /not found|inactive|no active loot/i.test(error.message || "");
+    console.error("[cases:open]", {
+      code: errorCode(error),
+      message: errorMessage(error),
+      schemaMismatch: isDatabaseSchemaError(error),
+      profileId: profile.id,
+      caseSku,
+      requestId,
+    });
+    const message = errorMessage(error);
+    const empty = /inventory|no case|case.*empty/i.test(message);
+    const unavailable = /not found|inactive|no active loot/i.test(message);
     if (!empty && !unavailable) return apiFailure(error, "Не удалось открыть кейс", 400);
     return NextResponse.json({ error: empty ? "В инвентаре нет этого кейса" : "Кейс временно недоступен" }, { status: empty ? 409 : 404 });
   }

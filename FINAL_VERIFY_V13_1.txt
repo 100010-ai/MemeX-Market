@@ -1,0 +1,38 @@
+MXM v0.63.1 — final verification
+================================
+
+Production incident addressed
+-----------------------------
+- POST /api/cases HTTP 503 path inspected.
+- Current API maps PostgreSQL/PostgREST schema/function failures (including 42883/PGRST202) to HTTP 503.
+- Added migration 100000_cases_runtime_hotfix_v13_1.sql.
+- open_case_v200(uuid,text,uuid) is recreated by the latest migration.
+- Case RNG no longer relies on unqualified gen_random_bytes() under SET search_path=public.
+- PostgREST schema cache reload is requested after RPC replacement.
+- Retired game RPCs are NOT re-enabled.
+- Case API now logs structured DB error code/message/schemaMismatch in Vercel logs.
+
+Static verification
+-------------------
+- TS/TSX syntax: 179 files checked, 0 syntax errors.
+- Local imports: 188 source files checked, 0 missing local imports.
+- Product/security release checks before dependency-backed steps: 105 OK.
+- Secret scan: OK (release gate).
+- Hotfix SQL dollar delimiters: balanced (2 function delimiters / 4 $$ tokens).
+- Migration numeric order: 100000 is newer than 99999.
+
+Environment limitation
+----------------------
+The uploaded source archive intentionally has no node_modules. Therefore the project's
+release gate cannot run its local node_modules/typescript/bin/tsc or ESLint binary in
+this container. Those are the only two release-gate failures here. A parser-level
+TypeScript pass using the globally installed TypeScript compiler completed with zero
+syntax errors, and local-import validation completed with zero missing imports.
+
+Deployment order
+----------------
+1. Apply supabase/migrations/99999_store_battlepass_cases_v13.sql if it has not already been applied.
+2. Apply supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql.
+3. Deploy/push v0.63.1.
+4. Retry opening a case. If a DB error remains, Vercel logs now include [cases:open]
+   with the exact PostgreSQL/PostgREST code without leaking internals to the player.

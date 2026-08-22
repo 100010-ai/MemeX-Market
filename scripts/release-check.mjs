@@ -128,7 +128,12 @@ check("Migration 9996 resilient Gift sync present", exists("supabase/migrations/
 check("Migration 9997 Telegram channel task present", exists("supabase/migrations/9997_main_channel_subscription_task.sql"));
 check("Migration 9998 player UI copy cleanup present", exists("supabase/migrations/9998_ui_copy_polish.sql"));
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
-check("v0.63 package version", packageJson.includes('"version": "0.63.0"'));
+const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
+check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
+check("v0.63.1 package version", packageJson.includes('"version": "0.63.1"'));
+check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
+check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
+check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 check("v0.63 expanded store catalogue", migration99999.includes("profile_founder_frame") && migration99999.includes("case_vault") && migration99999.includes("mxm_treasury"));
 check("v0.63 real profile-frame renderer", exists("lib/profile-frames.ts") && read("components/profile-avatar.tsx").includes("getProfileFrameClass") && read("app/globals.css").includes("mxm-profile-frame-founder"));
