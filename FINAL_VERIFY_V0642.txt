@@ -1,0 +1,45 @@
+MemeX Market v0.64.2 — final verification
+========================================
+
+Scope
+-----
+Existing Systems Polish across all 16 requested systems:
+Cases, Battle Pass, Store, Profile Frames, Profile, Achievements, Daily Streak,
+Collection Book, Gift Market, Memecoins, Tasks, Leaderboard, Portfolio,
+Notifications, Creator Tools, /control, plus cross-cutting Telegram/mobile UX.
+
+Checks completed
+----------------
+TS/TSX parser: 181 files, 0 syntax errors.
+Local import scan: 186 source files, 0 broken local imports.
+CSS brace regression: 792 open / 792 close, delta 0.
+Dependency-independent semantic TypeScript smoke check: PASS (temporary ambient
+stubs were used only for external packages; they were not added to the project).
+Release product/security checks: 124 PASS.
+v0.64.2 system-specific checks: all PASS.
+Retired source cleanup: nothing to remove.
+
+Dependency-backed checks
+------------------------
+The supplied project source does not contain node_modules. Therefore the
+repository release gate cannot launch its local TypeScript and ESLint binaries:
+- node_modules/typescript/bin/tsc: unavailable
+- node_modules/eslint/bin/eslint.js: unavailable
+
+For that reason this verification does NOT claim that `pnpm run build` was run
+successfully in this container. On CI/Vercel, dependencies must be installed and
+`pnpm run build` remains the final dependency-backed gate.
+
+Database
+--------
+v0.64.2 adds no new schema migration. The existing v0.64 progression migration
+`supabase/migrations/100001_progression_update_v064.sql` must already be applied.
+The earlier v0.63.1 cases runtime hotfix remains included.
+
+Additional bugs fixed during the pass
+-------------------------------------
+- Memecoin confirmed-trade notice used an identifier outside its function scope;
+  changed to the authoritative `data.coin.symbol` source.
+- Collection Book milestone render no longer dereferences nullable data.
+- /api/control/bootstrap metric rows are narrowed after the generic Supabase
+  paginator so strict TypeScript analysis does not collapse field access to unknown.

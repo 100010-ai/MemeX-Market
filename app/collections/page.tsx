@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { Award, Check, Gem, Gift, Layers3, LockKeyhole, Palette, Sparkles, Shapes } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Award, Check, Gem, Gift, Layers3, LockKeyhole, Palette, Search, Sparkles, Shapes } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { money } from "@/lib/format";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -49,6 +49,8 @@ export default function CollectionsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"progress" | "name" | "floor">("progress");
 
   const load = useCallback(async () => {
     setData(await apiFetch<Payload>("/api/collections/progress", { cacheMs: 0, dedupe: false }));
@@ -60,6 +62,19 @@ export default function CollectionsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+
+  const milestoneOptions = data?.milestones?.length ? data.milestones : DEFAULT_MILESTONES;
+
+  const visibleCollections = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    const rows = (data?.collections || []).filter((item) => !normalized || item.baseName.toLowerCase().includes(normalized));
+    return [...rows].sort((a, b) => {
+      if (sort === "name") return a.baseName.localeCompare(b.baseName, "ru");
+      if (sort === "floor") return (a.floorPrice ?? Number.POSITIVE_INFINITY) - (b.floorPrice ?? Number.POSITIVE_INFINITY);
+      return b.coverage - a.coverage || b.rarityPoints - a.rarityPoints;
+    });
+  }, [data?.collections, query, sort]);
 
   async function claim(baseName: string, milestone: number) {
     const key = `${baseName}:${milestone}`;
@@ -113,15 +128,20 @@ export default function CollectionsPage() {
       {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
       {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
 
-      <div className="mb-4 grid grid-cols-3 gap-2">
+      <div className="mb-3 grid grid-cols-3 gap-2">
         <Metric icon={<Gift size={13} />} label="Подарки" value={String(data?.giftCount || 0)} />
         <Metric icon={<Award size={13} />} label="100% серий" value={String(data?.completed || 0)} />
         <Metric icon={<Gem size={13} />} label="Очки" value={String(data?.totalPoints || 0)} />
       </div>
 
-      {data?.collections.length ? (
+      {data?.collections.length ? <div className="mb-3 flex flex-wrap items-center gap-2 border-y border-[var(--border-soft)] py-2">
+        <label className="flex min-w-[180px] flex-1 items-center gap-2"><Search size={12} className="text-[var(--muted)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти серию" className="min-w-0 flex-1 bg-transparent text-[10px] outline-none placeholder:text-[var(--muted-2)]" /></label>
+        <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="mxm-compact-select"><option value="progress">По прогрессу</option><option value="name">По названию</option><option value="floor">По floor</option></select>
+      </div> : null}
+
+      {visibleCollections.length ? (
         <div className="grid gap-3 md:grid-cols-2">
-          {data.collections.map((item) => {
+          {visibleCollections.map((item) => {
             const nextMilestone = DEFAULT_MILESTONES.find((milestone) => !item.claimedMilestones.includes(milestone)) || 100;
             return (
               <article key={item.baseName} className="mxm-card overflow-hidden p-3.5">
@@ -152,7 +172,7 @@ export default function CollectionsPage() {
                 </div>
 
                 <div className="mt-3 grid grid-cols-4 gap-1.5">
-                  {(data.milestones.length ? data.milestones : DEFAULT_MILESTONES).map((milestone) => {
+                  {milestoneOptions.map((milestone) => {
                     const claimed = item.claimedMilestones.includes(milestone);
                     const unlocked = item.coverage >= milestone;
                     const key = `${item.baseName}:${milestone}`;
@@ -179,18 +199,18 @@ export default function CollectionsPage() {
                     <p className="text-[8px] text-[var(--muted)]">Floor {item.floorPrice == null ? "—" : money(item.floorPrice)} · владельцев {item.holders.toLocaleString("ru-RU")}</p>
                     <p className="mt-0.5 truncate text-[7px] text-[var(--muted-2)]">Следующая награда: {MILESTONE_REWARD[nextMilestone]}</p>
                   </div>
-                  <Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 text-[8px] text-[var(--accent)]">Открыть рынок</Link>
+                  <div className="flex shrink-0 gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="text-[8px] text-[var(--muted)]">Серия</Link><Link href={`/market?collection=${encodeURIComponent(item.baseName)}`} className="text-[8px] text-[var(--accent)]">Найти на рынке</Link></div>
                 </div>
               </article>
             );
           })}
         </div>
       ) : (
-        <div className="py-16 text-center">
+        <div className="py-12 text-center">
           <Gift size={25} className="mx-auto text-[var(--muted)]" />
-          <p className="mt-3 text-xs font-medium">Книга пока пуста</p>
-          <p className="mt-1 text-[9px] text-[var(--muted)]">Получите первый Telegram-подарок — его Model, Backdrop и Symbol появятся здесь.</p>
-          <Link href="/market" className="mt-3 inline-block text-[9px] text-[var(--accent)]">Перейти на рынок</Link>
+          <p className="mt-3 text-xs font-medium">{data?.collections.length ? "Ничего не найдено" : "Книга пока пуста"}</p>
+          <p className="mt-1 text-[9px] text-[var(--muted)]">{data?.collections.length ? "Измени поиск или сортировку." : "Получите первый Telegram-подарок — его Model, Backdrop и Symbol появятся здесь."}</p>
+          {!data?.collections.length ? <Link href="/market" className="mt-3 inline-block text-[9px] text-[var(--accent)]">Перейти на рынок</Link> : null}
         </div>
       )}
     </div>

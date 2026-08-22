@@ -7,6 +7,11 @@ export const runtime = "nodejs";
 
 type PageResult<T> = { data: T[] | null; error: unknown };
 
+type ControlProfileRow = { id: string; is_system: boolean; is_banned: boolean; hidden_from_leaderboard: boolean };
+type ControlCoinRow = { status: string; hidden_from_market: boolean };
+type ControlGiftRow = { status: string; owner_profile_id: string | null };
+type ControlSourceRow = { active: boolean };
+
 async function fetchAll<T>(makePage: (from: number, to: number) => PromiseLike<PageResult<T>>) {
   const pageSize = 750;
   const rows: T[] = [];
@@ -92,18 +97,25 @@ async function GETHandler(request: Request) {
     if (tonapiStateResult.error) throw tonapiStateResult.error;
     if (liquidityResult.error) throw liquidityResult.error;
 
-    const systemIds = new Set(profileRows.filter((row) => row.is_system).map((row) => String(row.id)));
+    // Supabase query-builder generics can collapse to `unknown` when passed through
+    // the generic paginator. Narrow only the fields used for aggregate metrics; the
+    // original rows are still returned unchanged below.
+    const metricProfiles = profileRows as unknown as ControlProfileRow[];
+    const metricCoins = coinRows as unknown as ControlCoinRow[];
+    const metricGifts = giftRows as unknown as ControlGiftRow[];
+    const metricSources = sourceRows as unknown as ControlSourceRow[];
+    const systemIds = new Set(metricProfiles.filter((row) => row.is_system).map((row) => String(row.id)));
     return NextResponse.json({
       metrics: {
-        players: profileRows.filter((row) => !row.is_system).length,
-        banned: profileRows.filter((row) => !row.is_system && row.is_banned).length,
-        hidden: profileRows.filter((row) => !row.is_system && row.hidden_from_leaderboard).length,
+        players: metricProfiles.filter((row) => !row.is_system).length,
+        banned: metricProfiles.filter((row) => !row.is_system && row.is_banned).length,
+        hidden: metricProfiles.filter((row) => !row.is_system && row.hidden_from_leaderboard).length,
         coins: coinRows.length,
-        activeCoins: coinRows.filter((row) => row.status === "active" && !row.hidden_from_market).length,
+        activeCoins: metricCoins.filter((row) => row.status === "active" && !row.hidden_from_market).length,
         gifts: giftRows.length,
-        listedGifts: giftRows.filter((row) => row.status === "listed").length,
-        npcListings: giftRows.filter((row) => row.status === "listed" && systemIds.has(String(row.owner_profile_id))).length,
-        catalogSources: sourceRows.filter((row) => row.active).length,
+        listedGifts: metricGifts.filter((row) => row.status === "listed").length,
+        npcListings: metricGifts.filter((row) => row.status === "listed" && systemIds.has(String(row.owner_profile_id))).length,
+        catalogSources: metricSources.filter((row) => row.active).length,
         tonapiAssets: tonapiCountResult.count || 0,
         tonapiVerified: tonapiVerifiedResult.count || 0,
       },

@@ -5,6 +5,7 @@ export type Profile = {
   firstName: string;
   lastName: string | null;
   photoUrl: string | null;
+  equippedFrame: string | null;
   balance: number;
   reservedBalance: number;
   availableBalance: number;
@@ -253,6 +254,7 @@ export type LeaderboardPlayer = {
   isMe: boolean;
   name: string;
   photoUrl: string | null;
+  equippedFrame: string | null;
   balance: number;
   coinValue: number;
   giftValue: number;

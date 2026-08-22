@@ -59,6 +59,11 @@ function liquidityMaturity(state: LiquidityState) {
 const marketCache = new Map<string, { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
 const GIFT_PAGE_SIZE = 24;
+const MARKET_UI_STATE_KEY = "mxm-market-ui-v0642";
+type MarketUiState = {
+  tab?: "gifts" | "coins"; query?: string; watchOnly?: boolean; collection?: string; model?: string; backdrop?: string; symbol?: string;
+  giftSort?: GiftSort; giftView?: GiftView; giftMode?: GiftMarketMode; coinSort?: CoinSort; priceBand?: PriceBand; scrollY?: number;
+};
 
 export default function MarketPage() {
   const [data, setData] = useState<MarketPayload>(() => emptyMarketPayload());
@@ -124,6 +129,56 @@ export default function MarketPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const loadSeq = useRef(0);
   const scopeDataRef = useRef<Record<string, MarketPayload>>({});
+  const uiStateReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || uiStateReadyRef.current) return;
+    uiStateReadyRef.current = true;
+    let saved: MarketUiState = {};
+    try { saved = JSON.parse(sessionStorage.getItem(MARKET_UI_STATE_KEY) || "{}") as MarketUiState; } catch { saved = {}; }
+    const params = new URLSearchParams(window.location.search);
+    const explicitCollection = params.get("collection")?.trim() || "";
+    const explicitQuery = params.get("q")?.trim() || "";
+    if (explicitCollection || explicitQuery) {
+      setTab("gifts");
+      setGiftMode("items");
+      if (explicitCollection) setCollection(explicitCollection);
+      setQuery(explicitQuery);
+    } else {
+      if (saved.tab === "coins" || saved.tab === "gifts") setTab(saved.tab);
+      if (typeof saved.query === "string") setQuery(saved.query.slice(0, 120));
+      if (typeof saved.watchOnly === "boolean") setWatchOnly(saved.watchOnly);
+      if (typeof saved.collection === "string") setCollection(saved.collection);
+      if (typeof saved.model === "string") setModel(saved.model);
+      if (typeof saved.backdrop === "string") setBackdrop(saved.backdrop);
+      if (typeof saved.symbol === "string") setSymbol(saved.symbol);
+      if (["random","price","newest","number","rarity","offers"].includes(String(saved.giftSort))) setGiftSort(saved.giftSort as GiftSort);
+      if (["all","deals","rare","new","offers"].includes(String(saved.giftView))) setGiftView(saved.giftView as GiftView);
+      if (["items","collections","feed"].includes(String(saved.giftMode))) setGiftMode(saved.giftMode as GiftMarketMode);
+      if (["gainers","volume","marketcap","newest"].includes(String(saved.coinSort))) setCoinSort(saved.coinSort as CoinSort);
+      if (["all","under50","50to250","250to1000","over1000"].includes(String(saved.priceBand))) setPriceBand(saved.priceBand as PriceBand);
+    }
+    const savedScroll = Number(saved.scrollY || 0);
+    if (!explicitCollection && !explicitQuery && savedScroll > 0) window.setTimeout(() => window.scrollTo({ top: savedScroll, behavior: "auto" }), 120);
+  }, []);
+
+  useEffect(() => {
+    if (!uiStateReadyRef.current || typeof window === "undefined") return;
+    const state: MarketUiState = { tab, query, watchOnly, collection, model, backdrop, symbol, giftSort, giftView, giftMode, coinSort, priceBand, scrollY: window.scrollY };
+    try { sessionStorage.setItem(MARKET_UI_STATE_KEY, JSON.stringify(state)); } catch { /* storage can be disabled */ }
+  }, [tab, query, watchOnly, collection, model, backdrop, symbol, giftSort, giftView, giftMode, coinSort, priceBand]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saveScroll = () => {
+      try {
+        const current = JSON.parse(sessionStorage.getItem(MARKET_UI_STATE_KEY) || "{}") as MarketUiState;
+        sessionStorage.setItem(MARKET_UI_STATE_KEY, JSON.stringify({ ...current, scrollY: window.scrollY }));
+      } catch { /* storage can be disabled */ }
+    };
+    window.addEventListener("pagehide", saveScroll);
+    return () => { saveScroll(); window.removeEventListener("pagehide", saveScroll); };
+  }, []);
 
   const load = useCallback(async (silent = false, fresh = false) => {
     const seq = ++loadSeq.current;

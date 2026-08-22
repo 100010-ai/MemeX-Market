@@ -36,6 +36,13 @@ export default function TasksPage() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") void load().catch(() => undefined); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [load]);
+
   async function claim(id: string) {
     setBusy(id);
     setError(null);
@@ -46,6 +53,30 @@ export default function TasksPage() {
       haptic("heavy");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось забрать награду");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function claimAll() {
+    const ready = missions.filter((mission) => mission.progress >= mission.target && !mission.claimed && !mission.rewardRevoked);
+    if (!ready.length || busy) return;
+    setBusy("all");
+    setError(null);
+    setNotice(null);
+    haptic("medium");
+    let claimed = 0;
+    try {
+      for (const mission of ready) {
+        await apiFetch("/api/tasks/claim", { method: "POST", body: JSON.stringify({ missionId: mission.id }) });
+        claimed += 1;
+      }
+      await Promise.all([load(), refreshProfile()]);
+      setNotice(`Получено наград: ${claimed}`);
+      haptic("heavy");
+    } catch (cause) {
+      await Promise.allSettled([load(), refreshProfile()]);
+      setError(cause instanceof Error ? cause.message : `Получено ${claimed} из ${ready.length}. Остальные можно забрать повторно.`);
     } finally {
       setBusy(null);
     }
@@ -107,7 +138,7 @@ export default function TasksPage() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-5 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-4">
         <div><p className="text-[10px] uppercase tracking-[.16em] text-[var(--muted-2)]">Прогресс</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Задания и награды</h1></div>
-        <div className="text-right"><p className="text-[9px] text-[var(--muted)]">доступно в заданиях</p><p className="mt-1 flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p></div>
+        <div className="text-right"><p className="text-[9px] text-[var(--muted)]">доступно в заданиях</p><p className="mt-1 flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1.5 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать всё · ${claimable.length}`}</button> : null}</div>
       </div>
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
@@ -169,7 +200,7 @@ export default function TasksPage() {
                     <div className="mxm-task-actions">
                       {channelTask && !mission.claimed ? <button type="button" onClick={() => openChannel(mission.actionUrl || "https://t.me/Meme_X_Market")} className="mxm-task-action-secondary"><ExternalLink size={12} />Открыть канал</button> : null}
                       {channelTask && !mission.claimed ? <button type="button" onClick={() => void verifyChannel()} disabled={channelBusy} className="mxm-task-action-secondary"><RefreshCw size={12} className={channelBusy ? "animate-spin" : ""} />{channelBusy ? "Проверяем…" : "Проверить"}</button> : null}
-                      {done && !mission.claimed && !mission.rewardRevoked ? <button type="button" onClick={() => void claim(mission.id)} disabled={busy !== null || channelBusy} className="mxm-task-action-primary">{busy === mission.id ? <RefreshCw size={12} className="animate-spin" /> : <Gift size={12} />}Забрать награду</button> : null}
+                      {done && !mission.claimed && !mission.rewardRevoked ? <button type="button" onClick={() => void claim(mission.id)} disabled={busy !== null || channelBusy} className="mxm-task-action-primary">{busy === mission.id ? <RefreshCw size={12} className="animate-spin" /> : <Gift size={12} />}{busy === "all" ? "Получаем…" : "Забрать награду"}</button> : null}
                     </div>
                   </div>
                 </article>
@@ -179,7 +210,7 @@ export default function TasksPage() {
         );
       })}
 
-      {claimable.length ? <p className="pb-3 text-[9px] text-[var(--muted-2)]">Готово к получению: {claimable.length}</p> : null}
+      {claimable.length ? <p className="pb-3 text-[9px] text-[var(--muted-2)]">Готово к получению: {claimable.length} · прогресс обновляется при возвращении в приложение</p> : null}
     </div>
   );
 }

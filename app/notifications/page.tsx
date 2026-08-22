@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, CheckCheck, Gift, Megaphone, Settings2, TrendingUp, UsersRound } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ago } from "@/lib/format";
@@ -13,6 +13,8 @@ type Payload = { notifications: Notification[]; preferences: NotificationPrefere
 export default function NotificationsPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [settings, setSettings] = useState(false);
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const preferencesRef = useRef<NotificationPreferences | null>(null);
   const load = useCallback(() => apiFetch<Payload>("/api/notifications").then((payload) => {
@@ -22,24 +24,29 @@ export default function NotificationsPage() {
   }).catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить уведомления")), []);
   useEffect(() => { void load(); }, [load]);
   async function read(id: string) {
-    if (!data) return;
+    if (!data || busy === id) return;
+    setBusy(id);
     const previous = data;
     const now = new Date().toISOString();
     setData({ ...data, notifications: data.notifications.map((item) => item.id === id && !item.readAt ? { ...item, readAt: now } : item), unreadCount: Math.max(0, data.unreadCount - (data.notifications.some((item) => item.id === id && !item.readAt) ? 1 : 0)) });
     try { await apiFetch("/api/notifications", { method: "POST", body: JSON.stringify({ action: "read", id }) }); setError(null); }
     catch (cause) { setData(previous); setError(cause instanceof Error ? cause.message : "Не удалось отметить уведомление"); }
+    finally { setBusy(null); }
   }
   async function readAll() {
-    if (!data) return;
+    if (!data || busy) return;
+    setBusy("all");
     const previous = data;
     const now = new Date().toISOString();
     setData({ ...data, notifications: data.notifications.map((item) => item.readAt ? item : { ...item, readAt: now }), unreadCount: 0 });
     try { await apiFetch("/api/notifications", { method: "POST", body: JSON.stringify({ action: "read_all" }) }); setError(null); }
     catch (cause) { setData(previous); setError(cause instanceof Error ? cause.message : "Не удалось отметить уведомления"); }
+    finally { setBusy(null); }
   }
   async function toggle(key: NotificationPreferenceKey) {
     const previous = preferencesRef.current;
-    if (!previous) return;
+    if (!previous || busy === `pref:${key}`) return;
+    setBusy(`pref:${key}`);
     const previousValue = previous[key];
     const nextValue = !previousValue;
     const next = { ...previous, [key]: nextValue };
@@ -56,15 +63,36 @@ export default function NotificationsPage() {
         return { ...current, preferences: reverted };
       });
       setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки");
+    } finally {
+      setBusy(null);
     }
   }
+  const visible = useMemo(() => data?.notifications.filter((item) => filter === "all" || !item.readAt) || [], [data?.notifications, filter]);
+
   if (!data) return <div className="mx-auto max-w-3xl"><div className="mxm-skeleton h-24 rounded-[22px]" /><div className="mxm-skeleton mt-3 h-80 rounded-[22px]" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
   return <div className="mx-auto max-w-3xl">
-    <section className="mxm-summary-card p-4"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-[16px] bg-[var(--panel-2)] text-[var(--accent)]"><Bell size={17} /></span><div className="min-w-0 flex-1"><h1 className="text-base font-semibold">Уведомления</h1><p className="text-[10px] text-[var(--muted)]">{data.unreadCount ? `${data.unreadCount} непрочитанных` : "Всё прочитано"}</p></div>{data.unreadCount ? <button onClick={() => void readAll()} className="flex items-center gap-1.5 rounded-[14px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><CheckCheck size={13} />Прочитать все</button> : null}<button onClick={() => setSettings((v) => !v)} className="grid h-8 w-8 place-items-center rounded-[13px] bg-[var(--panel-2)]"><Settings2 size={14} /></button></div></section>
+    <section className="mxm-summary-card p-3.5">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-[14px] bg-[var(--panel-2)] text-[var(--accent)]"><Bell size={16} /></span>
+        <div className="min-w-0 flex-1"><h1 className="text-sm font-semibold">Уведомления</h1><p className="text-[9px] text-[var(--muted)]">{data.unreadCount ? `${data.unreadCount} непрочитанных` : "Всё прочитано"}</p></div>
+        {data.unreadCount ? <button disabled={Boolean(busy)} onClick={() => void readAll()} className="mxm-secondary-action !min-h-8 !px-2.5"><CheckCheck size={12} />{busy === "all" ? "…" : "Все"}</button> : null}
+        <button aria-expanded={settings} aria-label="Настройки уведомлений" onClick={() => setSettings((v) => !v)} className="grid h-8 w-8 place-items-center rounded-[11px] bg-[var(--panel-2)] text-[var(--muted)]"><Settings2 size={14} /></button>
+      </div>
+      <div className="mt-3 flex gap-1 border-t border-[var(--border-soft)] pt-2">
+        <button type="button" onClick={() => setFilter("all")} className={`mxm-notification-filter ${filter === "all" ? "is-active" : ""}`}>Все · {data.notifications.length}</button>
+        <button type="button" onClick={() => setFilter("unread")} className={`mxm-notification-filter ${filter === "unread" ? "is-active" : ""}`}>Непрочитанные · {data.unreadCount}</button>
+        <button type="button" onClick={() => void load()} className="ml-auto mxm-notification-filter">Обновить</button>
+      </div>
+    </section>
 
-    {settings ? <section className="mxm-card mt-3 p-3"><p className="mb-2 text-xs font-medium">Какие события показывать</p><div className="space-y-1">{([['gift_sold','Продажи подарков'],['gift_offer','Новые предложения'],['offer_resolved','Решение по предложению'],['price_alert','Ценовые уведомления'],['coin_move','Движение мемкоинов'],['referral_reward','Доход от рефералов'],['promo','Промокоды'],['telegram_push','Уведомления в Telegram']] as [NotificationPreferenceKey,string][]).map(([key,label]) => <button key={key} onClick={() => void toggle(key)} className="flex w-full items-center justify-between rounded-[14px] px-2.5 py-2 text-left text-[11px] hover:bg-[var(--panel-2)]"><span>{label}</span><span className={`h-5 w-9 rounded-full p-0.5 transition ${data.preferences[key] ? 'bg-[var(--accent)]' : 'bg-[var(--panel-3)]'}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${data.preferences[key] ? 'translate-x-4' : ''}`} /></span></button>)}</div></section> : null}
+    {error ? <div className="mxm-alert mxm-alert-error mt-3 flex items-center justify-between gap-2"><span>{error}</span><button type="button" onClick={() => void load()} className="underline">Повторить</button></div> : null}
 
-    <section className="mt-3 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">{data.notifications.length ? <div className="divide-y divide-[var(--border-soft)]">{data.notifications.map((n) => { const inner = <div className={`flex gap-3 p-3 ${n.readAt ? '' : 'bg-white/[.025]'}`}><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[14px] bg-[var(--panel-2)]">{iconFor(n.kind)}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-xs font-medium">{n.title}</p>{!n.readAt ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" /> : null}</div>{n.body ? <p className="mt-1 text-[10px] leading-4 text-[var(--muted)]">{n.body}</p> : null}<p className="mt-1 text-[9px] text-[var(--muted-2)]">{ago(n.createdAt)}</p></div></div>; return n.href ? <Link key={n.id} href={n.href} onClick={() => { if (!n.readAt) void read(n.id); }}>{inner}</Link> : <button key={n.id} onClick={() => { if (!n.readAt) void read(n.id); }} className="w-full text-left">{inner}</button>; })}</div> : <div className="p-10 text-center"><Bell size={22} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">Уведомлений пока нет</p></div>}</section>
+    {settings ? <section className="mxm-card mt-3 p-3"><p className="mb-2 text-xs font-medium">Какие события показывать</p><div className="space-y-0.5">{([['gift_sold','Продажи подарков'],['gift_offer','Новые предложения'],['offer_resolved','Решение по предложению'],['price_alert','Ценовые уведомления'],['coin_move','Движение мемкоинов'],['referral_reward','Доход от рефералов'],['promo','Промокоды'],['telegram_push','Уведомления в Telegram']] as [NotificationPreferenceKey,string][]).map(([key,label]) => <button key={key} role="switch" aria-checked={data.preferences[key]} disabled={busy === `pref:${key}`} onClick={() => void toggle(key)} className="flex w-full items-center justify-between rounded-[12px] px-2.5 py-2 text-left text-[10px] hover:bg-[var(--panel-2)] disabled:opacity-60"><span>{label}</span><span aria-hidden="true" className={`mxm-switch ${data.preferences[key] ? 'is-on' : ''}`}><span /></span></button>)}</div></section> : null}
+
+    <section className="mt-3 overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--panel)]">{visible.length ? <div className="divide-y divide-[var(--border-soft)]">{visible.map((n) => {
+      const inner = <div className={`flex gap-3 p-3 ${n.readAt ? '' : 'bg-white/[.025]'}`}><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[13px] bg-[var(--panel-2)]">{iconFor(n.kind)}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-[11px] font-medium">{n.title}</p>{!n.readAt ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" /> : null}</div>{n.body ? <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">{n.body}</p> : null}<p className="mt-1 text-[8px] text-[var(--muted-2)]">{ago(n.createdAt)}{busy === n.id ? " · сохраняем…" : ""}</p></div></div>;
+      return n.href ? <Link key={n.id} href={n.href} onClick={() => { if (!n.readAt) void read(n.id); }}>{inner}</Link> : <button key={n.id} disabled={busy === n.id} onClick={() => { if (!n.readAt) void read(n.id); }} className="w-full text-left disabled:opacity-70">{inner}</button>;
+    })}</div> : <div className="p-9 text-center"><Bell size={21} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">{filter === "unread" ? "Непрочитанных нет" : "Уведомлений пока нет"}</p></div>}</section>
   </div>;
 }
 

@@ -57,6 +57,7 @@ export default function CoinPage() {
   const [amount, setAmount] = useState("");
   const [sellAll, setSellAll] = useState(false);
   const [slippage, setSlippage] = useState(2);
+  const [tradeNotice, setTradeNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,15 @@ export default function CoinPage() {
       if (!silent && seq === loadSeq.current) setError(e instanceof Error ? e.message : "Не удалось загрузить мемкоин");
     }
   }, [id]);
+
+  useEffect(() => {
+    const savedSlippage = Number(window.sessionStorage.getItem("mxm-coin-slippage"));
+    if ([0.5, 1, 2, 5].includes(savedSlippage)) setSlippage(savedSlippage);
+    const savedTab = window.sessionStorage.getItem("mxm-coin-market-tab");
+    if (savedTab === "overview" || savedTab === "orders" || savedTab === "holders" || savedTab === "activity") setMarketTab(savedTab);
+  }, []);
+  useEffect(() => { window.sessionStorage.setItem("mxm-coin-slippage", String(slippage)); }, [slippage]);
+  useEffect(() => { window.sessionStorage.setItem("mxm-coin-market-tab", marketTab); }, [marketTab]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
@@ -104,6 +114,7 @@ export default function CoinPage() {
     setSellAll(false);
     tradeRequestId.current = null;
     setError(null);
+    setTradeNotice(null);
   }
 
   function applyFraction(fraction: number) {
@@ -149,6 +160,7 @@ export default function CoinPage() {
     tradeInFlight.current = true;
     setBusy(true);
     setError(null);
+    setTradeNotice(null);
     setData(optimistic);
     patchProfile({ balance: optimistic.balance, availableBalance: optimistic.availableBalance });
     setAmount("");
@@ -167,12 +179,14 @@ export default function CoinPage() {
       tradeRequestId.current = null;
       tradeInFlight.current = false;
       setBusy(false);
+      setTradeNotice(side === "buy" ? `Покупка подтверждена · +${compact(quote.outputAmount)} ${data.coin.symbol}` : `Продажа подтверждена · +${money(quote.outputAmount)}`);
       void refreshProfile();
       void load(true);
     } catch (e) {
       tradeInFlight.current = false;
       setBusy(false);
       setData(previous);
+      setTradeNotice(null);
       patchProfile({ balance: previous.balance, availableBalance: previous.availableBalance });
       setAmount(amountText(inputAmount));
       setSellAll(side === "sell" && Math.abs(inputAmount - previous.holding.availableQuantity) <= Math.max(1e-8, previous.holding.availableQuantity * 1e-12));
@@ -247,7 +261,7 @@ export default function CoinPage() {
 
         <aside className="space-y-4">
           <section className="lg:sticky lg:top-[68px]">
-            <div className="grid grid-cols-2 border-b border-[var(--border-soft)]"><button onClick={() => switchSide("buy")} className={`py-2.5 text-xs font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button><button onClick={() => switchSide("sell")} className={`py-2.5 text-xs font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button></div>
+            <div className="grid grid-cols-2 border-b border-[var(--border-soft)]"><button disabled={busy} onClick={() => switchSide("buy")} className={`py-2.5 text-xs font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button><button disabled={busy} onClick={() => switchSide("sell")} className={`py-2.5 text-xs font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button></div>
             <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Доступно</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
             {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1 text-right text-[9px] text-[#f3d789]">{compact(data.economy.lock.remaining)} заблокировано до {new Date(data.economy.lock.endsAt).toLocaleDateString("ru-RU")}</p> : null}
             {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} в резерве по предложениям на подарки</p> : null}
@@ -257,7 +271,9 @@ export default function CoinPage() {
             {quote ? <div className="mt-3 space-y-2 py-1"><QuoteRow label="Вы получите" value={side === "buy" ? `${compact(quote.outputAmount)} ${coin.symbol}` : money(quote.outputAmount)} strong /><QuoteRow label="Цена исполнения" value={price(quote.executionPrice)} /><QuoteRow label={`Комиссия · ${(COIN_FEE_RATE * 100).toFixed(1)}%`} value={money(quote.feeAmount)} /><QuoteRow label="Влияние на цену" value={`${quote.priceImpact.toFixed(2)}%`} warning={quote.priceImpact >= 10} /><QuoteRow label="Цена после сделки" value={price(quote.projectedPrice)} /><QuoteRow label="Минимум к получению" value={side === "buy" ? `${compact(quote.outputAmount * (1 - slippage / 100))} ${coin.symbol}` : money(quote.outputAmount * (1 - slippage / 100))} /></div> : null}
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border-soft)] pt-2"><span className="text-[10px] text-[var(--muted)]">Проскальзывание</span><div className="mxm-hscroll max-w-[210px] justify-end gap-3">{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => setSlippage(value)} className={`shrink-0 py-1 text-[10px] transition ${slippage === value ? "text-white underline decoration-[var(--accent)] underline-offset-4" : "text-[var(--muted)] hover:text-white"}`}>{value}%</button>)}</div></div>
             {Number.isFinite(numericAmount) && numericAmount > max && !sellAll ? <p className="mt-2 text-[10px] text-[var(--negative)]">Сумма превышает доступный баланс.</p> : null}
+            {tradeNotice ? <div aria-live="polite" className="mt-3 border-l-2 border-[var(--positive)] px-2 py-1.5 text-[10px] text-[var(--positive)]">{tradeNotice}</div> : null}
             {error ? <div className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+            {!busy && !validAmount ? <p className="mt-2 text-center text-[8px] text-[var(--muted-2)]">{!amount ? "Введите сумму сделки" : "Проверьте сумму и доступный баланс"}</p> : null}
             <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-3 w-full py-3 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
             <p className="mt-2 text-center text-[9px] text-[var(--muted-2)]">Расчёт показывается мгновенно. Сервер подтверждает итоговую сделку атомарно.</p>
             <div className="mt-4 grid grid-cols-2 gap-x-4 border-t border-[var(--border-soft)] pt-3"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Нереализованный результат" value={money(holdingPnl)} tone={holdingPnl} /></div>

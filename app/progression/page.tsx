@@ -77,6 +77,7 @@ export default function ProgressionPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [achievementFilter, setAchievementFilter] = useState("all");
 
   const load = useCallback(async () => {
     const payload = await apiFetch<Payload>("/api/progression", { cacheMs: 0, dedupe: false });
@@ -95,8 +96,9 @@ export default function ProgressionPage() {
     for (const achievement of data?.achievements || []) {
       result.set(achievement.category, [...(result.get(achievement.category) || []), achievement]);
     }
-    return [...result.entries()];
+    return [...result.entries()].map(([category, items]) => [category, [...items].sort((a, b) => Number(b.unlocked) - Number(a.unlocked) || (b.progress / Math.max(1, b.target)) - (a.progress / Math.max(1, a.target)))] as const);
   }, [data?.achievements]);
+  const visibleCategories = useMemo(() => achievementFilter === "all" ? categories : categories.filter(([category]) => category === achievementFilter), [achievementFilter, categories]);
 
   const unlockedCount = data?.achievements.filter((item) => item.unlocked).length || 0;
   const pendingLevelRewards = data?.account.rewards.filter((item) => item.unlocked && !item.claimed) || [];
@@ -170,7 +172,7 @@ export default function ProgressionPage() {
 
     <section className="mt-3 border-y border-[var(--border-soft)] py-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0"><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Flame size={14} />Ежедневная серия</h2><p className="mt-0.5 truncate text-[8px] text-[var(--muted)]">Серия {data?.streak.currentStreak || 0} · рекорд {data?.streak.bestStreak || 0} · сброс UTC</p></div>
+        <div className="min-w-0"><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Flame size={14} />Ежедневная серия</h2><p className="mt-0.5 truncate text-[8px] text-[var(--muted)]">Серия {data?.streak.currentStreak || 0} · рекорд {data?.streak.bestStreak || 0} · получено {data?.streak.totalClaims || 0} · сброс {data?.streak.resetTimezone || "UTC"}</p></div>
         <button type="button" disabled={!data?.streak.canClaim || Boolean(busy)} onClick={() => void claim("claim_streak")} className="mxm-primary-action shrink-0">{busy === "streak" ? "Получаем…" : data?.streak.claimedToday ? "Сегодня получено" : `Забрать Д${data?.streak.nextDay || 1}`}</button>
       </div>
       <div className="mt-2.5 grid grid-cols-7 gap-1">
@@ -187,8 +189,12 @@ export default function ProgressionPage() {
 
     <section className="mt-3">
       <div className="mb-2 flex items-end justify-between gap-3"><div><h2 className="flex items-center gap-1.5 text-[11px] font-medium"><Trophy size={14} />Достижения</h2><p className="mt-0.5 text-[8px] text-[var(--muted)]">XP начисляется один раз при первом выполнении.</p></div><span className="text-[8px] text-[var(--muted)]">{unlockedCount} открыто</span></div>
+      <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
+        <button type="button" onClick={() => setAchievementFilter("all")} className={`mxm-filter-chip ${achievementFilter === "all" ? "is-active" : ""}`}>Все <span>{data?.achievements.length || 0}</span></button>
+        {categories.map(([category, items]) => <button key={category} type="button" onClick={() => setAchievementFilter(category)} className={`mxm-filter-chip ${achievementFilter === category ? "is-active" : ""}`}>{CATEGORY_LABEL[category] || category}<span>{items.filter((item) => item.unlocked).length}/{items.length}</span></button>)}
+      </div>
       <div className="space-y-3.5">
-        {categories.map(([category, items]) => <div key={category}>
+        {visibleCategories.map(([category, items]) => <div key={category}>
           <div className="mb-1.5 flex items-center justify-between"><p className="text-[8px] uppercase tracking-[.11em] text-[var(--muted-2)]">{CATEGORY_LABEL[category] || category}</p><span className="text-[7px] text-[var(--muted)]">{items.filter((item) => item.unlocked).length}/{items.length}</span></div>
           <div className="grid gap-1.5 md:grid-cols-2">
             {items.map((item) => {

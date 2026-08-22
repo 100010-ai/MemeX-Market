@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CheckCheck, Clock3, Crown, Gift, LockKeyhole, PackageOpen, Sparkles, Star, Trophy, Zap } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -32,6 +32,8 @@ export default function SeasonPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const centeredLevelRef = useRef<number | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const load = useCallback(async () => setData(await apiFetch<Payload>("/api/season", { cacheMs: 20_000 })), []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -39,6 +41,16 @@ export default function SeasonPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+
+  useEffect(() => {
+    if (!data || centeredLevelRef.current === data.level) return;
+    centeredLevelRef.current = data.level;
+    const timer = window.setTimeout(() => {
+      trackRef.current?.querySelector(`[data-season-level="${data.level}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [data]);
 
   const next = useMemo(() => data?.levels.find((item) => item.level > data.level) || null, [data]);
   const currentFloor = data?.levels.filter((item) => item.level <= (data?.level || 0)).at(-1)?.requiredXp || 0;
@@ -125,11 +137,9 @@ export default function SeasonPage() {
     <section className="mb-3 border-y border-[var(--border-soft)] py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-[11px] font-semibold">Как получать XP</p><p className="mt-1 text-[8px] text-[var(--muted)]">Прогресс считается сервером из подтверждённых действий, вручную накрутить XP нельзя.</p></div>
-        {claimableCount > 0 && maxLevel >= 30
+        {claimableCount > 0
           ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimAll()} className="mxm-primary-action min-h-9"><CheckCheck size={13} />{busy === "all" ? "Получаем…" : `Забрать всё · ${claimableCount}`}</button>
-          : claimableCount > 0
-            ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Gift size={11} />Доступно наград: {claimableCount}</span>
-            : <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Check size={11} />Доступные награды получены</span>}
+          : <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Check size={11} />Доступные награды получены</span>}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
         {XP_SOURCES.map((source) => <div key={source.label} className="flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[8px]"><span className="text-[var(--muted)]">{source.label}</span><b className="font-medium text-[var(--accent)]">{source.xp}</b></div>)}
@@ -141,26 +151,30 @@ export default function SeasonPage() {
       {data.prestige.unlocked ? <><div className="mt-3"><div className="flex items-center justify-between text-[8px] text-[var(--muted)]"><span>{data.xp.toLocaleString("ru-RU")} XP</span><span>след. {data.prestige.nextRequiredXp.toLocaleString("ru-RU")} XP</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[#9c86ef]" style={{ width: `${Math.min(100, Math.max(0, ((data.xp - (data.prestige.nextRequiredXp - data.prestige.stepXp)) / Math.max(1, data.prestige.stepXp)) * 100))}%` }} /></div></div><div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[.06] pt-3"><div className="min-w-0"><p className="text-[9px] text-[var(--muted)]">Следующая награда · P{data.prestige.nextClaimLevel}</p><p className="mt-0.5 truncate text-[10px] font-medium">{data.prestige.nextReward?.label || "Prestige-награда"}</p></div><button type="button" disabled={data.prestige.claimable < 1 || Boolean(busy)} onClick={() => void claimPrestige()} className="mxm-primary-action shrink-0">{busy === "prestige" ? "Получаем…" : data.prestige.claimable > 0 ? `Забрать P${data.prestige.nextClaimLevel}` : `Нужно ${Math.max(0, data.prestige.nextRequiredXp - data.xp)} XP`}</button></div></> : <div className="mt-3 flex items-center gap-2 border-t border-white/[.06] pt-3 text-[9px] text-[var(--muted)]"><LockKeyhole size={12} />Prestige откроется после завершения основной дорожки.</div>}
     </section> : null}
 
-    <div className="grid grid-cols-[42px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 text-[9px]">
-      <div />
-      <div className="mb-2 flex items-center gap-1.5 text-[var(--muted)]"><Trophy size={12} />Бесплатная ветка</div>
-      <div className="mb-2 flex items-center gap-1.5 text-[#f3d789]"><Crown size={12} />Премиум-ветка</div>
-      {data?.levels.map((item) => <LevelRow key={item.level} item={item} currentLevel={data.level} premium={data.premium} busy={busy} claim={claim} />)}
+    <div className="mb-2 flex flex-wrap items-center gap-3 text-[8px] text-[var(--muted)]"><span className="mxm-season-state is-ready">Доступно</span><span className="mxm-season-state is-claimed">Получено</span><span className="mxm-season-state">Закрыто</span><span className="ml-auto">Дорожка центрируется на текущем уровне</span></div>
+    <div ref={trackRef} className="mxm-season-track mxm-hscroll pb-2">
+      {data?.levels.map((item) => <SeasonLevelCard key={item.level} item={item} currentLevel={data.level} premium={data.premium} busy={busy} claim={claim} />)}
     </div>
   </div>;
 
 }
 
-function LevelRow({ item, currentLevel, premium, busy, claim }: { item: Level; currentLevel: number; premium: boolean; busy: string | null; claim: (level: number, track: "free" | "premium") => Promise<void> }) {
+function SeasonLevelCard({ item, currentLevel, premium, busy, claim }: { item: Level; currentLevel: number; premium: boolean; busy: string | null; claim: (level: number, track: "free" | "premium") => Promise<void> }) {
   const unlocked = currentLevel >= item.level;
   const milestone = item.level % 5 === 0;
-  return <>
-    <div className={`grid min-h-[82px] place-items-center border-t border-[var(--border-soft)] ${milestone ? "bg-white/[.012]" : ""}`}><div className="text-center"><span className={`grid h-7 w-7 place-items-center rounded-full text-[10px] font-semibold ${unlocked ? "bg-[var(--accent)] text-black" : "bg-white/[.05] text-[var(--muted)]"}`}>{item.level}</span>{milestone ? <span className="mt-1 block text-[7px] uppercase tracking-[.08em] text-[var(--muted-2)]">этап</span> : null}</div></div>
-    <RewardCell reward={item.freeReward} locked={!unlocked} claimed={item.freeClaimed} busy={busy === `${item.level}:free`} onClaim={() => claim(item.level, "free")} milestone={milestone} />
-    <RewardCell reward={item.premiumReward} locked={!unlocked || !premium} claimed={item.premiumClaimed} busy={busy === `${item.level}:premium`} onClaim={() => claim(item.level, "premium")} premium milestone={milestone} />
-  </>;
+  const current = currentLevel === item.level;
+  return <article data-season-level={item.level} className={`mxm-season-level-card ${milestone ? "is-milestone" : ""} ${current ? "is-current" : ""}`}>
+    <header><span className={`mxm-season-level-number ${unlocked ? "is-unlocked" : ""}`}>{item.level}</span><span>{current ? "Текущий" : milestone ? "Этап" : `${item.requiredXp} XP`}</span></header>
+    <SeasonReward label="FREE" reward={item.freeReward} locked={!unlocked} claimed={item.freeClaimed} busy={busy === `${item.level}:free`} onClaim={() => claim(item.level, "free")} />
+    <SeasonReward label="PREMIUM" reward={item.premiumReward} locked={!unlocked || !premium} claimed={item.premiumClaimed} busy={busy === `${item.level}:premium`} onClaim={() => claim(item.level, "premium")} premium />
+  </article>;
 }
 
-function RewardCell({ reward, locked, claimed, busy, onClaim, premium = false, milestone = false }: { reward: Reward; locked: boolean; claimed: boolean; busy: boolean; onClaim: () => Promise<void>; premium?: boolean; milestone?: boolean }) {
-  return <div className={`flex min-h-[82px] items-center gap-2 border-t border-[var(--border-soft)] px-2 ${premium ? "bg-[#f5c451]/[.025]" : ""} ${milestone ? "font-medium" : ""}`}><div className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${premium ? "bg-[#f5c451]/10 text-[#f3d789]" : "bg-white/[.045] text-[var(--accent)]"}`}>{locked ? <LockKeyhole size={13} /> : claimed ? <Check size={14} /> : rewardIcon(reward?.kind)}</div><div className="min-w-0 flex-1"><p className="text-[9px] font-medium leading-4">{reward?.label || "Секретная награда"}</p>{!locked && !claimed ? <button type="button" disabled={busy} onClick={() => void onClaim()} className="mt-1 text-[8px] text-[var(--accent)] underline decoration-white/20 underline-offset-2">{busy ? "…" : "Забрать"}</button> : <p className="mt-1 text-[8px] text-[var(--muted-2)]">{claimed ? "Получено" : premium && !claimed ? "Закрыто" : "Нужно больше XP"}</p>}</div></div>;
+function SeasonReward({ label, reward, locked, claimed, busy, onClaim, premium = false }: { label: string; reward: Reward; locked: boolean; claimed: boolean; busy: boolean; onClaim: () => Promise<void>; premium?: boolean }) {
+  const status = claimed ? "Получено" : locked ? "Закрыто" : "Забрать";
+  return <div className={`mxm-season-reward ${premium ? "is-premium" : ""}`}>
+    <span className="mxm-season-reward-icon">{locked ? <LockKeyhole size={12} /> : claimed ? <Check size={12} /> : rewardIcon(reward?.kind)}</span>
+    <div className="min-w-0 flex-1"><small>{label}</small><p>{reward?.label || "Секретная награда"}</p></div>
+    {!locked && !claimed ? <button type="button" disabled={busy} onClick={() => void onClaim()}>{busy ? "…" : status}</button> : <span className={claimed ? "is-claimed" : ""}>{status}</span>}
+  </div>;
 }

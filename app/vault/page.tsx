@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ListPlus, LockKeyhole, WalletCards, X } from "lucide-react";
+import { Check, ListPlus, LockKeyhole, SortAsc, WalletCards, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { GiftAsset, Holding, PortfolioPoint, Profile } from "@/lib/types";
 import { ago, compact, money, percent, price } from "@/lib/format";
@@ -21,7 +21,13 @@ export default function VaultPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("gifts");
+  const [tab, setTab] = useState<TabKey>(() => {
+    if (typeof window === "undefined") return "gifts";
+    const saved = window.sessionStorage.getItem("mxm-vault-tab");
+    return saved === "coins" || saved === "listed" || saved === "history" ? saved : "gifts";
+  });
+  const [giftSort, setGiftSort] = useState<"new" | "value" | "name">("new");
+  const [coinSort, setCoinSort] = useState<"value" | "pnl" | "name">("value");
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -45,6 +51,7 @@ export default function VaultPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  useEffect(() => { window.sessionStorage.setItem("mxm-vault-tab", tab); }, [tab]);
   const realtimeReload = useCallback(() => { void load().catch((cause) => setLoadError(cause instanceof Error ? cause.message : "Не удалось обновить хранилище")); }, [load]);
 
   function toggleSelected(id: string) {
@@ -102,7 +109,18 @@ export default function VaultPage() {
   }
 
   const listed = useMemo(() => data?.listedGifts ?? data?.gifts.filter((gift) => gift.status === "listed") ?? [], [data]);
-  const activeGiftRows = tab === "listed" ? listed : data?.gifts || [];
+  const activeGiftRows = useMemo(() => {
+    const rows = [...(tab === "listed" ? listed : data?.gifts || [])];
+    if (giftSort === "value") return rows.sort((a, b) => Number(b.estimatedValue || b.listingPrice || 0) - Number(a.estimatedValue || a.listingPrice || 0));
+    if (giftSort === "name") return rows.sort((a, b) => `${a.baseName || a.telegramName}`.localeCompare(`${b.baseName || b.telegramName}`, "ru"));
+    return rows;
+  }, [data?.gifts, giftSort, listed, tab]);
+  const sortedHoldings = useMemo(() => {
+    const rows = [...(data?.holdings || [])];
+    if (coinSort === "pnl") return rows.sort((a, b) => b.pnl - a.pnl);
+    if (coinSort === "name") return rows.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    return rows.sort((a, b) => b.marketValue - a.marketValue);
+  }, [coinSort, data?.holdings]);
   const visibleGiftRows = activeGiftRows.slice(0, giftRenderLimit);
   const realtimeFilters = useMemo(() => data?.profile.id ? ({ holdings: `profile_id=eq.${data.profile.id}`, trades: `profile_id=eq.${data.profile.id}`, virtual_gifts: `owner_profile_id=eq.${data.profile.id}` }) : undefined, [data?.profile.id]);
   if (!data) {
@@ -142,18 +160,21 @@ export default function VaultPage() {
         <Tab label="История" active={tab === "history"} onClick={() => setTab("history")} />
       </div>
 
+      {tab === "gifts" || tab === "listed" ? <div className="mb-2 flex items-center justify-end gap-2 text-[9px] text-[var(--muted)]"><SortAsc size={11}/><select value={giftSort} onChange={(event)=>setGiftSort(event.target.value as typeof giftSort)} className="mxm-compact-select"><option value="new">Сначала новые</option><option value="value">По стоимости</option><option value="name">По названию</option></select></div> : null}
+      {tab === "coins" ? <div className="mb-2 flex items-center justify-end gap-2 text-[9px] text-[var(--muted)]"><SortAsc size={11}/><select value={coinSort} onChange={(event)=>setCoinSort(event.target.value as typeof coinSort)} className="mxm-compact-select"><option value="value">По стоимости</option><option value="pnl">По результату</option><option value="name">По названию</option></select></div> : null}
+
       {tab === "gifts" || tab === "listed" ? (
         (tab === "listed" ? listed : data.gifts).length ? <div>
           {tab === "gifts" ? <div className="mxm-bulk-listing">
             <div className="flex items-center justify-between gap-2"><div><p className="text-[11px] font-medium">Массовая продажа</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">До 50 подарков одной атомарной операцией.</p></div><button type="button" onClick={() => { setSelecting((value) => !value); setSelected(new Set()); }} className="inline-flex items-center gap-1.5 px-1 py-2 text-[10px] text-[var(--muted)]">{selecting ? <X size={12} /> : <ListPlus size={12} />}{selecting ? "Отмена" : "Выбрать"}</button></div>
-            {selecting ? <div className="mt-2 border-t border-[var(--border-soft)] pt-2"><div className="flex flex-wrap items-center gap-2"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as "fixed" | "floor")} className="mxm-bulk-listing-control h-9 px-1 text-[10px] outline-none"><option value="floor">Относительно мин. цены</option><option value="fixed">Одна цена каждому</option></select>{bulkMode === "floor" ? <label className="mxm-bulk-listing-control flex h-9 items-center gap-1 px-1 text-[10px]"><span>Мин. цена</span><input value={floorOffset} onChange={(event) => setFloorOffset(event.target.value)} inputMode="decimal" className="w-12 bg-transparent text-right outline-none" /><span>%</span></label> : <label className="mxm-bulk-listing-control flex h-9 items-center gap-1 px-1 text-[10px]"><input value={fixedPrice} onChange={(event) => setFixedPrice(event.target.value)} inputMode="decimal" placeholder="Цена" className="w-20 bg-transparent outline-none" /><span>TON</span></label>}<button type="button" disabled={!selected.size || bulkBusy} onClick={() => void bulkList()} className="ml-auto rounded-[13px] bg-[var(--accent)] px-3 py-2 text-[10px] font-semibold text-black disabled:opacity-40">{bulkBusy ? "Выставляем…" : `Выставить ${selected.size || ""}`}</button></div></div> : null}
+            {selecting ? <div className="mt-2 border-t border-[var(--border-soft)] pt-2"><div className="flex flex-wrap items-center gap-2"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as "fixed" | "floor")} className="mxm-bulk-listing-control h-9 px-1 text-[10px] outline-none"><option value="floor">Относительно мин. цены</option><option value="fixed">Одна цена каждому</option></select>{bulkMode === "floor" ? <label className="mxm-bulk-listing-control flex h-9 items-center gap-1 px-1 text-[10px]"><span>Мин. цена</span><input value={floorOffset} onChange={(event) => setFloorOffset(event.target.value)} inputMode="decimal" className="w-12 bg-transparent text-right outline-none" /><span>%</span></label> : <label className="mxm-bulk-listing-control flex h-9 items-center gap-1 px-1 text-[10px]"><input value={fixedPrice} onChange={(event) => setFixedPrice(event.target.value)} inputMode="decimal" placeholder="Цена" className="w-20 bg-transparent outline-none" /><span>TON</span></label>}<button type="button" disabled={!selected.size || bulkBusy} onClick={() => void bulkList()} className="mxm-primary-action ml-auto !min-h-9 !px-3">{bulkBusy ? "Выставляем…" : `Выставить ${selected.size || ""}`}</button></div></div> : null}
           </div> : null}
           <div className="market-grid grid gap-2">{visibleGiftRows.map((gift) => <div key={gift.virtualGiftId} className="relative">{selecting && tab === "gifts" ? <button type="button" aria-label={selected.has(gift.virtualGiftId) ? "Убрать из выбора" : "Выбрать подарок"} onClick={() => toggleSelected(gift.virtualGiftId)} className={`absolute right-2 top-2 z-20 grid h-7 w-7 place-items-center rounded-full border ${selected.has(gift.virtualGiftId) ? "border-[var(--accent)] bg-[var(--accent)] text-black" : "border-white/20 bg-black/55 text-white"}`}>{selected.has(gift.virtualGiftId) ? <Check size={14} /> : null}</button> : null}<div className={selecting && tab === "gifts" && !selected.has(gift.virtualGiftId) ? "opacity-80" : ""}><GiftCard gift={gift} /></div></div>)}</div>
           {visibleGiftRows.length < activeGiftRows.length ? <div className="mt-4 text-center"><button type="button" onClick={() => setGiftRenderLimit((value) => Math.min(activeGiftRows.length, value + 120))} className="border-b border-[var(--border)] pb-1 text-[10px] text-[var(--muted)]">Показать ещё {Math.min(120, activeGiftRows.length - visibleGiftRows.length)}</button></div> : null}
           {tab === "gifts" && visibleGiftRows.length >= activeGiftRows.length && data.inventory?.nextGiftOffset != null ? <div className="mt-4 text-center"><button type="button" disabled={moreGiftsBusy} onClick={() => void loadMoreGifts()} className="border-b border-[var(--border)] pb-1 text-[10px] text-[var(--muted)] disabled:opacity-50">{moreGiftsBusy ? "Загружаем…" : `Загрузить ещё ${Math.min(180, Math.max(0, (data.inventory?.giftCount || 0) - data.gifts.length))}`}</button></div> : null}
         </div> : <Empty title={tab === "listed" ? "Лотов нет" : "Подарков нет"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Рынок</Link> : undefined} />
       ) : tab === "coins" ? (
-        data.holdings.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{data.holdings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Мемкоинов нет" action={<Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Рынок</Link>} />
+        data.holdings.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{sortedHoldings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Мемкоинов нет" action={<Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Рынок</Link>} />
       ) : (
         data.history.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{data.history.map((item) => <Link href={item.href} key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-medium">{item.label}</p><p className="mt-1 text-[10px] text-[var(--muted)]">{ago(item.createdAt)} · {item.kind === "coin" ? "мемкоин" : "подарок"}</p></div><div className="text-right"><p className="text-xs">{money(item.amount)}</p>{item.pnl !== 0 ? <p className={`text-[10px] ${item.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{item.pnl > 0 ? "+" : ""}{money(item.pnl)}</p> : null}</div></Link>)}</div></div> : <Empty title="История пуста" />
       )}

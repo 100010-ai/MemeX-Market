@@ -64,10 +64,17 @@ function buildReel(caseItem: CaseItem, reward: Reward): ReelState {
   const seed = textSeed(`${caseItem.sku}:${reward.label}:${reward.rarity}`);
   const stopIndex = 29 + (seed % 3);
   const length = stopIndex + 7;
-  const items: ReelItem[] = Array.from({ length }, (_, index): ReelItem => {
-    const odd = source[(seed + index * 7 + Math.floor(index / 3) * 3) % source.length];
-    return { id: `${index}:${odd.reward}`, label: odd.label, rarity: odd.rarity };
-  });
+  const items: ReelItem[] = [];
+  for (let index = 0; index < length; index += 1) {
+    let sourceIndex = (seed + index * 7 + Math.floor(index / 3) * 3) % source.length;
+    let odd = source[sourceIndex];
+    const previous = items[index - 1];
+    if (previous && source.length > 1 && previous.label === odd.label) {
+      sourceIndex = (sourceIndex + 1 + (seed % (source.length - 1))) % source.length;
+      odd = source[sourceIndex];
+    }
+    items.push({ id: `${index}:${odd.reward}`, label: odd.label, rarity: odd.rarity });
+  }
   items[stopIndex] = { id: `winner:${reward.label}`, label: reward.label, rarity: reward.rarity, final: true };
   return { items, stopIndex, reward };
 }
@@ -89,6 +96,7 @@ export default function CasesPage() {
   const openingRequestRef = useRef<{ caseSku: string; requestId: string } | null>(null);
   const revealTimerRef = useRef<number | null>(null);
   const reelFrameRef = useRef<number | null>(null);
+  const pendingRevealRef = useRef<OpenResult | null>(null);
 
   const load = useCallback(async () => {
     const payload = await apiFetch<Payload>("/api/cases", { cacheMs: 0, dedupe: false });
@@ -123,6 +131,26 @@ export default function CasesPage() {
     setError(null);
   }
 
+  const finishReveal = useCallback(() => {
+    const result = pendingRevealRef.current;
+    if (!result) return;
+    if (revealTimerRef.current != null) window.clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = null;
+    pendingRevealRef.current = null;
+    setReward(result.reward);
+    setReelPhase("revealed");
+    setOpening(false);
+    haptic("heavy");
+    void load().catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "Награда получена, но список кейсов не обновился");
+    });
+  }, [haptic, load]);
+
+  function skipReveal() {
+    if (!opening || !pendingRevealRef.current) return;
+    finishReveal();
+  }
+
   async function open() {
     if (!current || current.quantity < 1 || opening) return;
     setOpening(true);
@@ -139,6 +167,7 @@ export default function CasesPage() {
       const result = await apiFetch<OpenResult>("/api/cases", { method: "POST", body: JSON.stringify(attempt) });
       openingRequestRef.current = null;
 
+      pendingRevealRef.current = result;
       const nextReel = buildReel(current, result.reward);
       setReel(nextReel);
       setReelPhase("armed");
@@ -147,16 +176,9 @@ export default function CasesPage() {
       });
 
       const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      revealTimerRef.current = window.setTimeout(() => {
-        setReward(result.reward);
-        setReelPhase("revealed");
-        setOpening(false);
-        haptic("heavy");
-        void load().catch((cause) => {
-          setError(cause instanceof Error ? cause.message : "Награда получена, но список кейсов не обновился");
-        });
-      }, reducedMotion ? 180 : 1950);
+      revealTimerRef.current = window.setTimeout(finishReveal, reducedMotion ? 180 : 1950);
     } catch (cause) {
+      pendingRevealRef.current = null;
       setOpening(false);
       setReel(null);
       setReelPhase("idle");
@@ -212,7 +234,10 @@ export default function CasesPage() {
                 </div>)}
               </div>
             </div>
-            <p className="mt-3 text-[9px] text-[var(--muted)]">Результат уже зафиксирован сервером · прокрутка только показывает выпадение</p>
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <p className="text-[9px] text-[var(--muted)]">Результат уже зафиксирован сервером</p>
+              <button type="button" onClick={skipReveal} className="mxm-case-skip">Пропустить</button>
+            </div>
           </div> : reward ? <div className="mxm-case-reward-compact">
             <span className={`mxm-reward-orb is-${reward.rarity}`}><Sparkles size={23} /></span>
             {reward.pityTriggered ? <span className="mxm-pity-trigger"><ShieldCheck size={9} />Гарантия {rarityLabel(reward.pityRarity || reward.rarity)}</span> : null}
@@ -236,7 +261,7 @@ export default function CasesPage() {
         </div>
 
         {current?.quantity ? <button type="button" disabled={opening} onClick={() => void open()} className="mxm-primary-action mt-2.5 w-full">
-          <PackageOpen size={14} />{opening ? "Прокручиваем…" : `Открыть кейс · ${current.quantity} шт.`}
+          <PackageOpen size={14} />{opening ? "Прокручиваем…" : reward ? `Открыть ещё · ${current.quantity} шт.` : `Открыть кейс · ${current.quantity} шт.`}
         </button> : <Link href="/store?category=cases" className="mxm-primary-action mt-2.5 w-full">
           <PackageOpen size={14} />Купить кейс
         </Link>}

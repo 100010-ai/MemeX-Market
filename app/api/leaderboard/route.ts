@@ -74,6 +74,19 @@ async function GETHandler(request: NextRequest) {
       const name = username ? `@${username}` : text(player.first_name, "Пользователь", 120);
       return [{ id, player, name }];
     });
+    const presentationById = new Map<string, string | null>();
+    const playerIds = validPlayers.map(({ id }) => id);
+    if (playerIds.length) {
+      const { data: presentation, error: presentationError } = await supabase.from("profiles")
+        .select("id,equipped_profile_frame")
+        .in("id", playerIds);
+      if (presentationError) throw presentationError;
+      for (const row of presentation || []) {
+        const rowId = nonEmptyId(row.id);
+        if (rowId) presentationById.set(rowId, nullableText(row.equipped_profile_frame, 120));
+      }
+    }
+
     let previousValue: number | null = null;
     let previousRank = 0;
     const players = validPlayers.map(({ id, player, name }, index) => {
@@ -87,6 +100,7 @@ async function GETHandler(request: NextRequest) {
       isMe: id === String(profile.id),
       name,
       photoUrl: nullableText(player.photo_url, 2_000),
+      equippedFrame: presentationById.get(id) || null,
       balance: numeric(player, "balance"),
       coinValue: numeric(player, "coin_value"),
       giftValue: numeric(player, "gift_value"),
