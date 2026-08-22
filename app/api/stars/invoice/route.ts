@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 const eligibilityMessages: Record<string, string> = {
   product_unavailable: "Товар временно недоступен",
   profile_missing: "Профиль не найден",
+  active_purchase_reservation: "Предыдущая покупка этого товара ещё подтверждается",
+  case_config_invalid: "Кейс временно снят с продажи: таблица наград обновляется",
   case_sold_out: "Этот кейс распродан",
   season_pass_owned: "Премиум-ветка текущего сезона уже открыта",
   profile_item_owned: "Этот предмет профиля уже получен",

@@ -73,6 +73,7 @@ const migration027 = migration027Name ? read(`supabase/migrations/${migration027
 const migration028 = read("supabase/migrations/028_remove_advertising.sql");
 const migration029 = read("supabase/migrations/029_market_scalability.sql");
 const migration9994 = read("supabase/migrations/9994_mrkt_player_market_handoff.sql");
+const migration99999 = read("supabase/migrations/99999_store_battlepass_cases_v13.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -126,8 +127,17 @@ check("Migration 9995 player-only consistency present", exists("supabase/migrati
 check("Migration 9996 resilient Gift sync present", exists("supabase/migrations/9996_gift_sync_resilience.sql"));
 check("Migration 9997 Telegram channel task present", exists("supabase/migrations/9997_main_channel_subscription_task.sql"));
 check("Migration 9998 player UI copy cleanup present", exists("supabase/migrations/9998_ui_copy_polish.sql"));
-check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
+check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
+check("v0.63 package version", packageJson.includes('"version": "0.63.0"'));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
+check("v0.63 expanded store catalogue", migration99999.includes("profile_founder_frame") && migration99999.includes("case_vault") && migration99999.includes("mxm_treasury"));
+check("v0.63 real profile-frame renderer", exists("lib/profile-frames.ts") && read("components/profile-avatar.tsx").includes("getProfileFrameClass") && read("app/globals.css").includes("mxm-profile-frame-founder"));
+check("v0.63 battle pass has claim-all", migration99999.includes("claim_all_season_rewards_v300") && read("app/api/season/route.ts").includes('action === "claim_all"') && read("app/season/page.tsx").includes("Забрать всё"));
+check("v0.63 Stars CTA is not consent-disabled", read("components/store-front.tsx").includes("startStarsPurchase") && read("components/store-front.tsx").includes("pendingStarsProduct") && !read("components/store-front.tsx").includes("!termsAccepted || Boolean(unavailable)"));
+
+check("v0.63 abandoned pending Stars invoices expire", migration99999.includes("expiredPending") && migration99999.includes("status='pending'"));
+check("v0.63 route titles cover commerce screens", read("components/app-shell.tsx").includes('["/season", "Боевой пропуск"]') && read("components/app-shell.tsx").includes('["/cases", "Кейсы MXM"]') && read("components/app-shell.tsx").includes('["/creator", "Инструменты автора"]'));
+check("v0.63 case stock is live", read("app/api/store/route.ts").includes("Limited case supply is mutable inventory") && !read("app/api/store/route.ts").includes("cases: (caseDefinitionsResult.data"));
 
 check("Runtime config schema", migration026.includes("create table if not exists public.runtime_config_v056") && exists("lib/runtime-config.ts") && exists("app/api/runtime-config/route.ts"));
 check("Maintenance mode + feature flags", read("components/app-shell.tsx").includes("maintenanceMode") && read("app/api/admin/runtime-config/route.ts").includes("validateRuntimeConfigInput"));

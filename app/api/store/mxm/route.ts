@@ -27,11 +27,22 @@ async function POSTHandler(request: Request) {
   });
   if (error) {
     console.error("mxm store purchase", error);
-    const insufficient = /insufficient mxm/i.test(error.message || "");
-    const soldOut = /sold out/i.test(error.message || "");
-    const unavailable = /not eligible|unavailable|already used/i.test(error.message || "");
-    if (!insufficient && !soldOut && !unavailable) return apiFailure(error, "Не удалось выполнить покупку", 400);
-    return NextResponse.json({ error: insufficient ? "Недостаточно MXM" : soldOut ? "Товар распродан" : "Покупка сейчас недоступна" }, { status: 409 });
+    const message = error.message || "";
+    const insufficient = /insufficient mxm/i.test(message);
+    const soldOut = /sold out/i.test(message);
+    const eligibilityReason = /not eligible:\s*([a-z0-9_]+)/i.exec(message)?.[1] || null;
+    const eligibilityMessages: Record<string, string> = {
+      case_sold_out: "Этот кейс распродан",
+      case_config_invalid: "Кейс временно недоступен: таблица наград обновляется",
+      profile_item_owned: "Этот предмет профиля уже получен",
+      energy_full: "Энергия уже заполнена",
+      active_purchase_reservation: "Предыдущая покупка этого товара ещё подтверждается",
+    };
+    if (insufficient) return NextResponse.json({ error: "Недостаточно MXM" }, { status: 409 });
+    if (soldOut) return NextResponse.json({ error: "Товар распродан" }, { status: 409 });
+    if (eligibilityReason) return NextResponse.json({ error: eligibilityMessages[eligibilityReason] || "Покупка сейчас недоступна", reason: eligibilityReason }, { status: 409 });
+    if (/unavailable|already used/i.test(message)) return NextResponse.json({ error: "Покупка сейчас недоступна" }, { status: 409 });
+    return apiFailure(error, "Не удалось выполнить покупку", 400);
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }

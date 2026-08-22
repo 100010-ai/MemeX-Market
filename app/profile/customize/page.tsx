@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Check, Crown, Palette, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { Check, Crown, Palette, ShieldCheck, Star } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { itemTypeLabel, rankLabel } from "@/lib/ui-copy";
+import { itemTypeLabel, rankLabel, rarityLabel } from "@/lib/ui-copy";
+import { getProfileFrameDefinition } from "@/lib/profile-frames";
 
 type Item = { key: string; type: string; title: string; equipped: boolean };
 type Payload = { wallet: { vipTier?: string; vipProgress?: number; premiumActive?: boolean }; items: Item[] };
@@ -65,13 +66,16 @@ export default function CustomizeProfilePage() {
         </div>
       </section>
       <div className="grid gap-2 sm:grid-cols-2">
-        {data?.items.length ? data.items.map((item) => (
-          <article key={item.key} className="mxm-card flex items-center gap-3 p-3">
-            <div className="grid h-10 w-10 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{item.type === "frame" ? <Sparkles size={16} /> : item.type === "title" ? <Star size={16} /> : <Palette size={16} />}</div>
-            <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{item.title}</p><p className="mt-1 text-[8px] uppercase text-[var(--muted)]">{itemTypeLabel(item.type)}</p></div>
+        {data?.items.length ? data.items.map((item) => {
+          const frame = item.type === "frame" ? getProfileFrameDefinition(item.key) : null;
+          return <article key={item.key} className="mxm-card flex items-center gap-3 p-3">
+            {frame
+              ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={item.key} />
+              : <div className="grid h-10 w-10 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{item.type === "title" ? <Star size={16} /> : <Palette size={16} />}</div>}
+            <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{item.title}</p><p className="mt-1 text-[8px] uppercase text-[var(--muted)]">{itemTypeLabel(item.type)}{frame ? ` · ${rarityLabel(frame.rarity)}` : ""}</p></div>
             {item.equipped ? <button type="button" disabled={Boolean(busy)} onClick={() => void unequip()} className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><Check size={11} />{busy === "reset" ? "…" : "Снять"}</button> : item.type === "frame" ? <button type="button" disabled={Boolean(busy)} onClick={() => void equip(item.key)} className="text-[9px] text-[var(--accent)]">{busy === item.key ? "…" : "Выбрать"}</button> : <span className="text-[9px] text-[var(--muted)]">Получено</span>}
-          </article>
-        )) : (
+          </article>;
+        }) : (
           <div className="mxm-card col-span-full p-8 text-center"><Palette size={23} className="mx-auto text-[var(--muted)]" /><p className="mt-3 text-[11px]">Предметов оформления пока нет</p><Link href="/store?category=profile" className="mt-3 inline-block text-[10px] text-[var(--accent)]">Открыть магазин MXM</Link></div>
         )}
       </div>

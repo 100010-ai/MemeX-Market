@@ -67,6 +67,11 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "season-claim", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  if (body.action === "claim_all") {
+    const { data, error } = await getSupabaseAdmin().rpc("claim_all_season_rewards_v300", { p_profile_id: profile.id });
+    if (error) return apiFailure(error, "Не удалось забрать сезонные награды", 400);
+    return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
+  }
   const level = Number(body.level);
   const track = body.track === "premium" ? "premium" : body.track === "free" ? "free" : "";
   if (!Number.isInteger(level) || level < 1 || level > 100 || !track) return NextResponse.json({ error: "Некорректная награда" }, { status: 400 });

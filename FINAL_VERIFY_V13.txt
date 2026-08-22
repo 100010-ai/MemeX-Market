@@ -1,0 +1,140 @@
+MXM v0.63 final verification
+UTC: 2026-08-22T19:59:02Z
+
+[1] TypeScript parser
+Parsed 181 TS/TSX files
+0 parse diagnostics
+
+[2] Local import resolution
+Checked imports in 188 source files
+0 missing local imports
+
+[3] v0.63 SQL/content consistency
+Products: 36
+Cases: 6
+Loot rows: 35
+Case weight sums: case_creator=10000, case_legendary=10000, case_market=10000, case_rare=10000, case_starter=10000, case_vault=10000
+Battle-pass rewards: 60 (30 levels x 2 tracks)
+Consistency errors: 0
+
+[4] Retired source cleanup
+retired source cleanup: nothing to remove
+
+[5] Offline static release gate
+MXM release gate
+
+OK   Migration 017 present
+OK   Migration 018 present
+OK   Migration 019 present
+OK   Migration 020 v0.45 present
+OK   Migration 021 v0.46 present
+OK   Migration 022 v0.47 present
+OK   Migration 023 v0.48 present
+OK   Migration 024 v0.49 present
+OK   Migration 025 v0.50 present
+OK   Migration 026 v0.56 present
+OK   Migration 027 present — 027_market_economy_2.sql
+OK   Migration 028 advertising teardown present
+OK   Migration 029 scalable market present
+OK   Migration 9994 player market handoff present
+OK   Migration 9995 player-only consistency present
+OK   Migration 9996 resilient Gift sync present
+OK   Migration 9997 Telegram channel task present
+OK   Migration 9998 player UI copy cleanup present
+OK   Migration 99999 store/battle-pass/cases v0.63 present
+OK   v0.63 package version
+OK   pnpm package manager pinned
+OK   v0.63 expanded store catalogue
+OK   v0.63 real profile-frame renderer
+OK   v0.63 battle pass has claim-all
+OK   v0.63 Stars CTA is not consent-disabled
+OK   v0.63 abandoned pending Stars invoices expire
+OK   v0.63 route titles cover commerce screens
+OK   v0.63 case stock is live
+OK   Runtime config schema
+OK   Maintenance mode + feature flags
+OK   Advanced Gift offers
+OK   Conditional memecoin orders
+OK   Command palette
+OK   Player market collection cards use Russian product copy
+OK   Task cards use responsive SVG-only actions
+OK   Public UI debug overlay is disabled in production
+OK   Admin Economy & Risk
+OK   Admin Health Center
+OK   Error Inbox infrastructure
+OK   Environment template present
+OK   Human support username documented
+OK   Payment support never falls back to the bot
+OK   No local .env.local tracked
+OK   No local control secret tracked
+OK   Games removed from public API
+OK   Games removed from navigation
+OK   Games disabled in DB
+OK   Old market side dashboard removed
+OK   One robust Gift filter drawer
+OK   Misleading 25M launch copy removed
+OK   Current launch economics
+OK   Coin launch waits for economy migration
+OK   Coin create has no post-RPC visibility mutation
+OK   Advertising routes, helpers, pages and setup docs removed
+OK   No live advertising code or configuration references
+OK   Tasks contain missions only
+OK   Runtime advertising flags removed
+OK   Advertising environment variables removed
+OK   Advertising notification preference removed
+OK   Advertising package script removed
+OK   Migration 028 drops advertising data paths
+OK   Virtual TON disclosure is visible
+OK   Telegram Stars invoice endpoint
+OK   Telegram channel subscription task is server-verified
+OK   Telegram Stars webhook verifier
+OK   Stars reservation cleanup has a visible-store entry point
+OK   Referral graph + idempotent rewards
+OK   Full-market filter dictionary
+OK   Catalogue-wide indexed market paging
+OK   NPC liquidity has irreversible player-only handoff
+OK   Player-only market filters stale system listings
+OK   MRKT-style collections + activity feed are real-data backed
+OK   Collection preview basket uses validated bulk cart
+OK   Admin can tune thresholds or force irreversible handoff
+OK   Paid Coin Boost is visible in New Coins
+OK   Referral link auth binding
+OK   Promo codes
+OK   PnL uses realized trading PnL
+OK   Economy audit ledger
+OK   AMM trade fee sink is audited
+OK   Admin economy update excludes retired settings
+OK   Admin overview uses bounded lists + DB aggregates
+OK   Admin growth, turnover and top-list metrics are bounded and surfaced
+OK   Admin expensive actions have dedicated limits
+OK   Admin Stars refund is paid-only and marks after Bot API success
+OK   Refund reconciliation queue is surfaced and audited
+OK   Gift market fee treasury
+OK   Telegram Gift download timeout
+OK   Telegram Gift file-size bound
+OK   TGS decompression bound
+OK   Binary media response bodies use exact ArrayBuffer bodies
+OK   Remote Gift media bodies are bounded before buffering
+OK   Supabase TS2589 guard on large dynamic market queries
+OK   Gift resolver present
+OK   TonAPI resilient client present
+OK   Market health endpoint present
+OK   Atomic single-Gift purchase RPC present
+OK   Atomic cart purchase RPC present
+OK   Fast session snapshot RPC
+OK   Public env does not expose service role
+OK   No probable literal secrets in artifact
+OK   TypeScript dependency-backed check skipped in offline container — parser/import gate run separately
+OK   ESLint dependency-backed check skipped in offline container — node_modules unavailable
+
+NOTES
+- TONAPI_KEY не задан в shell: каталог перейдёт на публичный rate limit TonAPI.
+- Supabase env не загружен в этой shell-сессии; проверьте production env перед deploy.
+- TELEGRAM_BOT_TOKEN не загружен в этой shell-сессии.
+- npm audit требует доступ к registry.npmjs.org; если CI имеет сеть, запустите npm audit --omit=dev отдельно.
+
+STATIC RELEASE CHECK PASSED
+
+[6] Dependency-backed build status
+NOT RUN: node_modules absent and registry.npmjs.org is unreachable in this container (EAI_AGAIN).
+No dependency-backed tsc/ESLint/next build result is claimed.

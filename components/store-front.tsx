@@ -2,10 +2,27 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Crown, Gem, Gift, PackageOpen, Rocket, Sparkles, Star, UserRound, Zap } from "lucide-react";
+import {
+  BadgeCheck,
+  CheckCircle2,
+  ChevronRight,
+  Crown,
+  Gem,
+  Gift,
+  Info,
+  PackageOpen,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  UserRound,
+  Zap,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { StoreCategory, StoreProduct } from "@/lib/store";
 import { useTelegramProfile } from "@/components/telegram-provider";
+import { ProfileAvatar } from "@/components/profile-avatar";
+import { getProfileFrameDefinition } from "@/lib/profile-frames";
 import { rarityLabel } from "@/lib/ui-copy";
 
 type Wallet = {
@@ -37,13 +54,13 @@ type StorePayload = {
 
 const categoryOrder: StoreCategory[] = ["currency", "membership", "season", "cases", "energy", "creator", "profile"];
 const categoryCopy: Record<StoreCategory, { title: string; note: string }> = {
-  currency: { title: "Монеты MXM", note: "Внутренняя валюта для игровых предметов и возможностей" },
-  membership: { title: "Премиум", note: "Ежедневные бонусы и расширенные лимиты" },
-  season: { title: "Сезонный пропуск", note: "Премиальная дорожка текущего 30-дневного сезона" },
-  cases: { title: "Кейсы", note: "Вероятности наград открыты до покупки" },
-  energy: { title: "Энергия", note: "Восстановление ресурса для запусков и событий" },
-  creator: { title: "Инструменты автора", note: "Продвижение, верификация и расширенная аналитика" },
-  profile: { title: "Профиль", note: "Постоянные косметические предметы без влияния на рынок" },
+  currency: { title: "Монеты MXM", note: "Внутренняя валюта для игровых предметов, кейсов и оформления" },
+  membership: { title: "Премиум", note: "Больше энергии, ускоренное восстановление и ежедневный бонус" },
+  season: { title: "Боевой пропуск", note: "Премиальная дорожка текущего сезона с 30 уровнями" },
+  cases: { title: "Кейсы", note: "Все вероятности раскрыты до покупки, дубликаты компенсируются MXM" },
+  energy: { title: "Энергия", note: "Ресурс для игровых запусков и событий" },
+  creator: { title: "Инструменты автора", note: "Продвижение, статус автора и расширенная аналитика" },
+  profile: { title: "Рамки профиля", note: "Постоянная косметика с реальным визуальным оформлением профиля" },
 };
 
 const categoryIcon: Record<StoreCategory, React.ReactNode> = {
@@ -56,6 +73,8 @@ const categoryIcon: Record<StoreCategory, React.ReactNode> = {
   profile: <UserRound size={14} />,
 };
 
+const rarityRank: Record<string, number> = { common: 0, rare: 1, epic: 2, legendary: 3 };
+
 function categoryDetails(category: StoreCategory) {
   return categoryCopy[category];
 }
@@ -64,32 +83,67 @@ function categoryGlyph(category: StoreCategory) {
   return categoryIcon[category];
 }
 
+function metadataTextList(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => typeof item === "string" && item.trim() ? [item.trim().slice(0, 80)] : []).slice(0, 4);
+}
+
+function profileItemKey(product: StoreProduct) {
+  return typeof product.metadata.profileItem === "string" ? product.metadata.profileItem : null;
+}
+
+function CaseOddsSummary({ odds }: { odds: Array<{ label: string; percent: number; rarity: string }> }) {
+  if (!odds.length) return null;
+  const rarePlus = odds.reduce((sum, odd) => sum + (rarityRank[odd.rarity] >= rarityRank.rare ? odd.percent : 0), 0);
+  const epicPlus = odds.reduce((sum, odd) => sum + (rarityRank[odd.rarity] >= rarityRank.epic ? odd.percent : 0), 0);
+  return <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[8px] text-[var(--muted)]">
+    <span>Редкое+ <b className="font-medium text-white">{rarePlus.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</b></span>
+    <span>Эпическое+ <b className="font-medium text-white">{epicPlus.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</b></span>
+  </div>;
+}
+
 export function StoreFront({ initialCategory = "currency" }: { initialCategory?: StoreCategory }) {
-  const { refreshProfile, haptic } = useTelegramProfile();
+  const { profile, refreshProfile, haptic } = useTelegramProfile();
   const [data, setData] = useState<StorePayload | null>(null);
   const [category, setCategory] = useState<StoreCategory>(initialCategory);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [creatorCoinId, setCreatorCoinId] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [pendingStarsProduct, setPendingStarsProduct] = useState<StoreProduct | null>(null);
+  const [termsDraftAccepted, setTermsDraftAccepted] = useState(false);
   const mxmRequestIdsRef = useRef(new Map<string, string>());
+  const mountedRef = useRef(true);
 
   const load = useCallback(async () => {
     const payload = await apiFetch<StorePayload>("/api/store", { cacheMs: 20_000 });
+    if (!mountedRef.current) return;
     setData(payload);
     setCreatorCoinId((current) => current || payload.creatorCoins[0]?.id || "");
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     const timer = window.setTimeout(() => {
-      void load().catch((error) => setNotice(error instanceof Error ? error.message : "Не удалось загрузить магазин"));
+      void load().catch((error) => {
+        if (mountedRef.current) setNotice(error instanceof Error ? error.message : "Не удалось загрузить магазин");
+      });
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      mountedRef.current = false;
+      window.clearTimeout(timer);
+    };
   }, [load]);
 
   const products = useMemo(() => (data?.products || []).filter((product) => product.category === category), [data?.products, category]);
   const inventory = useMemo(() => new Map((data?.inventory || []).map((item) => [item.sku, Number(item.quantity)])), [data?.inventory]);
   const mxmShop = useMemo(() => new Map((data?.mxmShop || []).map((item) => [item.sku, item])), [data?.mxmShop]);
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<StoreCategory, number>();
+    for (const product of data?.products || []) counts.set(product.category, (counts.get(product.category) || 0) + 1);
+    return counts;
+  }, [data?.products]);
 
   function unavailableReason(product: StoreProduct) {
     if (!data) return null;
@@ -100,15 +154,38 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
     return null;
   }
 
-  async function buy(product: StoreProduct) {
-    if (busy || !data?.migrationReady) return;
+  function startStarsPurchase(product: StoreProduct) {
+    if (busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
     if (!termsAccepted) {
-      setNotice("Подтверди условия цифровой покупки перед оплатой");
+      setTermsDraftAccepted(false);
+      setPendingStarsProduct(product);
+      setNotice(null);
+      haptic("light");
       return;
     }
+    void buy(product);
+  }
+
+  function closePurchaseConsent() {
+    if (busy) return;
+    setPendingStarsProduct(null);
+    setTermsDraftAccepted(false);
+  }
+
+  function confirmPurchaseConsent() {
+    const product = pendingStarsProduct;
+    if (!product || !termsDraftAccepted || busy) return;
+    setTermsAccepted(true);
+    setPendingStarsProduct(null);
+    setTermsDraftAccepted(false);
+    void buy(product);
+  }
+
+  async function buy(product: StoreProduct) {
+    if (busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
     const requiresCoin = product.metadata.requiresCoin === true;
     if (requiresCoin && !creatorCoinId) {
-      setNotice("Сначала создай мемкоин или выбери существующий");
+      setNotice("Для этого инструмента сначала нужен свой активный мемкоин. Создай его или выбери существующий.");
       return;
     }
     setBusy(product.sku);
@@ -120,38 +197,48 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         body: JSON.stringify({ sku: product.sku, termsAccepted: true, context: requiresCoin ? { coinId: creatorCoinId } : {} }),
       });
       const webApp = window.Telegram?.WebApp;
-      if (!webApp?.openInvoice) throw new Error("Открой MXM внутри актуального Telegram");
+      if (!webApp?.openInvoice) throw new Error("Оплата Stars открывается только внутри актуального Telegram");
       webApp.openInvoice(invoice.invoiceUrl, (status) => {
+        if (!mountedRef.current) return;
         if (status !== "paid" && status !== "pending") {
           setBusy(null);
           setNotice(status === "cancelled" ? "Оплата отменена" : "Платёж не завершён");
           return;
         }
-        setNotice(status === "paid" ? "Telegram подтвердил оплату. Выдаём покупку…" : "Платёж обрабатывается Telegram…");
+        setNotice(status === "paid" ? "Telegram подтвердил оплату. Зачисляем покупку…" : "Платёж обрабатывается Telegram…");
         let tries = 0;
         const poll = async () => {
+          if (!mountedRef.current) return;
           tries += 1;
           try {
             const result = await apiFetch<{ purchase: { status: string; productSku?: string | null } }>(`/api/stars/status/${invoice.purchaseId}`, { cacheMs: 0 });
             if (result.purchase.status === "paid") {
               await Promise.all([load(), refreshProfile()]);
+              if (!mountedRef.current) return;
               setNotice("Покупка зачислена в аккаунт");
               setBusy(null);
               haptic("heavy");
               return;
             }
+            if (["cancelled", "expired", "refunded"].includes(result.purchase.status)) {
+              setNotice("Платёж не был зачислен. Обнови магазин и повтори попытку.");
+              setBusy(null);
+              return;
+            }
           } catch { /* Telegram webhook can arrive slightly later. */ }
-          if (tries < 16) window.setTimeout(poll, 800);
+          if (tries < 18) window.setTimeout(poll, 850);
           else {
-            setNotice("Платёж принят. Покупка появится после webhook-подтверждения.");
+            setNotice("Telegram принял платёж. Покупка появится после webhook-подтверждения.");
             setBusy(null);
           }
         };
         void poll();
       });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось открыть оплату Stars");
-      setBusy(null);
+      if (mountedRef.current) {
+        setNotice(error instanceof Error ? error.message : "Не удалось открыть оплату Stars");
+        setBusy(null);
+      }
     }
   }
 
@@ -197,14 +284,14 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
     <div className="mx-auto max-w-5xl">
       <header className="mb-4 border-b border-[var(--border-soft)] pb-4">
         <div className="flex items-start justify-between gap-4">
-          <div><p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Telegram Stars</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Магазин MXM</h1><p className="mt-1.5 max-w-2xl text-[11px] leading-5 text-[var(--muted)]">Игровая валюта, пропуски и косметика внутри виртуальной экономики MXM. Ничего из магазина нельзя вывести, обменять на деньги или Toncoin.</p></div>
+          <div><p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Telegram Stars · MXM</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Магазин MXM</h1><p className="mt-1.5 max-w-2xl text-[11px] leading-5 text-[var(--muted)]">Боевой пропуск, кейсы, рамки, премиум и инструменты автора. Все товары работают только внутри виртуальной экономики MXM и не выводятся в деньги или Toncoin.</p></div>
           <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Баланс</p><p className="mt-1 flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={13} className="text-[var(--accent)]" />{Number(data?.wallet.mxmCoins || 0).toLocaleString("ru-RU")} MXM</p><p className="mt-1 flex items-center justify-end gap-1 text-[9px] text-[var(--muted)]"><Zap size={10} />{data?.wallet.energy ?? 100}/{data?.wallet.maxEnergy ?? 100} энергии</p></div>
         </div>
         {data?.wallet.premiumActive ? <div className="mt-3 flex items-center gap-2 border-l-2 border-[#f5c451] px-2 text-[10px] text-[#f3d789]"><Crown size={12} />Премиум MXM до {new Date(data.wallet.premiumUntil!).toLocaleDateString("ru-RU")}{data.wallet.dailyBonusAvailable ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimDaily()} className="ml-auto text-white underline decoration-white/30 underline-offset-4">Получить ежедневный бонус</button> : <span className="ml-auto text-[var(--muted)]">Бонус сегодня получен</span>}</div> : null}
       </header>
 
       <nav className="mxm-hscroll mb-4 gap-2 pb-1">
-        <Link href="/season" className="mxm-quick-link"><Sparkles size={14} />Сезон</Link>
+        <Link href="/season" className="mxm-quick-link"><Sparkles size={14} />Боевой пропуск</Link>
         <Link href="/cases" className="mxm-quick-link"><PackageOpen size={14} />Кейсы</Link>
         <Link href="/collections" className="mxm-quick-link"><Gift size={14} />Коллекции</Link>
         <Link href="/creator" className="mxm-quick-link"><Rocket size={14} />Авторам</Link>
@@ -212,32 +299,75 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
 
       {!data?.migrationReady && data ? <div className="mxm-alert mxm-alert-error mb-4">Каталог работает в режиме предпросмотра. Для покупок примените миграцию <code>{data.migration}</code>.</div> : null}
       {notice ? <div className="mxm-alert mb-4">{notice}</div> : null}
-      {data && !data.starsEnabled ? <div className="mxm-alert mb-4">Покупки за Telegram Stars временно отключены. Доступные товары всё ещё можно получать за MXM.</div> : null}
+      {data && !data.starsEnabled ? <div className="mxm-alert mb-4">Покупки за Telegram Stars временно отключены в Runtime Config. Товары с ценой в MXM остаются доступны.</div> : null}
 
-      <label className="mb-4 flex cursor-pointer items-start gap-2 text-[9px] leading-4 text-[var(--muted)]"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="mt-0.5 accent-white" /><span>Я понимаю, что покупаю только цифровые предметы внутри MXM, и принимаю <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">условия покупок</Link>. Для вопросов доступна <Link href="/paysupport" className="text-white underline decoration-white/30 underline-offset-2">платёжная поддержка</Link>.</span></label>
+      <div className="mb-4 flex items-start gap-2 border-y border-[var(--border-soft)] py-3 text-[9px] leading-4 text-[var(--muted)]">
+        <ShieldCheck size={12} className="mt-0.5 shrink-0 text-[var(--accent)]" />
+        <span>Покупки за Stars открываются через официальный Telegram Invoice. При первой покупке магазин отдельно попросит подтвердить, что это цифровой предмет только внутри MXM. <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">Условия</Link> · <Link href="/paysupport" className="text-white underline decoration-white/30 underline-offset-2">поддержка</Link>.</span>
+      </div>
 
       <div className="mxm-hscroll mb-4 gap-1.5 pb-1">
-        {categoryOrder.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`mxm-filter-chip ${category === value ? "is-active" : ""}`}>{categoryGlyph(value)}{categoryDetails(value).title}</button>)}
+        {categoryOrder.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`mxm-filter-chip ${category === value ? "is-active" : ""}`}>{categoryGlyph(value)}{categoryDetails(value).title}<span className="text-[8px] text-[var(--muted-2)]">{categoryCounts.get(value) || 0}</span></button>)}
       </div>
 
       <section>
-        <div className="mb-3"><h2 className="text-[13px] font-semibold">{categoryDetails(category).title}</h2><p className="mt-1 text-[9px] text-[var(--muted)]">{categoryDetails(category).note}</p></div>
+        <div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-[13px] font-semibold">{categoryDetails(category).title}</h2><p className="mt-1 text-[9px] text-[var(--muted)]">{categoryDetails(category).note}</p></div>{category === "season" ? <Link href="/season" className="inline-flex items-center gap-1 text-[9px] text-[var(--accent)]">Открыть сезон <ChevronRight size={11} /></Link> : category === "cases" ? <Link href="/cases" className="inline-flex items-center gap-1 text-[9px] text-[var(--accent)]">Мои кейсы <ChevronRight size={11} /></Link> : null}</div>
         {category === "creator" && data?.creatorCoins.length ? <label className="mb-3 block max-w-sm text-[10px] text-[var(--muted)]">Мемкоин для продвижения<select value={creatorCoinId} onChange={(event) => setCreatorCoinId(event.target.value)} className="mxm-input mt-1.5 w-full text-white">{data.creatorCoins.map((coin) => <option key={coin.id} value={coin.id}>{coin.name} · ${coin.symbol}</option>)}</select></label> : null}
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {category === "creator" && data && !data.creatorCoins.length ? <div className="mb-3 flex items-center justify-between gap-3 border-y border-[var(--border-soft)] py-3 text-[9px] text-[var(--muted)]"><span>Продвижение требует собственного активного мемкоина.</span><Link href="/create" className="text-[var(--accent)]">Создать</Link></div> : null}
+
+        {!data ? <div className="grid gap-3 md:grid-cols-2"><div className="mxm-skeleton h-44" /><div className="mxm-skeleton h-44" /></div> : products.length ? <div className="grid gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => {
             const owned = inventory.get(product.sku) || 0;
             const sink = mxmShop.get(product.sku);
             const unavailable = unavailableReason(product);
-            return <article key={product.sku} className="mxm-card flex min-h-[164px] flex-col p-3.5">
-              <div className="flex items-start gap-2"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div></div>
-              <p className="mt-3 flex-1 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
-              {product.metadata.entitlement === "season_pass" && data?.currentSeason ? <p className="mt-2 text-[9px] text-[#f3d789]">Действует до {new Date(data.currentSeason.endsAt).toLocaleString("ru-RU")} · осталось {data.currentSeason.daysLeft} дн.</p> : null}
-              {product.category === "cases" ? <details className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[9px] text-[var(--muted)]"><summary className="cursor-pointer text-white">Вероятности наград до покупки</summary><div className="mt-2 grid gap-1">{(data?.caseOdds[product.sku] || []).map((odd) => <div key={`${product.sku}:${odd.label}`} className="flex justify-between gap-3"><span>{odd.label} · {rarityLabel(odd.rarity)}</span><span className="shrink-0 text-white">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div>)}</div><Link href="/cases" className="mt-2 inline-block text-[var(--accent)] underline decoration-current/30 underline-offset-2">Все правила и история открытий</Link></details> : null}
-              <div className="mt-3 flex items-center justify-between gap-3">{unavailable ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><CheckCircle2 size={11} />{unavailable}</span> : owned > 0 ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><CheckCircle2 size={11} />В инвентаре: {owned}</span> : <span className="text-[8px] text-[var(--muted-2)]">Без реальной стоимости</span>}<div className="flex gap-1.5">{sink ? <button type="button" disabled={Boolean(busy) || !data?.migrationReady || Boolean(unavailable) || data.wallet.mxmCoins < sink.mxmPrice} onClick={() => void buyWithMxm(product)} className="inline-flex min-w-[76px] items-center justify-center gap-1 rounded-[12px] border border-white/10 px-2.5 py-2 text-[10px] font-semibold text-white disabled:opacity-40"><Gem size={11} />{busy === `mxm:${product.sku}` ? "…" : sink.mxmPrice.toLocaleString("ru-RU")}</button> : null}<button type="button" disabled={Boolean(busy) || !data?.migrationReady || !data?.starsEnabled || !termsAccepted || Boolean(unavailable)} onClick={() => void buy(product)} className="inline-flex min-w-[76px] items-center justify-center gap-1 rounded-[12px] bg-white px-3 py-2 text-[10px] font-semibold text-black disabled:opacity-40"><Star size={11} fill="currentColor" />{busy === product.sku ? "…" : product.stars}</button></div></div>
+            const highlights = metadataTextList(product.metadata, "highlights");
+            const itemKey = profileItemKey(product);
+            const frame = itemKey ? getProfileFrameDefinition(itemKey) : null;
+            const odds = data.caseOdds[product.sku] || [];
+            const insufficientMxm = Boolean(sink && data.wallet.mxmCoins < sink.mxmPrice);
+            return <article key={product.sku} className="mxm-card flex min-h-[190px] flex-col py-4">
+              <div className="flex items-start gap-3">
+                {frame ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={frame.key} /> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div>}
+                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}{frame ? <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><BadgeCheck size={9} />{rarityLabel(frame.rarity)}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div>
+              </div>
+              <p className="mt-3 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
+              {highlights.length ? <div className="mt-2 grid gap-1">{highlights.map((item) => <span key={item} className="flex items-center gap-1.5 text-[8px] text-[var(--muted)]"><CheckCircle2 size={9} className="text-[var(--positive)]" />{item}</span>)}</div> : null}
+              {product.metadata.entitlement === "season_pass" && data.currentSeason ? <p className="mt-2 text-[9px] text-[#f3d789]">Действует до конца текущего сезона · осталось {data.currentSeason.daysLeft} дн.</p> : null}
+              {product.category === "cases" ? <><CaseOddsSummary odds={odds} /><details className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[9px] text-[var(--muted)]"><summary className="cursor-pointer text-white">Все вероятности наград</summary><div className="mt-2 grid gap-1">{odds.map((odd) => <div key={`${product.sku}:${odd.label}`} className="flex justify-between gap-3"><span>{odd.label} · {rarityLabel(odd.rarity)}</span><span className="shrink-0 text-white">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div>)}</div></details></> : null}
+              <div className="mt-auto pt-3">
+                <div className="mb-2 min-h-4">{unavailable ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><CheckCircle2 size={11} />{unavailable}</span> : owned > 0 ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><CheckCircle2 size={11} />В инвентаре: {owned}</span> : product.category === "cases" && data.caseAvailability[product.sku] != null ? <span className="text-[8px] text-[var(--muted-2)]">Осталось в серии: {Number(data.caseAvailability[product.sku]).toLocaleString("ru-RU")}</span> : <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted-2)]"><ShieldCheck size={9} />Без реальной стоимости</span>}</div>
+                <div className="flex flex-wrap items-stretch gap-1.5">
+                  {sink ? <button type="button" title={insufficientMxm ? `Нужно ${sink.mxmPrice.toLocaleString("ru-RU")} MXM` : "Купить за MXM"} disabled={Boolean(busy) || !data.migrationReady || Boolean(unavailable) || insufficientMxm} onClick={() => void buyWithMxm(product)} className="inline-flex min-w-[92px] flex-1 items-center justify-center gap-1 rounded-[12px] border border-white/10 px-2.5 py-2 text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35"><Gem size={11} />{busy === `mxm:${product.sku}` ? "Покупка…" : sink.mxmPrice.toLocaleString("ru-RU")}</button> : null}
+                  <button type="button" title={!data.starsEnabled ? "Покупки Stars отключены в Runtime Config" : unavailable || "Купить за Telegram Stars"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="inline-flex min-w-[104px] flex-1 items-center justify-center gap-1.5 rounded-[12px] bg-white px-3 py-2 text-[10px] font-semibold text-black disabled:cursor-not-allowed disabled:opacity-35"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : `${product.stars} · Купить`}</button>
+                </div>
+                {!termsAccepted && data.starsEnabled && !unavailable ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />При первом нажатии откроется подтверждение условий</span> : null}
+              </div>
             </article>;
           })}
-        </div>
+        </div> : <div className="border-y border-[var(--border-soft)] py-10 text-center"><p className="text-[11px] text-[var(--muted)]">В этой категории пока нет активных товаров.</p></div>}
       </section>
+
+      {pendingStarsProduct ? <div className="fixed inset-0 z-[120] flex items-end justify-center p-0 md:items-center md:p-5">
+        <button type="button" aria-label="Закрыть подтверждение покупки" className="mxm-sheet-backdrop absolute inset-0 bg-black/75" onClick={closePurchaseConsent} />
+        <section role="dialog" aria-modal="true" aria-labelledby="mxm-store-consent-title" className="mxm-sheet-panel relative z-[1] w-full max-w-md rounded-t-[24px] border border-[var(--border)] bg-[var(--bg)] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-18px_56px_rgba(0,0,0,.55)] md:rounded-[24px] md:pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-[8px] uppercase tracking-[.14em] text-[var(--muted-2)]">Подтверждение Stars</p><h3 id="mxm-store-consent-title" className="mt-1 text-[15px] font-semibold">{pendingStarsProduct.title}</h3><p className="mt-1 text-[10px] text-[var(--accent)]">{pendingStarsProduct.rewardLabel}</p></div>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-white px-2.5 py-1.5 text-[10px] font-semibold text-black"><Star size={11} fill="currentColor" />{pendingStarsProduct.stars}</span>
+          </div>
+          <div className="mt-4 rounded-[14px] border border-white/[.08] bg-white/[.025] p-3 text-[9px] leading-4 text-[var(--muted)]">
+            Это виртуальный цифровой товар внутри MXM. Он не является TON, криптовалютой или денежным активом, не имеет гарантированной реальной стоимости и не выводится в деньги.
+          </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-[14px] border border-[var(--border-soft)] p-3 text-[9px] leading-4 text-[var(--muted)]">
+            <input autoFocus type="checkbox" checked={termsDraftAccepted} onChange={(event) => setTermsDraftAccepted(event.target.checked)} className="mt-0.5 accent-white" />
+            <span>Я понимаю характер цифровой покупки и принимаю <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">условия покупок MXM</Link>.</span>
+          </label>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" disabled={Boolean(busy)} onClick={closePurchaseConsent} className="min-h-10 rounded-[13px] border border-white/10 px-3 text-[10px] font-semibold text-white disabled:opacity-40">Отмена</button>
+            <button type="button" disabled={!termsDraftAccepted || Boolean(busy)} onClick={confirmPurchaseConsent} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[13px] bg-white px-3 text-[10px] font-semibold text-black disabled:cursor-not-allowed disabled:opacity-35"><Star size={11} fill="currentColor" />Подтвердить</button>
+          </div>
+          <p className="mt-2 text-center text-[8px] text-[var(--muted-2)]">После подтверждения откроется официальный платёжный экран Telegram.</p>
+        </section>
+      </div> : null}
     </div>
   );
 }

@@ -3,10 +3,7 @@ import { Award, Sparkles, UserRound } from "lucide-react";
 import type { ProfileBadge } from "@/lib/types";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { rarityLabel } from "@/lib/ui-copy";
-
-const FRAME_TITLES: Record<string, string> = {
-  neon_frame: "Неоновая рамка",
-};
+import { getProfileFrameClass, getProfileFrameDefinition } from "@/lib/profile-frames";
 
 export function ProfileAvatar({
   photoUrl,
@@ -19,23 +16,25 @@ export function ProfileAvatar({
   equippedFrame: string | null;
   size?: "regular" | "large";
 }) {
+  const frame = getProfileFrameDefinition(equippedFrame);
   const framed = Boolean(equippedFrame);
-  const frameTitle = equippedFrame ? FRAME_TITLES[equippedFrame] || equippedFrame.replaceAll("_", " ") : null;
+  const frameTitle = frame?.title || (equippedFrame ? equippedFrame.replaceAll("_", " ") : null);
   const sizeClass = size === "large" ? "h-14 w-14" : "h-13 w-13";
-  const frameClass = equippedFrame === "neon_frame"
-    ? "mxm-profile-frame-neon p-[2px]"
-    : framed ? "bg-[var(--accent)] p-[2px] shadow-[0_0_14px_rgba(139,164,255,.22)]" : "border border-[var(--border)] bg-[var(--panel-2)]";
+  const radiusClass = size === "large" ? "rounded-[19px]" : "rounded-[18px]";
+  const frameClass = framed ? getProfileFrameClass(equippedFrame) : "border border-[var(--border)] bg-[var(--panel-2)] p-[1px]";
   const avatarSrc = telegramAvatarProxyUrl(photoUrl);
 
   return <span
     data-profile-frame={equippedFrame || undefined}
     title={frameTitle ? `Рамка профиля: ${frameTitle}` : undefined}
-    className={`relative grid ${sizeClass} shrink-0 place-items-center rounded-[20px] ${frameClass}`}
+    className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass}`}
   >
-    {avatarSrc
-      ? <Image unoptimized fill sizes={size === "large" ? "56px" : "52px"} src={avatarSrc} alt={`Профиль ${name}`} className="rounded-[18px] bg-[var(--panel-2)] object-cover" />
-      : <span className="grid h-full w-full place-items-center rounded-[18px] bg-[var(--panel-2)] text-[var(--muted)]">{name ? <span className="text-base font-semibold">{name.slice(0, 1).toUpperCase()}</span> : <UserRound size={21} />}</span>}
-    {framed ? <span aria-label={frameTitle || "Рамка профиля"} className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full border border-white/20 bg-[#19162b] text-[#80f5ff] shadow-md"><Sparkles size={10} /></span> : null}
+    <span className={`relative z-[1] block h-full w-full overflow-hidden ${radiusClass} bg-[var(--panel-2)]`}>
+      {avatarSrc
+        ? <Image unoptimized fill sizes={size === "large" ? "56px" : "52px"} src={avatarSrc} alt={`Профиль ${name}`} className="object-cover" />
+        : <span className="grid h-full w-full place-items-center bg-[var(--panel-2)] text-[var(--muted)]">{name ? <span className="text-base font-semibold">{name.slice(0, 1).toUpperCase()}</span> : <UserRound size={21} />}</span>}
+    </span>
+    {framed ? <span aria-label={frameTitle || "Рамка профиля"} className="mxm-profile-frame-mark absolute -bottom-1 -right-1 z-[3] grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-[#0b0d11] text-[var(--accent)] shadow-md"><Sparkles size={10} /></span> : null}
   </span>;
 }
 

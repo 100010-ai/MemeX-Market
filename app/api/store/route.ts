@@ -8,7 +8,6 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 type StoreStaticCatalog = {
   products: Array<Record<string, unknown>>;
   loot: Array<Record<string, unknown>>;
-  cases: Array<Record<string, unknown>>;
 };
 let storeCatalogCache: { expiresAt: number; value: StoreStaticCatalog } | null = null;
 let storeCatalogInFlight: Promise<StoreStaticCatalog> | null = null;
@@ -18,17 +17,15 @@ async function getStoreStaticCatalog() {
   if (storeCatalogInFlight) return storeCatalogInFlight;
   storeCatalogInFlight = (async () => {
     const supabase = getSupabaseAdmin();
-    const [productsResult, caseLootResult, caseDefinitionsResult] = await Promise.all([
+    const [productsResult, caseLootResult] = await Promise.all([
       supabase.from("store_products").select("sku,category,title,description,stars_price,reward_label,badge,sort_order,metadata").eq("active", true).order("sort_order", { ascending: true }).limit(250),
       supabase.from("case_loot_definitions").select("case_sku,reward_label,weight,rarity").eq("active", true).limit(2_000),
-      supabase.from("case_definitions").select("sku,remaining_supply").eq("active", true).limit(250),
     ]);
-    const error = productsResult.error || caseLootResult.error || caseDefinitionsResult.error;
+    const error = productsResult.error || caseLootResult.error;
     if (error) throw error;
     const value: StoreStaticCatalog = {
       products: (productsResult.data || []) as Array<Record<string, unknown>>,
       loot: (caseLootResult.data || []) as Array<Record<string, unknown>>,
-      cases: (caseDefinitionsResult.data || []) as Array<Record<string, unknown>>,
     };
     storeCatalogCache = { expiresAt: Date.now() + 20_000, value };
     return value;
@@ -60,12 +57,15 @@ async function GETHandler() {
     }
   });
   let catalog: StoreStaticCatalog;
-  const [catalogResult, snapshotResult, seasonResult] = await Promise.all([
+  const [catalogResult, snapshotResult, seasonResult, caseDefinitionsResult] = await Promise.all([
     getStoreStaticCatalog().then((value) => ({ value, error: null as unknown })).catch((error: unknown) => ({ value: null, error })),
     supabase.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
     supabase.rpc("season_snapshot_v200", { p_profile_id: profile.id }),
+    // Limited case supply is mutable inventory. Never hide it behind the 20s
+    // static catalogue cache or the shop can show stock that was just sold.
+    supabase.from("case_definitions").select("sku,remaining_supply").eq("active", true).limit(250),
   ]);
-  const firstError = catalogResult.error || snapshotResult.error || seasonResult.error;
+  const firstError = catalogResult.error || snapshotResult.error || seasonResult.error || caseDefinitionsResult.error;
   if (firstError || !catalogResult.value) return apiFailure(firstError || new Error("Каталог магазина недоступен"), "Не удалось загрузить магазин MXM");
   catalog = catalogResult.value;
 
@@ -103,6 +103,9 @@ async function GETHandler() {
         return product ? [product] : [];
       })
       .filter((product) => runtimeConfig.featureFlags.memecoins || product.metadata.creatorTool !== "boost");
+    const migrationReady = products.some((product) => product.sku === "case_vault")
+      && products.some((product) => product.sku === "profile_founder_frame")
+      && (caseOdds.case_vault?.length || 0) >= 5;
     return NextResponse.json({
       products,
       wallet,
@@ -112,12 +115,13 @@ async function GETHandler() {
       mxmShop: Array.isArray(snapshot.mxmShop) ? snapshot.mxmShop : [],
       creatorCoins: Array.isArray(snapshot.creatorCoins) ? snapshot.creatorCoins : [],
       caseOdds,
-      caseAvailability: Object.fromEntries(catalog.cases.map((row) => [String(row.sku || ""), row.remaining_supply == null ? null : Number(row.remaining_supply)]).filter(([sku]) => Boolean(sku))),
+      caseAvailability: Object.fromEntries(((caseDefinitionsResult.data || []) as Array<Record<string, unknown>>).map((row) => [String(row.sku || ""), row.remaining_supply == null ? null : Number(row.remaining_supply)]).filter(([sku]) => Boolean(sku))),
       currentSeason: seasonResult.data && typeof seasonResult.data === "object" && !Array.isArray(seasonResult.data)
         ? ((seasonResult.data as Record<string, unknown>).season || null)
         : null,
       starsEnabled: runtimeConfig.featureFlags.stars,
-      migrationReady: true,
+      migrationReady,
+      migration: migrationReady ? undefined : "99999_store_battlepass_cases_v13.sql",
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("store payload", error);
