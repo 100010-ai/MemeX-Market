@@ -7,14 +7,14 @@ type DbRow = Record<string, unknown>;
 
 function relationOne(value: unknown, label: string): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
-  if (!row || typeof row !== "object") throw new Error(`${label} relation is missing`);
+  if (!row || typeof row !== "object") return {};
   return row as DbRow;
 }
 
 function profileName(row: DbRow) {
   if (typeof row.username === "string" && row.username.length) return `@${row.username}`;
   if (typeof row.first_name === "string" && row.first_name.length) return row.first_name;
-  throw new Error("Profile display name is missing");
+  return "Пользователь";
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {

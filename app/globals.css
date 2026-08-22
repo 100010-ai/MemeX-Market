@@ -1307,14 +1307,14 @@ html { font-size:15.5px; }
   --mxm-safe-area-bottom: 0px;
 }
 html, body { min-height: var(--mxm-viewport-stable-height); }
-body { min-height: var(--mxm-viewport-height); overscroll-behavior-y: none; touch-action: manipulation; }
+body { min-height: var(--mxm-viewport-height); overscroll-behavior-y: auto; touch-action: pan-x pan-y; }
 @supports (-webkit-touch-callout: none) {
   input, textarea, select { font-size: max(16px, 1em); }
 }
 
 
 /* Telegram WebView stability */
-.mxm-webview-fix { overscroll-behavior: none; }
+.mxm-webview-fix { overscroll-behavior: auto; }
 html, body { overflow-x: hidden; }
 .mxm-shell-content { padding-bottom: calc(84px + max(env(safe-area-inset-bottom), var(--mxm-safe-area-bottom))); }
 .mxm-bottom-nav.safe-bottom { padding-bottom: max(3px, env(safe-area-inset-bottom), var(--mxm-safe-area-bottom)); }

@@ -7,7 +7,7 @@ type DbRow = Record<string, unknown>;
 
 function relationOne(value: unknown, label: string): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
-  if (!row || typeof row !== "object") throw new Error(`${label} relation is missing`);
+  if (!row || typeof row !== "object") return {};
   return row as DbRow;
 }
 
@@ -42,12 +42,12 @@ export async function GET() {
     const history = [
       ...((coinHistoryResult.data || []) as DbRow[]).map((row) => {
         const coin = relationOne(row.coins, "Coin history");
-        if (typeof coin.symbol !== "string" || !coin.symbol) throw new Error("Coin history symbol is missing");
+        if (typeof coin.symbol !== "string" || !coin.symbol) coin.symbol = "UNKNOWN";
         return { id: `coin-${String(row.id)}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${coin.symbol}`, amount: Number(row.quote_amount), pnl: Number(row.realized_pnl), createdAt: String(row.created_at), href: `/coin/${String(row.coin_id)}` };
       }),
       ...((giftHistoryResult.data || []) as DbRow[]).map((row) => {
         const gift = relationOne(row.gift_assets, "Gift history");
-        if (typeof gift.base_name !== "string" || !gift.base_name || !Number.isFinite(Number(gift.gift_number))) throw new Error("Gift history metadata is missing");
+        if (typeof gift.base_name !== "string" || !gift.base_name) gift.base_name = "Gift";
         const sold = String(row.seller_profile_id) === String(profile.id);
         return { id: `gift-${String(row.id)}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${gift.base_name} #${Number(gift.gift_number)}`, amount: Number(row.price), pnl: sold ? Number(row.realized_pnl) : 0, createdAt: String(row.created_at), href: `/gifts/${String(row.virtual_gift_id)}` };
       }),

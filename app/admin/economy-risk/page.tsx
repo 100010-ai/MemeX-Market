@@ -20,7 +20,7 @@ type Payload = {
   checkedAt: string;
 };
 
-const flagLabels: Record<keyof RuntimeFeatureFlags, string> = { gifts: "Gifts trading", memecoins: "Memecoins", referrals: "Referrals", stars: "Telegram Stars" };
+const flagLabels: Record<keyof RuntimeFeatureFlags, string> = { gifts: "Gifts trading", memecoins: "Memecoins", referrals: "Referrals", stars: "Telegram Stars", rewardedAds: "Rewarded ads" };
 const n = (value: unknown) => Number(value || 0);
 const fmt = (value: unknown) => n(value).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 

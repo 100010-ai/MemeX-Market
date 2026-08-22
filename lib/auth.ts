@@ -122,9 +122,21 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
       supabase.from("profile_financial_overview").select("coin_value,gift_value,net_worth,realized_pnl").eq("id", id).single(),
       supabase.rpc("pending_gift_offer_total", { p_profile_id: id, p_exclude_virtual_gift_id: null }),
     ]);
-    if (leaderboardResult.error) throw leaderboardResult.error;
+    if (leaderboardResult.error) {
+      // Keep Telegram login alive if an old database deployment is missing the financial view.
+      if (leaderboardResult.error.code !== "42P01") throw leaderboardResult.error;
+    }
     if (reservedResult.error) throw reservedResult.error;
-    if (!leaderboardResult.data) throw new Error("Profile financial snapshot is missing");
+    if (!leaderboardResult.data) {
+      finance = {
+        balance: requiredNumber(profileRow.balance, "balance"),
+        reservedBalance: 0,
+        coinValue: 0,
+        giftValue: 0,
+        netWorth: requiredNumber(profileRow.balance, "balance"),
+        realizedPnl: 0,
+      };
+    } else {
     finance = {
       balance: requiredNumber(profileRow.balance, "balance"),
       reservedBalance: requiredNumber(reservedResult.data ?? 0, "reserved balance"),
@@ -133,6 +145,7 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
       netWorth: requiredNumber(leaderboardResult.data.net_worth, "net_worth"),
       realizedPnl: requiredNumber(leaderboardResult.data.realized_pnl ?? 0, "realized_pnl"),
     };
+    }
   }
 
   return formatProfileSnapshot(profileRow, finance);

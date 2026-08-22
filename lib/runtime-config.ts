@@ -5,6 +5,7 @@ export type RuntimeFeatureFlags = {
   memecoins: boolean;
   referrals: boolean;
   stars: boolean;
+  rewardedAds: boolean;
 };
 
 export type RuntimeRemoteConfig = {
@@ -28,6 +29,7 @@ const defaultFlags: RuntimeFeatureFlags = {
   memecoins: true,
   referrals: true,
   stars: true,
+  rewardedAds: true,
 };
 
 const defaultRemote: RuntimeRemoteConfig = {
@@ -60,6 +62,7 @@ export function normalizeRuntimeConfig(row: Record<string, unknown>): RuntimeCon
       memecoins: typeof flags.memecoins === "boolean" ? flags.memecoins : defaultFlags.memecoins,
       referrals: typeof flags.referrals === "boolean" ? flags.referrals : defaultFlags.referrals,
       stars: typeof flags.stars === "boolean" ? flags.stars : defaultFlags.stars,
+      rewardedAds: typeof flags.rewardedAds === "boolean" ? flags.rewardedAds : defaultFlags.rewardedAds,
     },
     remoteConfig: {
       maxPriceAlerts: clampInt(remote.maxPriceAlerts, defaultRemote.maxPriceAlerts, 1, 100),
@@ -95,6 +98,7 @@ export function validateRuntimeConfigInput(value: unknown) {
     memecoins: currentFlags.memecoins === true,
     referrals: currentFlags.referrals === true,
     stars: currentFlags.stars === true,
+    rewardedAds: currentFlags.rewardedAds === true,
   };
   const remoteConfig: RuntimeRemoteConfig = {
     maxPriceAlerts: clampInt(currentRemote.maxPriceAlerts, NaN, 1, 100),

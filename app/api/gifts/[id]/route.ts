@@ -26,7 +26,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
 
     const virtualGiftId = String(giftRow.virtual_gift_id);
-    const baseName = String(giftRow.base_name);
+    const baseName = String(giftRow.base_name || "Unknown Gift");
     const nowIso = new Date().toISOString();
 
     const [tradesResult, offersResult, advancedOffersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([

@@ -25,7 +25,7 @@ export async function setSession(telegramId: number) {
   const store = await cookies();
   store.set(COOKIE_NAME, value, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "none",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,

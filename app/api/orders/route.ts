@@ -35,7 +35,7 @@ export async function GET() {
     const gifts = new Map<string, GiftAsset>(((giftRowsResult.data || []) as DbRow[]).map((row) => [String(row.virtual_gift_id), mapGift(row)] as [string, GiftAsset]));
     const names = new Map(((buyersResult.data || []) as DbRow[]).map((person) => {
       const name = person.username ? `@${person.username}` : person.first_name;
-      if (typeof name !== "string" || !name) throw new Error(`Buyer profile ${person.id} has no display name`);
+      if (typeof name !== "string" || !name) return "Пользователь";
       return [String(person.id), name] as const;
     }));
     const mapOffer = (offer: DbRow) => {

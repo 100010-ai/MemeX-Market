@@ -15,8 +15,7 @@ type BoardKey = keyof typeof columns;
 
 function numeric(row: Record<string, unknown>, key: string) {
   const value = Number(row[key]);
-  if (!Number.isFinite(value)) throw new Error(`Leaderboard field ${key} is invalid`);
-  return value;
+  return Number.isFinite(value) ? value : 0;
 }
 
 export async function GET(request: NextRequest) {

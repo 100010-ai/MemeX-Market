@@ -1,20 +1,17 @@
 import { rgbIntToHex } from "@/lib/format";
 import type { Coin, GiftAsset, GiftMediaKind } from "@/lib/types";
 
-function requiredString(value: unknown, name: string) {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`Missing ${name}`);
-  return value;
+function requiredString(value: unknown, _name: string, fallback = "") {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-function stringValue(value: unknown, name: string) {
-  if (typeof value !== "string") throw new Error(`Invalid ${name}`);
-  return value;
+function stringValue(value: unknown, _name: string, fallback = "") {
+  return typeof value === "string" ? value : fallback;
 }
 
-function requiredNumber(value: unknown, name: string) {
+function requiredNumber(value: unknown, _name: string, fallback = 0) {
   const number = Number(value);
-  if (!Number.isFinite(number)) throw new Error(`Invalid ${name}`);
-  return number;
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function nullableString(value: unknown) {
@@ -23,15 +20,27 @@ function nullableString(value: unknown) {
 
 function nullableNumber(value: unknown, name: string) {
   if (value == null) return null;
-  return requiredNumber(value, name);
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
-function mediaKind(animated: unknown, video: unknown, label: string): GiftMediaKind {
-  if (animated === true && video === true) throw new Error(`${label} cannot be animated and video at the same time`);
+function safeColor(value: unknown, fallback = 16777215) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function mediaKind(animated: unknown, video: unknown, _label: string): GiftMediaKind {
+  if (animated === true && video === true) return "animated";
   if (video === true) return "video";
   if (animated === true) return "animated";
-  if (video === false && animated === false) return "static";
-  throw new Error(`Invalid ${label} media metadata`);
+
+  // Telegram/TON API catalog entries can omit media flags.
+  // Missing flags do not mean invalid media; treat them as static.
+  if ((video == null || video === false) && (animated == null || animated === false)) {
+    return "static";
+  }
+
+  return "static";
 }
 
 // Keep this as a string literal, not Array.join(). Supabase's type-level SelectQueryError
@@ -68,7 +77,7 @@ export function mapCoin(row: Record<string, unknown>): Coin {
 
 export function mapGift(row: Record<string, unknown>): GiftAsset {
   const status = row.status;
-  if (status !== "owned" && status !== "listed") throw new Error("Invalid Gift market status");
+  const safeStatus = status === "owned" || status === "listed" ? status : "owned";
 
   return {
     id: requiredString(row.asset_id, "gift asset id"),
@@ -77,17 +86,17 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     giftId: nullableString(row.gift_id),
     baseName: requiredString(row.base_name, "gift base name"),
     number: requiredNumber(row.gift_number, "gift number"),
-    modelName: requiredString(row.model_name, "gift model name"),
+    modelName: nullableString(row.model_name) || "Unknown",
     modelRarityPerMille: requiredNumber(row.model_rarity_per_mille, "model rarity"),
     modelRarity: nullableString(row.model_rarity),
-    symbolName: requiredString(row.symbol_name, "gift symbol name"),
+    symbolName: nullableString(row.symbol_name) || "Unknown",
     symbolRarityPerMille: requiredNumber(row.symbol_rarity_per_mille, "symbol rarity"),
-    backdropName: requiredString(row.backdrop_name, "gift backdrop name"),
+    backdropName: nullableString(row.backdrop_name) || "Unknown",
     backdropRarityPerMille: requiredNumber(row.backdrop_rarity_per_mille, "backdrop rarity"),
-    backdropCenter: rgbIntToHex(requiredNumber(row.backdrop_center_color, "backdrop center color")),
-    backdropEdge: rgbIntToHex(requiredNumber(row.backdrop_edge_color, "backdrop edge color")),
-    backdropSymbol: rgbIntToHex(requiredNumber(row.backdrop_symbol_color, "backdrop symbol color")),
-    backdropText: rgbIntToHex(requiredNumber(row.backdrop_text_color, "backdrop text color")),
+    backdropCenter: rgbIntToHex(safeColor(row.backdrop_center_color)),
+    backdropEdge: rgbIntToHex(safeColor(row.backdrop_edge_color)),
+    backdropSymbol: rgbIntToHex(safeColor(row.backdrop_symbol_color)),
+    backdropText: rgbIntToHex(safeColor(row.backdrop_text_color)),
     modelFileId: nullableString(row.model_file_id),
     modelThumbFileId: nullableString(row.model_thumb_file_id),
     modelMediaUrl: nullableString(row.model_media_url),
@@ -100,13 +109,13 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     isPremium: Boolean(row.is_premium),
     isBurned: Boolean(row.is_burned),
     isFromBlockchain: Boolean(row.is_from_blockchain),
-    lastSeenAt: requiredString(row.last_seen_at, "gift last_seen_at"),
+    lastSeenAt: nullableString(row.last_seen_at) || nullableString(row.updated_at) || new Date(0).toISOString(),
     catalogSource: row.catalog_source === "tonapi" ? "tonapi" : row.catalog_source === "bot_catalog" ? "bot_catalog" : "profile_sync",
     bestOffer: nullableNumber(row.best_offer, "gift best offer"),
     offerCount: requiredNumber(row.offer_count, "gift offer count"),
-    ownerId: requiredString(row.owner_profile_id, "gift owner id"),
-    ownerName: requiredString(row.owner_name, "gift owner name"),
-    acquiredPrice: requiredNumber(row.acquired_price, "gift acquisition price"),
+    ownerId: nullableString(row.owner_profile_id) || "unknown",
+    ownerName: nullableString(row.owner_name) || "MXM Liquidity",
+    acquiredPrice: nullableNumber(row.acquired_price, "gift acquisition price") ?? 0,
     listingPrice: nullableNumber(row.listing_price, "gift listing price"),
     lastSalePrice: nullableNumber(row.last_sale_price, "gift last sale price"),
     estimatedValue: nullableNumber(row.estimated_value, "gift estimated value"),
@@ -125,7 +134,7 @@ export function mapGift(row: Record<string, unknown>): GiftAsset {
     listedAt: nullableString(row.listed_at),
     listingUpdatedAt: nullableString(row.listing_updated_at),
     listingExpiresAt: nullableString(row.listing_expires_at),
-    status,
+    status: safeStatus,
     createdAt: requiredString(row.created_at, "gift created_at"),
   };
 }

@@ -273,7 +273,8 @@ function TelegramSticker({ fileId, mediaUrl, kind, alt, className, onError, lazy
     });
   }, [kind, near, permitted]);
 
-  const src = mediaUrl || (fileId ? `/api/telegram/file/${encodeURIComponent(fileId)}` : null);
+  const safeMediaUrl = mediaUrl && /^(https?:|data:)/.test(mediaUrl) ? mediaUrl : null;
+  const src = safeMediaUrl || (fileId && !fileId.startsWith("tonapi:") ? `/api/telegram/file/${encodeURIComponent(fileId)}` : null);
   return (
     <div ref={holderRef} className={className} aria-label={alt}>
       {error || !src ? <div className="grid h-full w-full place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div> : !near ? null : kind === "video" ? (
@@ -302,9 +303,12 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   const permitted = useAnimationPermit(active && wantsAnimation && !animationFailed, `tonapi:${gift.id}`, compact);
   const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
   const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
+  // Always use our media proxy for Telegram collectible previews. Fragment URLs
+  // can reject embedded WebView requests and expose CORS/referrer issues.
+  // The proxy validates the source and serves the original collectible render.
   const previewSource = compact
-    ? (fragmentMedia?.medium || fragmentMedia?.small || `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=medium`)
-    : (fragmentMedia?.large || fragmentMedia?.medium || `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=large`);
+    ? `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=medium${fragmentSlug ? `&slug=${encodeURIComponent(fragmentSlug)}` : ""}`
+    : `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=large${fragmentSlug ? `&slug=${encodeURIComponent(fragmentSlug)}` : ""}`;
 
   useEffect(() => {
     if (!near || !wantsAnimation || animationFailed || !permitted || !lottieRef.current) return;
@@ -412,15 +416,18 @@ export function GiftMedia({ gift, className = "", compact = false, priority = fa
   }
 
   const staticSymbolFileId = gift.symbolThumbFileId || (gift.symbolMediaKind === "static" ? gift.symbolFileId : null);
-  const symbolUrl = gift.symbolMediaUrl && gift.symbolMediaKind === "static"
+  const safeSymbolFileId = staticSymbolFileId && !staticSymbolFileId.startsWith("tonapi:")
+    ? staticSymbolFileId
+    : null;
+  const symbolUrl = gift.symbolMediaUrl && gift.symbolMediaKind === "static" && /^(https?:|data:)/.test(gift.symbolMediaUrl)
     ? gift.symbolMediaUrl
-    : staticSymbolFileId ? `/api/telegram/file/${encodeURIComponent(staticSymbolFileId)}` : null;
+    : safeSymbolFileId ? `/api/telegram/file/${encodeURIComponent(safeSymbolFileId)}` : null;
   const compactModelFileId = compact && !gift.modelMediaUrl && gift.modelThumbFileId ? gift.modelThumbFileId : gift.modelFileId;
   const compactModelKind: GiftMediaKind = compact && !gift.modelMediaUrl && gift.modelThumbFileId ? "static" : gift.mediaKind;
 
   return (
     <div className={`mxm-gift-media relative isolate overflow-hidden ${className}`} style={{ background: `radial-gradient(circle at 48% 38%, ${gift.backdropCenter} 0%, ${gift.backdropEdge} 100%)` }}>
-      {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact && (gift.symbolFileId || gift.symbolMediaUrl) ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={gift.symbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
+      {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact && (safeSymbolFileId || gift.symbolMediaUrl) ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={safeSymbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
       <div className={`relative z-10 grid h-full w-full place-items-center ${compact ? "p-[14%]" : "p-[13%]"}`}>
         {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={setModelError} lazy={compact && !priority} />}
       </div>

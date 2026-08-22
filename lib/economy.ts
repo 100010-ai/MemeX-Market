@@ -11,6 +11,11 @@ export const GAME_MIN_BET_TON = 0.1;
 export const GAME_MAX_BET_TON = 100;
 
 export const REFERRAL_BONUS_PERCENT = 5;
+
+// Rewarded ads economy settings
+export const REWARDED_AD_REWARD_TON = 0.01;
+export const REWARDED_AD_COOLDOWN_MINUTES = 30;
+export const REWARDED_AD_DAILY_LIMIT = 10;
 export const STAR_PACKAGES = [
   { stars: 50, virtualTon: 750, label: "Старт" },
   { stars: 100, virtualTon: 1600, label: "Буст" },
