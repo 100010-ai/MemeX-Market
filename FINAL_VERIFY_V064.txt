@@ -1,0 +1,11 @@
+MemeX Market v0.64 verification
+
+Completed checks in this environment:
+- TypeScript parser: 181 TS/TSX files parsed, 0 syntax errors.
+- Local import resolver: 181 source files checked, 0 broken local imports.
+- Existing static release gate: 105 product/security checks passed before dependency-backed stages.
+- Full TypeScript/ESLint/build could not be executed because this project snapshot has no node_modules. The release script expects local node_modules/typescript and node_modules/eslint.
+
+Deployment requirement:
+- Apply supabase/migrations/100001_progression_update_v064.sql before or together with the v0.64 frontend deployment.
+- Keep the previously required v0.63/v0.63.1 migrations applied.

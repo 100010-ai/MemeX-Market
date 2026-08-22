@@ -20,6 +20,8 @@ const FRAME_DEFINITIONS: ProfileFrameDefinition[] = [
   // Season-only frames.
   { key: "season_rift_frame", title: "Season Rift", cssClass: "mxm-profile-frame-rift", rarity: "epic", shortLabel: "Rift" },
   { key: "season_master_frame", title: "Season Master", cssClass: "mxm-profile-frame-master", rarity: "legendary", shortLabel: "Master" },
+  { key: "account_vanguard_frame", title: "Vanguard 100", cssClass: "mxm-profile-frame-vanguard", rarity: "legendary", shortLabel: "Vanguard" },
+  { key: "season_prestige_frame", title: "Prestige Orbit", cssClass: "mxm-profile-frame-prestige", rarity: "legendary", shortLabel: "Prestige" },
 ];
 
 export const PROFILE_FRAME_CATALOG = Object.fromEntries(

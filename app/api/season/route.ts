@@ -34,6 +34,8 @@ function seasonSnapshot(value: unknown) {
       premiumClaimed: Boolean(row.premiumClaimed),
     }];
   }).sort((a, b) => a.level - b.level) : [];
+  const prestigeRaw = root.prestige && typeof root.prestige === "object" && !Array.isArray(root.prestige) ? root.prestige as Record<string, unknown> : {};
+  const nextReward = rewardSnapshot(prestigeRaw.nextReward);
   return {
     season: {
       id: seasonId,
@@ -46,6 +48,17 @@ function seasonSnapshot(value: unknown) {
     level: Math.max(1, Math.floor(finiteNumber(root.level, 1))),
     premium: Boolean(root.premium),
     levels,
+    prestige: {
+      unlocked: Boolean(prestigeRaw.unlocked),
+      level: Math.max(0, Math.floor(finiteNumber(prestigeRaw.level))),
+      claimed: Math.max(0, Math.floor(finiteNumber(prestigeRaw.claimed))),
+      claimable: Math.max(0, Math.floor(finiteNumber(prestigeRaw.claimable))),
+      stepXp: Math.max(1, Math.floor(finiteNumber(prestigeRaw.stepXp, 300))),
+      baseXp: Math.max(0, Math.floor(finiteNumber(prestigeRaw.baseXp))),
+      nextRequiredXp: Math.max(0, Math.floor(finiteNumber(prestigeRaw.nextRequiredXp))),
+      nextClaimLevel: Math.max(1, Math.floor(finiteNumber(prestigeRaw.nextClaimLevel, 1))),
+      nextReward,
+    },
   };
 }
 
@@ -70,6 +83,17 @@ async function POSTHandler(request: Request) {
   if (body.action === "claim_all") {
     const { data, error } = await getSupabaseAdmin().rpc("claim_all_season_rewards_v300", { p_profile_id: profile.id });
     if (error) return apiFailure(error, "Не удалось забрать сезонные награды", 400);
+    return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
+  }
+  if (body.action === "claim_prestige") {
+    const prestigeLevel = Number(body.prestigeLevel);
+    if (!Number.isInteger(prestigeLevel) || prestigeLevel < 1 || prestigeLevel > 1000) return NextResponse.json({ error: "Некорректный Prestige-уровень" }, { status: 400 });
+    const { data, error } = await getSupabaseAdmin().rpc("claim_season_prestige_v064", { p_profile_id: profile.id, p_prestige_level: prestigeLevel });
+    if (error) {
+      const locked = /locked|previous/i.test(error.message || "");
+      if (!locked) return apiFailure(error, "Не удалось получить Prestige-награду", 400);
+      return NextResponse.json({ error: /previous/i.test(error.message || "") ? "Сначала заберите предыдущую Prestige-награду" : "Нужно больше сезонного XP" }, { status: 409 });
+    }
     return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
   }
   const level = Number(body.level);

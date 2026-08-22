@@ -35,7 +35,7 @@ export function CoinAvatar({ symbol, imageUrl = null, size = "md" }: { symbol: s
 }
 
 export function PrimaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`rounded-[12px] bg-[#eef1ff] px-3.5 py-2.5 text-[11px] font-semibold text-[#090b0e] transition hover:bg-white active:scale-[.985] disabled:opacity-40 ${className}`}>{children}</button>;
+  return <button {...props} className={`mxm-primary-action ${className}`}>{children}</button>;
 }
 
 export function SecondaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {

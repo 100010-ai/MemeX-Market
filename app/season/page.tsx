@@ -8,7 +8,8 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 
 type Reward = { label: string; kind: string; amount?: number } | null;
 type Level = { level: number; requiredXp: number; freeReward: Reward; premiumReward: Reward; freeClaimed: boolean; premiumClaimed: boolean };
-type Payload = { season: { id: string; title: string; startsAt: string; endsAt: string; daysLeft: number }; xp: number; level: number; premium: boolean; levels: Level[] };
+type Prestige = { unlocked: boolean; level: number; claimed: number; claimable: number; stepXp: number; baseXp: number; nextRequiredXp: number; nextClaimLevel: number; nextReward: Reward };
+type Payload = { season: { id: string; title: string; startsAt: string; endsAt: string; daysLeft: number }; xp: number; level: number; premium: boolean; levels: Level[]; prestige: Prestige };
 type ClaimAllResult = { status: string; claimedCount?: number; rewards?: unknown[] };
 
 const XP_SOURCES = [
@@ -79,13 +80,26 @@ export default function SeasonPage() {
     finally { setBusy(null); }
   }
 
+  async function claimPrestige() {
+    if (busy || !data?.prestige || data.prestige.claimable < 1) return;
+    const prestigeLevel = data.prestige.nextClaimLevel;
+    setBusy("prestige"); setError(null); setNotice(null);
+    try {
+      const result = await apiFetch<{ status: string; reward?: Reward }>("/api/season", { method: "POST", body: JSON.stringify({ action: "claim_prestige", prestigeLevel }) });
+      haptic("heavy");
+      await load();
+      setNotice(result.reward?.label ? `Prestige ${prestigeLevel}: ${result.reward.label}` : `Prestige ${prestigeLevel} получен`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось получить Prestige-награду"); }
+    finally { setBusy(null); }
+  }
+
   return <div className="mx-auto max-w-5xl">
-    <header className="mb-4 border-b border-[var(--border-soft)] pb-4">
+    <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Боевой пропуск · 30 дней</p>
-          <h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">{data?.season.title || "Сезон MXM"}</h1>
-          <p className="mt-1.5 max-w-2xl text-[10px] leading-5 text-[var(--muted)]">Получай XP за реальные действия внутри MXM: сделки, подарки, задания и запуск мемкоинов. Бесплатная ветка доступна всем, премиальная открывается до конца текущего сезона.</p>
+          <h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">{data?.season.title || "Сезон MXM"}</h1>
+          <p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Получай XP за реальные действия внутри MXM: сделки, подарки, задания и запуск мемкоинов. Бесплатная ветка доступна всем, премиальная открывается до конца текущего сезона.</p>
         </div>
         <div className="shrink-0 text-right">
           <p className="flex items-center justify-end gap-1 text-[9px] text-[var(--muted)]"><Clock3 size={11} />Осталось</p>
@@ -108,11 +122,11 @@ export default function SeasonPage() {
     {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
     {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
 
-    <section className="mb-4 border-y border-[var(--border-soft)] py-3">
+    <section className="mb-3 border-y border-[var(--border-soft)] py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-[11px] font-semibold">Как получать XP</p><p className="mt-1 text-[8px] text-[var(--muted)]">Прогресс считается сервером из подтверждённых действий, вручную накрутить XP нельзя.</p></div>
         {claimableCount > 0 && maxLevel >= 30
-          ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimAll()} className="inline-flex min-h-9 items-center gap-1.5 rounded-[12px] bg-white px-3 text-[10px] font-semibold text-black disabled:opacity-40"><CheckCheck size={13} />{busy === "all" ? "Получаем…" : `Забрать всё · ${claimableCount}`}</button>
+          ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimAll()} className="mxm-primary-action min-h-9"><CheckCheck size={13} />{busy === "all" ? "Получаем…" : `Забрать всё · ${claimableCount}`}</button>
           : claimableCount > 0
             ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Gift size={11} />Доступно наград: {claimableCount}</span>
             : <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><Check size={11} />Доступные награды получены</span>}
@@ -121,6 +135,11 @@ export default function SeasonPage() {
         {XP_SOURCES.map((source) => <div key={source.label} className="flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[8px]"><span className="text-[var(--muted)]">{source.label}</span><b className="font-medium text-[var(--accent)]">{source.xp}</b></div>)}
       </div>
     </section>
+
+    {data?.prestige ? <section className="mb-4 overflow-hidden rounded-[18px] border border-[#8f79e8]/20 bg-[linear-gradient(145deg,rgba(115,91,203,.08),rgba(245,196,81,.025),transparent)] p-4">
+      <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[.12em] text-[#b9a7ff]"><Trophy size={12} />Prestige</p><h2 className="mt-1 text-sm font-semibold">Прогресс после {maxLevel} уровня</h2><p className="mt-1 max-w-2xl text-[8px] leading-4 text-[var(--muted)]">После основной дорожки каждые {data.prestige.stepXp} сезонного XP открывают новый Prestige-этап. Награды забираются последовательно, поэтому прогресс нельзя перескочить или выдать дважды.</p></div><div className="shrink-0 text-right"><p className="text-[8px] text-[var(--muted)]">Достигнуто</p><p className="mt-1 text-base font-semibold">P{data.prestige.level}</p><p className="text-[7px] text-[var(--muted-2)]">получено {data.prestige.claimed}</p></div></div>
+      {data.prestige.unlocked ? <><div className="mt-3"><div className="flex items-center justify-between text-[8px] text-[var(--muted)]"><span>{data.xp.toLocaleString("ru-RU")} XP</span><span>след. {data.prestige.nextRequiredXp.toLocaleString("ru-RU")} XP</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[#9c86ef]" style={{ width: `${Math.min(100, Math.max(0, ((data.xp - (data.prestige.nextRequiredXp - data.prestige.stepXp)) / Math.max(1, data.prestige.stepXp)) * 100))}%` }} /></div></div><div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[.06] pt-3"><div className="min-w-0"><p className="text-[9px] text-[var(--muted)]">Следующая награда · P{data.prestige.nextClaimLevel}</p><p className="mt-0.5 truncate text-[10px] font-medium">{data.prestige.nextReward?.label || "Prestige-награда"}</p></div><button type="button" disabled={data.prestige.claimable < 1 || Boolean(busy)} onClick={() => void claimPrestige()} className="mxm-primary-action shrink-0">{busy === "prestige" ? "Получаем…" : data.prestige.claimable > 0 ? `Забрать P${data.prestige.nextClaimLevel}` : `Нужно ${Math.max(0, data.prestige.nextRequiredXp - data.xp)} XP`}</button></div></> : <div className="mt-3 flex items-center gap-2 border-t border-white/[.06] pt-3 text-[9px] text-[var(--muted)]"><LockKeyhole size={12} />Prestige откроется после завершения основной дорожки.</div>}
+    </section> : null}
 
     <div className="grid grid-cols-[42px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 text-[9px]">
       <div />

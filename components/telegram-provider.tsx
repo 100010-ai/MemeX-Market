@@ -369,7 +369,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     setAppReady(false);
 
     const primaryRoutes = ["/market", "/orders", "/hub", "/tasks", "/vault"];
-    const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
+    const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/progression", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
     for (const href of primaryRoutes) router.prefetch(href);
 
     const criticalRequests = [

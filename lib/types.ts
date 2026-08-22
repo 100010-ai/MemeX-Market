@@ -19,6 +19,7 @@ export type Profile = {
   level: number;
   levelProgress: number;
   xpForNextLevel: number;
+  prestigeLevel: number;
 };
 
 export type ProfileBadge = {

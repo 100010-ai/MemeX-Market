@@ -2,98 +2,217 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Award, Check, Gem, Gift, LockKeyhole, Sparkles } from "lucide-react";
+import { Award, Check, Gem, Gift, Layers3, LockKeyhole, Palette, Sparkles, Shapes } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { money } from "@/lib/format";
 import { useTelegramProfile } from "@/components/telegram-provider";
 
-type Collection = { baseName: string; owned: number; target: number; complete: boolean; claimed: boolean; rarityPoints: number; holders: number; floorPrice: number | null };
-type Payload = { level: number; totalPoints: number; nextLevel: number; progress: number; giftCount: number; completed: number; collections: Collection[]; claimsReady: boolean };
+type Trait = { owned: number; total: number };
+type Collection = {
+  baseName: string;
+  coverage: number;
+  owned: number;
+  rarityPoints: number;
+  holders: number;
+  floorPrice: number | null;
+  models: Trait;
+  backdrops: Trait;
+  symbols: Trait;
+  claimedMilestones: number[];
+};
+type Payload = {
+  level: number;
+  totalPoints: number;
+  nextLevel: number;
+  progress: number;
+  giftCount: number;
+  completed: number;
+  collections: Collection[];
+  milestones: number[];
+};
+
+const DEFAULT_MILESTONES = [25, 50, 75, 100];
+const MILESTONE_REWARD: Record<number, string> = {
+  25: "250 MXM",
+  50: "700 MXM + Starter Case",
+  75: "1 500 MXM + Rare Case",
+  100: "3 000 MXM + Master badge",
+};
+
+function traitPercent(trait: Trait) {
+  return trait.total > 0 ? Math.min(100, Math.round((trait.owned / trait.total) * 100)) : 0;
+}
 
 export default function CollectionsPage() {
-  const { haptic } = useTelegramProfile();
+  const { haptic, refreshProfile } = useTelegramProfile();
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/collections/progress", { cacheMs: 20_000 })), []);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setData(await apiFetch<Payload>("/api/collections/progress", { cacheMs: 0, dedupe: false }));
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void load().catch((cause) => setNotice(cause instanceof Error ? cause.message : "Не удалось загрузить коллекции"));
+      void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить Collection Book"));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  async function claim(baseName: string) {
+  async function claim(baseName: string, milestone: number) {
+    const key = `${baseName}:${milestone}`;
     if (busy) return;
-    setBusy(baseName); setNotice(null);
+    setBusy(key);
+    setNotice(null);
+    setError(null);
     try {
-      const result = await apiFetch<{ status: string; reward?: { mxmCoins?: number } }>("/api/collections/progress", { method: "POST", body: JSON.stringify({ baseName }) });
-      if (result.status !== "claimed") throw new Error("Бонус уже получен или серия не завершена");
-      haptic("heavy"); setNotice(`Бонус за коллекцию: +${Number(result.reward?.mxmCoins || 0).toLocaleString("ru-RU")} MXM`); await load();
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Не удалось получить бонус"); }
-    finally { setBusy(null); }
+      const result = await apiFetch<{ status: string; alreadyClaimed?: boolean }>("/api/collections/progress", {
+        method: "POST",
+        body: JSON.stringify({ baseName, milestone }),
+      });
+      haptic("heavy");
+      await Promise.all([load(), refreshProfile()]);
+      setNotice(result.alreadyClaimed ? `Награда ${milestone}% уже была получена` : `Награда за ${milestone}% коллекции получена`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось получить награду");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-4 border-b border-[var(--border-soft)] pb-4">
+      <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Коллекции подарков</p>
-            <h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Коллекционер · уровень {data?.level || 1}</h1>
-            <p className="mt-1.5 text-[10px] text-[var(--muted)]">Уровень растёт от количества, редкости и уникальности Telegram-подарков.</p>
+            <p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Collection Book</p>
+            <h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">Коллекционер · уровень {data?.level || 1}</h1>
+            <p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">
+              Книга отдельно считает уникальные Model, Backdrop и Symbol. Чем полнее набор вариантов серии, тем выше процент коллекции и ценнее этапные награды.
+            </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[9px] text-[var(--muted)]">Собрано</p>
-            <p className="mt-1 text-sm font-semibold">{data?.giftCount || 0} подарков</p>
+            <p className="text-[9px] text-[var(--muted)]">Завершено</p>
+            <p className="mt-1 text-sm font-semibold">{data?.completed || 0}</p>
+            <p className="mt-0.5 text-[8px] text-[var(--muted-2)]">на 100%</p>
           </div>
         </div>
         <div className="mt-3">
-          <div className="flex justify-between text-[8px] text-[var(--muted)]"><span>{data?.totalPoints || 0} опыта коллекций</span><span>{data?.nextLevel || 5} опыта</span></div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round((data?.progress || 0) * 100)}%` }} /></div>
+          <div className="flex justify-between text-[8px] text-[var(--muted)]">
+            <span>{data?.totalPoints || 0} очков редкости</span>
+            <span>{data?.nextLevel || 5} до границы уровня</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]">
+            <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round((data?.progress || 0) * 100)}%` }} />
+          </div>
         </div>
       </header>
 
+      {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
       {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
-      <div className="mb-3 grid grid-cols-2 gap-2">
+
+      <div className="mb-4 grid grid-cols-3 gap-2">
         <Metric icon={<Gift size={13} />} label="Подарки" value={String(data?.giftCount || 0)} />
-        <Metric icon={<Award size={13} />} label="Серий завершено" value={String(data?.completed || 0)} />
+        <Metric icon={<Award size={13} />} label="100% серий" value={String(data?.completed || 0)} />
+        <Metric icon={<Gem size={13} />} label="Очки" value={String(data?.totalPoints || 0)} />
       </div>
 
       {data?.collections.length ? (
-        <div className="grid gap-2 md:grid-cols-2">
-          {data.collections.map((item) => (
-            <article key={item.baseName} className="mxm-card p-3.5">
-              <div className="flex items-start gap-3">
-                <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-[13px] ${item.complete ? "bg-[var(--accent)] text-black" : "bg-white/[.045] text-[var(--muted)]"}`}>
-                  {item.complete ? <Sparkles size={17} /> : <Gift size={17} />}
+        <div className="grid gap-3 md:grid-cols-2">
+          {data.collections.map((item) => {
+            const nextMilestone = DEFAULT_MILESTONES.find((milestone) => !item.claimedMilestones.includes(milestone)) || 100;
+            return (
+              <article key={item.baseName} className="mxm-card overflow-hidden p-3.5">
+                <div className="flex items-start gap-3">
+                  <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-[14px] ${item.coverage >= 100 ? "bg-[var(--accent)] text-black" : "bg-white/[.045] text-[var(--accent)]"}`}>
+                    {item.coverage >= 100 ? <Sparkles size={18} /> : <Layers3 size={18} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="truncate text-[11px] font-semibold hover:underline">
+                          {item.baseName}
+                        </Link>
+                        <p className="mt-0.5 text-[8px] text-[var(--muted)]">{item.owned} предметов · {item.rarityPoints} очков редкости</p>
+                      </div>
+                      <span className={`shrink-0 text-sm font-semibold ${item.coverage >= 100 ? "text-[var(--positive)]" : "text-white"}`}>{item.coverage}%</span>
+                    </div>
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[.05]">
+                      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${item.coverage}%` }} />
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="truncate text-[12px] font-semibold">{item.baseName}</Link>
-                  <p className="mt-1 text-[9px] text-[var(--muted)]">{item.owned}/{item.target} · {item.rarityPoints} очков редкости · {item.holders} владельцев</p>
-                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.min(100, item.owned / item.target * 100)}%` }} /></div>
+
+                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                  <TraitCell icon={<Shapes size={11} />} label="Model" trait={item.models} />
+                  <TraitCell icon={<Palette size={11} />} label="Backdrop" trait={item.backdrops} />
+                  <TraitCell icon={<Sparkles size={11} />} label="Symbol" trait={item.symbols} />
                 </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)] pt-3">
-                <span className="text-[9px] text-[var(--muted)]">Мин. цена {item.floorPrice == null ? "—" : money(item.floorPrice)}</span>
-                {item.claimed ? (
-                  <span className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><Check size={11} />Бонус получен</span>
-                ) : item.complete ? (
-                  <button type="button" disabled={busy !== null || !data.claimsReady} onClick={() => void claim(item.baseName)} className="text-[9px] font-medium text-[var(--accent)]">{busy === item.baseName ? "…" : "Получить бонус"}</button>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted-2)]"><LockKeyhole size={10} />Значок + MXM</span>
-                )}
-              </div>
-            </article>
-          ))}
+
+                <div className="mt-3 grid grid-cols-4 gap-1.5">
+                  {(data.milestones.length ? data.milestones : DEFAULT_MILESTONES).map((milestone) => {
+                    const claimed = item.claimedMilestones.includes(milestone);
+                    const unlocked = item.coverage >= milestone;
+                    const key = `${item.baseName}:${milestone}`;
+                    return (
+                      <button
+                        key={milestone}
+                        type="button"
+                        disabled={!unlocked || claimed || Boolean(busy)}
+                        onClick={() => void claim(item.baseName, milestone)}
+                        title={MILESTONE_REWARD[milestone]}
+                        className={`min-w-0 rounded-[10px] px-1 py-2 text-center ring-1 disabled:cursor-default ${claimed ? "bg-[var(--positive)]/[.05] text-[var(--positive)] ring-white/[.08]" : unlocked ? "bg-[var(--accent)]/[.06] text-[var(--accent)] ring-white/[.08]" : "bg-white/[.02] text-[var(--muted-2)] ring-white/[.05]"}`}
+                      >
+                        <span className="mx-auto grid h-4 place-items-center">
+                          {claimed ? <Check size={10} /> : unlocked ? (busy === key ? <Sparkles size={10} /> : <Gift size={10} />) : <LockKeyhole size={9} />}
+                        </span>
+                        <span className="mt-0.5 block text-[7px] font-medium">{milestone}%</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border-soft)] pt-2.5">
+                  <div className="min-w-0">
+                    <p className="text-[8px] text-[var(--muted)]">Floor {item.floorPrice == null ? "—" : money(item.floorPrice)} · владельцев {item.holders.toLocaleString("ru-RU")}</p>
+                    <p className="mt-0.5 truncate text-[7px] text-[var(--muted-2)]">Следующая награда: {MILESTONE_REWARD[nextMilestone]}</p>
+                  </div>
+                  <Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 text-[8px] text-[var(--accent)]">Открыть рынок</Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : (
-        <div className="mxm-card grid min-h-56 place-items-center p-6 text-center">
-          <div><Gem size={24} className="mx-auto text-[var(--muted)]" /><p className="mt-3 text-xs font-medium">Коллекция пуста</p><Link href="/market" className="mt-3 inline-block text-[10px] text-[var(--accent)]">Найти первый подарок</Link></div>
+        <div className="py-16 text-center">
+          <Gift size={25} className="mx-auto text-[var(--muted)]" />
+          <p className="mt-3 text-xs font-medium">Книга пока пуста</p>
+          <p className="mt-1 text-[9px] text-[var(--muted)]">Получите первый Telegram-подарок — его Model, Backdrop и Symbol появятся здесь.</p>
+          <Link href="/market" className="mt-3 inline-block text-[9px] text-[var(--accent)]">Перейти на рынок</Link>
         </div>
       )}
     </div>
   );
 }
 
-function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="mxm-card flex items-center gap-2.5 p-3"><span className="text-[var(--accent)]">{icon}</span><div><p className="text-[8px] text-[var(--muted)]">{label}</p><p className="mt-0.5 text-xs font-semibold">{value}</p></div></div>; }
+function TraitCell({ icon, label, trait }: { icon: React.ReactNode; label: string; trait: Trait }) {
+  const percent = traitPercent(trait);
+  return (
+    <div className="rounded-[11px] bg-white/[.025] px-2 py-2 ring-1 ring-white/[.05]">
+      <div className="flex items-center gap-1 text-[7px] text-[var(--muted)]">{icon}{label}</div>
+      <p className="mt-1 text-[9px] font-medium">{trait.owned}/{trait.total || 0}</p>
+      <div className="mt-1 h-[2px] overflow-hidden rounded-full bg-white/[.05]"><div className="h-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
+    </div>
+  );
+}
+
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="border-y border-[var(--border-soft)] py-2.5">
+      <div className="flex items-center gap-1.5 text-[8px] text-[var(--muted)]">{icon}{label}</div>
+      <p className="mt-1 text-[12px] font-semibold">{value}</p>
+    </div>
+  );
+}

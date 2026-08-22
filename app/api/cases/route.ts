@@ -21,6 +21,13 @@ function caseSnapshot(value: unknown) {
       if (!reward) return [];
       return [{ reward, label, percent: Math.max(0, Math.min(100, finiteNumber(odd.percent))), rarity: text(odd.rarity, "common", 32) }];
     }) : [];
+    const pityRaw = row.pity && typeof row.pity === "object" && !Array.isArray(row.pity) ? row.pity as Record<string, unknown> : {};
+    const pityTier = (value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const pity = value as Record<string, unknown>;
+      const threshold = Math.max(1, Math.floor(finiteNumber(pity.threshold, 1)));
+      return { current: Math.max(0, Math.floor(finiteNumber(pity.current))), threshold, remaining: Math.max(1, Math.floor(finiteNumber(pity.remaining, threshold))) };
+    };
     return [{
       sku,
       title: text(row.title, "Кейс", 120),
@@ -28,6 +35,7 @@ function caseSnapshot(value: unknown) {
       description: text(row.description, "", 500),
       quantity: Math.max(0, Math.floor(finiteNumber(row.quantity))),
       remaining: row.remaining == null ? null : Math.max(0, Math.floor(finiteNumber(row.remaining))),
+      pity: { rare: pityTier(pityRaw.rare), epic: pityTier(pityRaw.epic), legendary: pityTier(pityRaw.legendary), totalOpens: Math.max(0, Math.floor(finiteNumber(pityRaw.totalOpens))) },
       odds,
     }];
   }) : [];
@@ -36,7 +44,7 @@ function caseSnapshot(value: unknown) {
     const row = raw as Record<string, unknown>;
     const id = text(row.id, "", 80);
     if (!id) return [];
-    return [{ id, caseSku: text(row.caseSku, "", 80), rewardLabel: text(row.rewardLabel, "Награда", 160), rarity: text(row.rarity, "common", 32), openedAt: safeIsoDate(row.openedAt) }];
+    return [{ id, caseSku: text(row.caseSku, "", 80), rewardLabel: text(row.rewardLabel, "Награда", 160), rarity: text(row.rarity, "common", 32), openedAt: safeIsoDate(row.openedAt), pityTriggered: Boolean(row.pityTriggered), pityRarity: row.pityRarity == null ? null : text(row.pityRarity, "", 32) || null }];
   }) : [];
   return { cases, history };
 }

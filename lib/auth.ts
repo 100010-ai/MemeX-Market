@@ -74,15 +74,31 @@ export function tierForWorth(netWorth: number) {
 
 export function progressionForXp(rawXp: number) {
   const xp = Math.max(0, Math.floor(rawXp));
-  const level = Math.max(1, Math.floor(Math.sqrt(xp / 25)) + 1);
-  const levelStart = 25 * Math.pow(level - 1, 2);
-  const nextLevelAt = 25 * Math.pow(level, 2);
+  const level = Math.min(100, Math.max(1, Math.floor(Math.sqrt(xp / 10)) + 1));
+  let levelStart = 0;
+  let nextLevelAt = 10;
+  let prestigeLevel = 0;
+
+  if (level < 100) {
+    levelStart = 10 * Math.pow(level - 1, 2);
+    nextLevelAt = 10 * Math.pow(level, 2);
+  } else if (xp < 100_000) {
+    // Level 100 is reached at 98,010 XP; the short cap segment leads into prestige.
+    levelStart = 98_010;
+    nextLevelAt = 100_000;
+  } else {
+    prestigeLevel = Math.floor((xp - 100_000) / 25_000);
+    levelStart = 100_000 + prestigeLevel * 25_000;
+    nextLevelAt = levelStart + 25_000;
+  }
+
   const span = Math.max(1, nextLevelAt - levelStart);
   return {
     xp,
     level,
     levelProgress: Math.max(0, Math.min(1, (xp - levelStart) / span)),
     xpForNextLevel: Math.max(0, nextLevelAt - xp),
+    prestigeLevel,
   };
 }
 

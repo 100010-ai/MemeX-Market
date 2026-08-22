@@ -1,16 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Clock3, Gem, PackageOpen, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { rarityLabel } from "@/lib/ui-copy";
 import { useTelegramProfile } from "@/components/telegram-provider";
 
-type CaseItem = { sku: string; title: string; tier: string; description: string; quantity: number; remaining: number | null; odds: Array<{ reward: string; label: string; percent: number; rarity: string }> };
-type HistoryItem = { id: string; caseSku: string; rewardLabel: string; rarity: string; openedAt: string };
+type PityTier = { current: number; threshold: number; remaining: number } | null;
+type CaseOdd = { reward: string; label: string; percent: number; rarity: string };
+type CaseItem = {
+  sku: string;
+  title: string;
+  tier: string;
+  description: string;
+  quantity: number;
+  remaining: number | null;
+  pity: { rare: PityTier; epic: PityTier; legendary: PityTier; totalOpens: number };
+  odds: CaseOdd[];
+};
+type HistoryItem = { id: string; caseSku: string; rewardLabel: string; rarity: string; openedAt: string; pityTriggered: boolean; pityRarity: string | null };
 type Payload = { cases: CaseItem[]; history: HistoryItem[] };
-type OpenResult = { status: string; reward: { label: string; rarity: string; kind: string; amount: number; creditedEnergy?: number | null; overflowMxmCoins?: number | null }; remaining: number };
+type Reward = { label: string; rarity: string; kind: string; amount: number; creditedEnergy?: number | null; overflowMxmCoins?: number | null; pityTriggered?: boolean; pityRarity?: string | null };
+type OpenResult = { status: string; reward: Reward; remaining: number };
+type ReelItem = { id: string; label: string; rarity: string; final?: boolean };
+type ReelState = { items: ReelItem[]; stopIndex: number; reward: Reward };
 
 const TIER_LABEL: Record<string, string> = { starter: "Базовая серия", rare: "Редкая серия", legendary: "Легендарная серия" };
 const TIER_CLASS: Record<string, string> = {
@@ -33,21 +48,54 @@ const RARITY_BAR: Record<string, string> = {
   legendary: "mxm-odds-legendary",
 };
 
+function textSeed(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function buildReel(caseItem: CaseItem, reward: Reward): ReelState {
+  const source = caseItem.odds.length
+    ? caseItem.odds
+    : [{ reward: "fallback", label: "Награда MXM", percent: 100, rarity: "common" }];
+  const seed = textSeed(`${caseItem.sku}:${reward.label}:${reward.rarity}`);
+  const stopIndex = 29 + (seed % 3);
+  const length = stopIndex + 7;
+  const items = Array.from({ length }, (_, index) => {
+    const odd = source[(seed + index * 7 + Math.floor(index / 3) * 3) % source.length];
+    return { id: `${index}:${odd.reward}`, label: odd.label, rarity: odd.rarity } satisfies ReelItem;
+  });
+  items[stopIndex] = { id: `winner:${reward.label}`, label: reward.label, rarity: reward.rarity, final: true };
+  return { items, stopIndex, reward };
+}
+
+function pityPercent(pity: PityTier) {
+  if (!pity) return 0;
+  return Math.max(3, Math.min(100, (pity.current / Math.max(1, pity.threshold)) * 100));
+}
+
 export default function CasesPage() {
   const { haptic } = useTelegramProfile();
   const [data, setData] = useState<Payload | null>(null);
   const [selected, setSelected] = useState<string>("case_starter");
   const [opening, setOpening] = useState(false);
-  const [reward, setReward] = useState<OpenResult["reward"] | null>(null);
+  const [reward, setReward] = useState<Reward | null>(null);
+  const [reel, setReel] = useState<ReelState | null>(null);
+  const [reelPhase, setReelPhase] = useState<"idle" | "armed" | "spinning" | "revealed">("idle");
   const [error, setError] = useState<string | null>(null);
   const openingRequestRef = useRef<{ caseSku: string; requestId: string } | null>(null);
   const revealTimerRef = useRef<number | null>(null);
+  const reelFrameRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
-    const payload = await apiFetch<Payload>("/api/cases", { cacheMs: 20_000 });
+    const payload = await apiFetch<Payload>("/api/cases", { cacheMs: 0, dedupe: false });
     setData(payload);
     setSelected((current) => payload.cases.some((item) => item.sku === current) ? current : payload.cases[0]?.sku || "case_starter");
   }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось загрузить кейсы"));
@@ -55,6 +103,7 @@ export default function CasesPage() {
     return () => {
       window.clearTimeout(timer);
       if (revealTimerRef.current != null) window.clearTimeout(revealTimerRef.current);
+      if (reelFrameRef.current != null) window.cancelAnimationFrame(reelFrameRef.current);
     };
   }, [load]);
 
@@ -65,9 +114,23 @@ export default function CasesPage() {
     return (ranks[item.rarity] || 0) > (ranks[best?.rarity || "common"] || 0) ? item : best;
   }, current?.odds[0]) || null, [current]);
 
+  function selectCase(sku: string) {
+    if (opening) return;
+    setSelected(sku);
+    setReward(null);
+    setReel(null);
+    setReelPhase("idle");
+    setError(null);
+  }
+
   async function open() {
     if (!current || current.quantity < 1 || opening) return;
-    setOpening(true); setReward(null); setError(null); haptic("medium");
+    setOpening(true);
+    setReward(null);
+    setReel(null);
+    setReelPhase("idle");
+    setError(null);
+    haptic("medium");
     try {
       const attempt = openingRequestRef.current?.caseSku === current.sku
         ? openingRequestRef.current
@@ -75,36 +138,141 @@ export default function CasesPage() {
       openingRequestRef.current = attempt;
       const result = await apiFetch<OpenResult>("/api/cases", { method: "POST", body: JSON.stringify(attempt) });
       openingRequestRef.current = null;
+
+      const nextReel = buildReel(current, result.reward);
+      setReel(nextReel);
+      setReelPhase("armed");
+      reelFrameRef.current = window.requestAnimationFrame(() => {
+        reelFrameRef.current = window.requestAnimationFrame(() => setReelPhase("spinning"));
+      });
+
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       revealTimerRef.current = window.setTimeout(() => {
         setReward(result.reward);
+        setReelPhase("revealed");
         setOpening(false);
         haptic("heavy");
         void load().catch((cause) => {
           setError(cause instanceof Error ? cause.message : "Награда получена, но список кейсов не обновился");
         });
-      }, 720);
+      }, reducedMotion ? 180 : 1950);
     } catch (cause) {
       setOpening(false);
+      setReel(null);
+      setReelPhase("idle");
       setError(cause instanceof Error ? cause.message : "Не удалось открыть кейс");
     }
   }
 
+  const reelStyle = reel ? ({ "--mxm-case-stop": reel.stopIndex } as CSSProperties) : undefined;
+
   return <div className="mx-auto max-w-5xl">
-    <header className="mb-4 flex items-end justify-between gap-3 border-b border-[var(--border-soft)] pb-4"><div><p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Коллекционные серии</p><h1 className="mt-1 text-[20px] font-semibold tracking-[-.035em]">Кейсы MXM</h1><p className="mt-1.5 max-w-2xl text-[10px] leading-5 text-[var(--muted)]">Шансы раскрыты до открытия, результат выбирается на сервере криптографическим генератором. Дубликаты постоянных предметов автоматически компенсируются MXM.</p></div><Link href="/store?category=cases" className="mxm-quick-link"><Star size={13} fill="currentColor" />Магазин</Link></header>
-    {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
-    <div className="mb-3 grid grid-cols-3 gap-2 border-y border-[var(--border-soft)] py-3 text-center"><div><p className="text-[8px] text-[var(--muted)]">В инвентаре</p><p className="mt-1 text-[12px] font-semibold">{totalOwned}</p></div><div><p className="text-[8px] text-[var(--muted)]">Серий</p><p className="mt-1 text-[12px] font-semibold">{data?.cases.length || 0}</p></div><div><p className="text-[8px] text-[var(--muted)]">Открыто ранее</p><p className="mt-1 text-[12px] font-semibold">{data?.history.length || 0}</p></div></div>
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <header className="mxm-compact-page-head">
+      <div className="min-w-0">
+        <p className="mxm-eyebrow">Коллекционные серии</p>
+        <div className="mt-1 flex items-center gap-2"><h1 className="mxm-page-title">Кейсы MXM</h1><span className="mxm-status-chip">серверный дроп</span></div>
+        <p className="mt-1 text-[9px] text-[var(--muted)]">Открытые шансы · pity-гарантии · дубликаты компенсируются MXM.</p>
+      </div>
+      <Link href="/store?category=cases" className="mxm-compact-link"><Star size={12} fill="currentColor" />Магазин</Link>
+    </header>
+
+    {error ? <div className="mxm-alert mxm-alert-error mb-2.5">{error}</div> : null}
+
+    <div className="mxm-case-summary">
+      <span><b>{totalOwned}</b> в инвентаре</span>
+      <span><b>{data?.cases.length || 0}</b> серий</span>
+      <span><b>{data?.history.length || 0}</b> открытий в истории</span>
+    </div>
+
+    <div className="mxm-hscroll mxm-case-tabs mt-2.5 gap-1.5 pb-1">
+      {data?.cases.map((item) => <button
+        key={item.sku}
+        type="button"
+        disabled={opening}
+        onClick={() => selectCase(item.sku)}
+        className={`mxm-case-tab ${selected === item.sku ? "is-active" : ""}`}
+      >
+        <span>{item.title}</span><b>×{item.quantity}</b>
+      </button>)}
+    </div>
+
+    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
       <section className="min-w-0">
-        <div className="mxm-hscroll gap-2 pb-1">{data?.cases.map((item) => <button key={item.sku} type="button" onClick={() => { setSelected(item.sku); setReward(null); }} className={`mxm-filter-chip ${selected === item.sku ? "is-active" : ""}`}>{item.title}<span className="text-[8px] opacity-60">×{item.quantity}</span></button>)}</div>
-        <div className={`mxm-case-stage mt-4 grid min-h-[300px] place-items-center overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-5 text-center ${opening ? "is-opening" : ""}`}>
-          {reward ? <div className="mxm-case-reward max-w-sm"><Sparkles size={34} className="mx-auto text-[#f5c451]" /><p className="mt-3 text-[9px] uppercase tracking-[.16em] text-[var(--muted)]">{rarityLabel(reward.rarity)}</p><p className="mt-1 text-lg font-semibold">{reward.label}</p><p className="mt-2 text-[9px] text-[var(--muted)]">Награда уже добавлена в аккаунт</p>{Number(reward.overflowMxmCoins || 0) > 0 ? <p className="mt-2 text-[8px] text-[var(--accent)]">Излишек энергии компенсирован: +{Number(reward.overflowMxmCoins).toLocaleString("ru-RU")} MXM</p> : null}</div> : <div className="max-w-md"><div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}><Box size={44} /></div><p className="mt-4 text-[8px] uppercase tracking-[.14em] text-[var(--muted-2)]">{TIER_LABEL[current?.tier || "starter"] || "Серия MXM"}</p><h2 className="mt-1 text-base font-semibold">{current?.title || "Загрузка…"}</h2><p className="mx-auto mt-2 max-w-sm text-[10px] leading-5 text-[var(--muted)]">{current?.description}</p><div className="mt-3 flex items-center justify-center gap-3 text-[8px] text-[var(--muted)]"><span>В инвентаре: <b className="font-medium text-white">{current?.quantity || 0}</b></span>{current?.remaining != null ? <span>Осталось в серии: <b className="font-medium text-white">{current.remaining.toLocaleString("ru-RU")}</b></span> : null}</div>{bestChance ? <p className="mt-2 text-[8px] text-[var(--muted-2)]">Максимальная редкость в таблице: {rarityLabel(bestChance.rarity)}</p> : null}</div>}
+        <div className={`mxm-case-stage-compact ${opening ? "is-opening" : ""} ${reward ? "has-reward" : ""}`}>
+          {reel && reelPhase !== "revealed" ? <div className="mxm-case-reel-wrap" aria-live="polite">
+            <div className="mxm-case-reel-pointer" aria-hidden="true" />
+            <div className="mxm-case-reel-fade is-left" aria-hidden="true" />
+            <div className="mxm-case-reel-fade is-right" aria-hidden="true" />
+            <div className="mxm-case-reel-viewport">
+              <div className={`mxm-case-reel-track ${reelPhase === "spinning" ? "is-spinning" : ""}`} style={reelStyle}>
+                {reel.items.map((item) => <div key={item.id} className={`mxm-case-reel-item is-${item.rarity} ${item.final ? "is-winner" : ""}`}>
+                  <Gem size={13} />
+                  <span>{item.label}</span>
+                  <small>{rarityLabel(item.rarity)}</small>
+                </div>)}
+              </div>
+            </div>
+            <p className="mt-3 text-[9px] text-[var(--muted)]">Результат уже зафиксирован сервером · прокрутка только показывает выпадение</p>
+          </div> : reward ? <div className="mxm-case-reward-compact">
+            <span className={`mxm-reward-orb is-${reward.rarity}`}><Sparkles size={23} /></span>
+            {reward.pityTriggered ? <span className="mxm-pity-trigger"><ShieldCheck size={9} />Гарантия {rarityLabel(reward.pityRarity || reward.rarity)}</span> : null}
+            <p className="mt-2 text-[8px] uppercase tracking-[.15em] text-[var(--muted)]">{rarityLabel(reward.rarity)}</p>
+            <p className="mt-1 text-[16px] font-semibold tracking-[-.02em]">{reward.label}</p>
+            <p className="mt-1 text-[8px] text-[var(--muted)]">Награда уже зачислена</p>
+            {Number(reward.overflowMxmCoins || 0) > 0 ? <p className="mt-1.5 text-[8px] text-[var(--accent)]">Излишек энергии: +{Number(reward.overflowMxmCoins).toLocaleString("ru-RU")} MXM</p> : null}
+          </div> : <div className="mxm-case-idle-compact">
+            <div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}><Box size={38} /></div>
+            <div className="min-w-0">
+              <p className="text-[8px] uppercase tracking-[.13em] text-[var(--muted-2)]">{TIER_LABEL[current?.tier || "starter"] || "Серия MXM"}</p>
+              <h2 className="mt-1 text-[15px] font-semibold">{current?.title || "Загрузка…"}</h2>
+              <p className="mt-1 max-w-md text-[9px] leading-4 text-[var(--muted)]">{current?.description}</p>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[8px] text-[var(--muted)]">
+                <span>Инвентарь <b className="font-medium text-white">{current?.quantity || 0}</b></span>
+                {current?.remaining != null ? <span>Тираж <b className="font-medium text-white">{current.remaining.toLocaleString("ru-RU")}</b></span> : null}
+                {bestChance ? <span>Макс. редкость <b className="font-medium text-white">{rarityLabel(bestChance.rarity)}</b></span> : null}
+              </div>
+            </div>
+          </div>}
         </div>
-        {current?.quantity ? <button type="button" disabled={opening} onClick={() => void open()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] bg-white py-3 text-[11px] font-semibold text-black disabled:opacity-40"><PackageOpen size={15} />{opening ? "Определяем награду…" : `Открыть 1 кейс · осталось ${current.quantity}`}</button> : <Link href="/store?category=cases" className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] bg-white py-3 text-[11px] font-semibold text-black"><PackageOpen size={15} />Купить кейс в магазине MXM</Link>}
-        <p className="mt-2 flex items-center justify-center gap-1 text-[8px] text-[var(--muted-2)]"><ShieldCheck size={9} />Один запрос открытия = одна серверная транзакция; повторный запрос с тем же ID не выдаст награду второй раз.</p>
+
+        {current?.quantity ? <button type="button" disabled={opening} onClick={() => void open()} className="mxm-primary-action mt-2.5 w-full">
+          <PackageOpen size={14} />{opening ? "Прокручиваем…" : `Открыть кейс · ${current.quantity} шт.`}
+        </button> : <Link href="/store?category=cases" className="mxm-primary-action mt-2.5 w-full">
+          <PackageOpen size={14} />Купить кейс
+        </Link>}
+        <p className="mt-1.5 flex items-center justify-center gap-1 text-[7px] text-[var(--muted-2)]"><ShieldCheck size={8} />Idempotency защищает от двойной выдачи при повторном запросе.</p>
+
+        <section className="mt-3 border-t border-[var(--border-soft)] pt-2.5">
+          <div className="mb-2 flex items-center justify-between"><p className="text-[9px] font-medium">Персональная гарантия</p><span className="text-[7px] text-[var(--muted-2)]">счётчики по серии</span></div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["rare", "epic", "legendary"] as const).map((rarity) => {
+              const pity = current?.pity[rarity] || null;
+              return <div key={rarity} className={`mxm-pity-card is-${rarity}`}>
+                <div className="flex items-center justify-between gap-1"><span>{rarityLabel(rarity)}</span><b>{pity ? `${pity.current}/${pity.threshold}` : "—"}</b></div>
+                <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.05]"><div className={`h-full rounded-full ${RARITY_BAR[rarity]}`} style={{ width: `${pityPercent(pity)}%` }} /></div>
+                <p className="mt-1 text-[7px] text-[var(--muted-2)]">{pity ? (pity.remaining === 1 ? "следующее гарантировано" : `≤ ${pity.remaining} до гарантии`) : "нет порога"}</p>
+              </div>;
+            })}
+          </div>
+        </section>
       </section>
-      <aside className="space-y-4">
-        <section className="overflow-hidden border-y border-[var(--border-soft)]"><div className="mxm-section-head"><span>Вероятности</span><span>100%</span></div><div className="divide-y divide-[var(--border-soft)]">{current?.odds.map((odd) => <div key={`${odd.reward}:${odd.rarity}`} className="py-2.5"><div className="flex items-center gap-2"><Gem size={11} className="text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{odd.label}</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">{rarityLabel(odd.rarity)}</p></div><span className="text-[10px]">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div><div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.04]"><div className={`h-full rounded-full ${RARITY_BAR[odd.rarity] || RARITY_BAR.common}`} style={{ width: `${Math.max(1.5, Math.min(100, odd.percent))}%` }} /></div></div>)}</div></section>
-        <section className="overflow-hidden border-y border-[var(--border-soft)]"><div className="mxm-section-head"><span>Последние открытия</span><Clock3 size={12} /></div><div className="divide-y divide-[var(--border-soft)]">{data?.history.length ? data.history.slice(0, 10).map((item) => <div key={item.id} className="py-2.5"><p className="truncate text-[10px] font-medium">{item.rewardLabel}</p><p className="mt-1 text-[8px] text-[var(--muted)]">{rarityLabel(item.rarity)} · {new Date(item.openedAt).toLocaleString("ru-RU")}</p></div>) : <p className="py-6 text-center text-[9px] text-[var(--muted)]">История пока пуста</p>}</div></section>
+
+      <aside className="min-w-0 space-y-3">
+        <section className="border-t border-[var(--border-soft)]">
+          <div className="mxm-compact-section-head"><span>Вероятности</span><span>100%</span></div>
+          <div className="divide-y divide-[var(--border-soft)]">{current?.odds.map((odd) => <div key={`${odd.reward}:${odd.rarity}`} className="py-2">
+            <div className="flex items-center gap-2"><span className={`mxm-rarity-dot is-${odd.rarity}`} /><p className="min-w-0 flex-1 truncate text-[9px] font-medium">{odd.label}</p><span className="text-[9px] tabular-nums">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div>
+            <div className="mt-1 h-[2px] overflow-hidden rounded-full bg-white/[.04]"><div className={`h-full rounded-full ${RARITY_BAR[odd.rarity] || RARITY_BAR.common}`} style={{ width: `${Math.max(1.5, Math.min(100, odd.percent))}%` }} /></div>
+          </div>)}</div>
+        </section>
+
+        <section className="border-t border-[var(--border-soft)]">
+          <div className="mxm-compact-section-head"><span>Последние открытия</span><Clock3 size={11} /></div>
+          <div className="divide-y divide-[var(--border-soft)]">{data?.history.length ? data.history.slice(0, 7).map((item) => <div key={item.id} className="py-2">
+            <div className="flex items-center gap-2"><span className={`mxm-rarity-dot is-${item.rarity}`} /><p className="min-w-0 flex-1 truncate text-[9px] font-medium">{item.rewardLabel}</p>{item.pityTriggered ? <span className="text-[7px] text-[#e7c867]">pity</span> : null}</div>
+            <p className="mt-0.5 pl-3.5 text-[7px] text-[var(--muted-2)]">{rarityLabel(item.rarity)} · {new Date(item.openedAt).toLocaleString("ru-RU")}</p>
+          </div>) : <p className="py-5 text-center text-[8px] text-[var(--muted)]">История пока пуста</p>}</div>
+        </section>
       </aside>
     </div>
   </div>;
