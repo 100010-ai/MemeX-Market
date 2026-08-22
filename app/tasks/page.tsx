@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clock3, ExternalLink, Flame, Gem, Gift, RefreshCw, Sparkles, TicketCheck, Trophy } from "lucide-react";
+import { Check, CircleCheckBig, Clock3, ExternalLink, Flame, Gem, Gift, RadioTower, RefreshCw, Sparkles, TicketCheck, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -110,7 +110,7 @@ export default function TasksPage() {
         <div className="text-right"><p className="text-[9px] text-[var(--muted)]">доступно в заданиях</p><p className="mt-1 flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p></div>
       </div>
 
-      {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} XP</span></div> : null}
+      {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
       {notice ? <div className="mxm-alert mb-4">{notice}</div> : null}
 
@@ -126,32 +126,53 @@ export default function TasksPage() {
         const Icon = sectionMeta[period].icon;
         return (
           <section key={period} className="mb-7">
-            <div className="mb-1 flex items-center justify-between border-b border-[var(--border-soft)] py-2.5"><div className="flex items-center gap-2 text-[12px] font-semibold"><Icon size={14} className={period === "daily" ? "text-[#ff855d]" : "text-[var(--muted)]"} />{sectionMeta[period].title}<span className="text-[9px] font-normal text-[var(--muted-2)]">{items.length}</span></div>{period !== "onboarding" ? <span className="flex items-center gap-1 text-[9px] text-[var(--muted-2)]"><Clock3 size={10} />автосброс</span> : null}</div>
-            <div>{items.map((mission) => {
+            <div className="mb-2 flex items-center justify-between py-1.5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold"><Icon size={14} className={period === "daily" ? "text-[#ff855d]" : "text-[var(--muted)]"} />{sectionMeta[period].title}<span className="text-[9px] font-normal text-[var(--muted-2)]">{items.length}</span></div>
+              {period !== "onboarding" ? <span className="flex items-center gap-1 text-[9px] text-[var(--muted-2)]"><Clock3 size={10} />автосброс</span> : null}
+            </div>
+            <div className="space-y-2.5">{items.map((mission) => {
               const done = mission.progress >= mission.target;
               const progress = Math.min(100, mission.progress / mission.target * 100);
               const channelTask = mission.actionType === "telegram_channel_subscription";
+              const displayTitle = channelTask ? "Подписка на официальный канал" : mission.title;
+              const displayDescription = channelTask
+                ? "Подпишитесь на канал MEMEX MARKET и подтвердите подписку. После получения награды подписка продолжает проверяться."
+                : mission.description;
+              const StateIcon = channelTask ? RadioTower : mission.claimed ? CircleCheckBig : Gift;
               return (
-                <div key={mission.id} className="mxm-task-row">
-                  <div className={`mxm-task-state ${mission.claimed ? "is-done" : done ? "is-ready" : ""}`}>{mission.claimed ? <Check size={13} /> : <Gift size={13} />}</div>
-                  <div className="min-w-0 flex-1"><div className="flex items-baseline justify-between gap-3"><p className="truncate text-[11px] font-medium">{mission.title}</p><span className="shrink-0 text-[9px] text-[var(--muted)]">{mission.progress}/{mission.target}</span></div><p className="mt-1 truncate text-[9px] text-[var(--muted-2)]">{mission.description}</p><div className="mt-2 h-[2px] overflow-hidden bg-white/[.055]"><div className={`h-full ${done ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`} style={{ width: `${progress}%` }} /></div></div>
-                  <div className="shrink-0 text-right">
-                    <p className="flex items-center justify-end gap-1 text-[10px] font-semibold text-[var(--accent)]"><Gem size={9} fill="currentColor" />{money(mission.reward)}</p>
-                    {mission.rewardRevoked ? (
-                      <div className="mt-1.5 max-w-[116px] text-right text-[9px] text-[var(--negative)]">Награда отозвана{Number(mission.clawbackDue || 0) > 0 ? ` · долг ${money(Number(mission.clawbackDue || 0))}` : ""}</div>
-                    ) : done && !mission.claimed ? (
-                      <button onClick={() => void claim(mission.id)} disabled={busy !== null || channelBusy} className="mt-1.5 border-b border-white pb-0.5 text-[9px] font-semibold text-white">{busy === mission.id ? "…" : "Забрать"}</button>
-                    ) : mission.claimed ? (
-                      <span className="mt-1.5 block text-[9px] text-[var(--positive)]">Получено</span>
-                    ) : null}
-                    {channelTask && !mission.claimed ? (
-                      <div className="mt-2 flex items-center justify-end gap-2">
-                        <button type="button" onClick={() => openChannel(mission.actionUrl || "https://t.me/Meme_X_Market")} className="inline-flex items-center gap-1 text-[9px] text-[var(--accent)]"><ExternalLink size={9} />Подписаться</button>
-                        <button type="button" onClick={() => void verifyChannel()} disabled={channelBusy} className="inline-flex items-center gap-1 text-[9px] text-white disabled:opacity-50"><RefreshCw size={9} className={channelBusy ? "animate-spin" : ""} />{channelBusy ? "…" : "Проверить"}</button>
+                <article key={mission.id} className={`mxm-task-card ${mission.claimed ? "is-claimed" : done ? "is-ready" : ""}`}>
+                  <div className="mxm-task-card-main">
+                    <div className={`mxm-task-card-icon ${mission.claimed ? "is-done" : done ? "is-ready" : ""}`}><StateIcon size={16} /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold leading-[1.35] tracking-[-.015em] text-white">{displayTitle}</h3><p className="mt-1 text-[9px] leading-[1.5] text-[var(--muted)]">{displayDescription}</p></div>
+                        <span className="mxm-task-reward"><Gem size={10} fill="currentColor" />{money(mission.reward)}</span>
                       </div>
-                    ) : null}
+                      <div className="mt-3 flex items-center gap-2.5">
+                        <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/[.055]"><div className={`h-full rounded-full ${mission.claimed || done ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`} style={{ width: `${progress}%` }} /></div>
+                        <span className="shrink-0 text-[9px] tabular-nums text-[var(--muted)]">{mission.progress}/{mission.target}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  <div className="mxm-task-card-footer">
+                    {mission.rewardRevoked ? (
+                      <div className="flex min-w-0 flex-1 items-center gap-2 text-[9px] text-[var(--negative)]"><RefreshCw size={11} className="shrink-0" /><span>Награда отозвана{Number(mission.clawbackDue || 0) > 0 ? ` · к удержанию ${money(Number(mission.clawbackDue || 0))}` : ""}</span></div>
+                    ) : mission.claimed ? (
+                      <div className="flex min-w-0 flex-1 items-center gap-2 text-[9px] text-[var(--positive)]"><Check size={12} /><span>Награда получена</span></div>
+                    ) : done ? (
+                      <div className="flex min-w-0 flex-1 items-center gap-2 text-[9px] text-[var(--positive)]"><CircleCheckBig size={12} /><span>Задание выполнено</span></div>
+                    ) : (
+                      <div className="min-w-0 flex-1 text-[9px] text-[var(--muted-2)]">Выполните условие, чтобы получить награду</div>
+                    )}
+
+                    <div className="mxm-task-actions">
+                      {channelTask && !mission.claimed ? <button type="button" onClick={() => openChannel(mission.actionUrl || "https://t.me/Meme_X_Market")} className="mxm-task-action-secondary"><ExternalLink size={12} />Открыть канал</button> : null}
+                      {channelTask && !mission.claimed ? <button type="button" onClick={() => void verifyChannel()} disabled={channelBusy} className="mxm-task-action-secondary"><RefreshCw size={12} className={channelBusy ? "animate-spin" : ""} />{channelBusy ? "Проверяем…" : "Проверить"}</button> : null}
+                      {done && !mission.claimed && !mission.rewardRevoked ? <button type="button" onClick={() => void claim(mission.id)} disabled={busy !== null || channelBusy} className="mxm-task-action-primary">{busy === mission.id ? <RefreshCw size={12} className="animate-spin" /> : <Gift size={12} />}Забрать награду</button> : null}
+                    </div>
+                  </div>
+                </article>
               );
             })}</div>
           </section>

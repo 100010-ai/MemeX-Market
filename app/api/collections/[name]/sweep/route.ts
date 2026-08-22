@@ -17,7 +17,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "collection-sweep", String(profile.id), 12, 60))) return NextResponse.json({ error: "Слишком много операций. Подождите немного." }, { status: 429 });
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
 
   const { name } = await params;
   const baseName = safeDecodeURIComponent(name);
@@ -25,7 +25,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const count = Number(body.count);
   if (!baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });
-  if (!Number.isInteger(count) || !allowedCounts.has(count)) return NextResponse.json({ error: "Можно купить 2, 3, 5 или 10 самых дешёвых Gifts" }, { status: 400 });
+  if (!Number.isInteger(count) || !allowedCounts.has(count)) return NextResponse.json({ error: "Можно купить 2, 3, 5 или 10 самых дешёвых подарков" }, { status: 400 });
 
   const requestKey = request.headers.get("x-idempotency-key")?.trim() || `sweep-${crypto.randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });

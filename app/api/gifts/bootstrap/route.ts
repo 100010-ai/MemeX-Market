@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 function friendlyBootstrapError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Не удалось загрузить Telegram Gifts";
+  const message = error instanceof Error ? error.message : "Не удалось загрузить подарки Telegram";
   if (/TonAPI (401|403)/i.test(message)) {
     return "TonAPI отклонил TONAPI_KEY. MX Market попробует публичный режим автоматически; если ошибка повторяется, удалите невалидный TONAPI_KEY или выпустите новый ключ в TonConsole.";
   }
@@ -53,7 +53,7 @@ async function waitForConcurrentBootstrap(maxWaitMs = 18_000) {
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "gift-market-bootstrap", String(profile.id), 4, 300))) {
     return NextResponse.json({ error: "Каталог уже обновляется. Подождите немного и повторите." }, { status: 429 });
@@ -106,7 +106,7 @@ async function POSTHandler(request: Request) {
 
     return NextResponse.json({ ok: true, skipped: false, listed, catalog, genesis });
   } catch (error) {
-    if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема Gifts требует актуальной production-миграции");
+    if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема подарков требует актуальной production-миграции");
     console.error("gift market bootstrap", error);
     return NextResponse.json({ error: friendlyBootstrapError(error) }, { status: 502 });
   }

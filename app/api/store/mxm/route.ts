@@ -31,7 +31,7 @@ async function POSTHandler(request: Request) {
     const soldOut = /sold out/i.test(error.message || "");
     const unavailable = /not eligible|unavailable|already used/i.test(error.message || "");
     if (!insufficient && !soldOut && !unavailable) return apiFailure(error, "Не удалось выполнить покупку", 400);
-    return NextResponse.json({ error: insufficient ? "Недостаточно MXM Coins" : soldOut ? "Товар распродан" : "Покупка сейчас недоступна" }, { status: 409 });
+    return NextResponse.json({ error: insufficient ? "Недостаточно MXM" : soldOut ? "Товар распродан" : "Покупка сейчас недоступна" }, { status: 409 });
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }

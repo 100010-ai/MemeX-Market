@@ -50,7 +50,7 @@ async function GETHandler() {
       return [{
         coinId,
         name: text(coin.name, "Мемкоин"),
-        symbol: text(coin.symbol, "UNKNOWN"),
+        symbol: text(coin.symbol, "—"),
         imageUrl: typeof coin.image_url === "string" && coin.image_url.trim() ? coin.image_url.trim() : null,
         quantity,
         currentPrice,
@@ -71,7 +71,7 @@ async function GETHandler() {
         const coinId = text(row.coin_id);
         if (!id || !coinId) return [];
         const coin = relationOne(row.coins);
-        return [{ id: `coin-${id}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${text(coin.symbol, "UNKNOWN")}`, amount: finiteNumber(row.quote_amount), pnl: finiteNumber(row.realized_pnl), createdAt: isoDate(row.created_at), href: `/coin/${coinId}` }];
+        return [{ id: `coin-${id}`, kind: "coin", label: `${row.side === "buy" ? "Куплено" : "Продано"} $${text(coin.symbol, "—")}`, amount: finiteNumber(row.quote_amount), pnl: finiteNumber(row.realized_pnl), createdAt: isoDate(row.created_at), href: `/coin/${coinId}` }];
       }),
       ...((giftHistoryResult.data || []) as DbRow[]).flatMap((row) => {
         const id = text(row.id);
@@ -79,7 +79,7 @@ async function GETHandler() {
         if (!id || !virtualGiftId) return [];
         const gift = relationOne(row.gift_assets);
         const sold = text(row.seller_profile_id) === String(profile.id);
-        return [{ id: `gift-${id}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${text(gift.base_name, "Gift")} #${finiteNumber(gift.gift_number)}`, amount: finiteNumber(row.price), pnl: sold ? finiteNumber(row.realized_pnl) : 0, createdAt: isoDate(row.created_at), href: `/gifts/${virtualGiftId}` }];
+        return [{ id: `gift-${id}`, kind: "gift", label: `${sold ? "Продан" : "Куплен"} ${text(gift.base_name, "Подарок")} #${finiteNumber(gift.gift_number)}`, amount: finiteNumber(row.price), pnl: sold ? finiteNumber(row.realized_pnl) : 0, createdAt: isoDate(row.created_at), href: `/gifts/${virtualGiftId}` }];
       }),
     ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 50);
     const bucketStart = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();

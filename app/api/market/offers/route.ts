@@ -60,7 +60,7 @@ async function GETHandler(request: NextRequest) {
   } catch (error) {
     console.error("advanced offers", error);
     await recordAppError("/api/market/offers", error, String(profile.id), { method: "GET" });
-    return apiFailure(error, "Не удалось загрузить расширенные офферы");
+    return apiFailure(error, "Не удалось загрузить расширенные предложения");
   }
 }
 
@@ -68,9 +68,9 @@ async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
-  if (!(await enforceRateLimit(request, "advanced-gift-offer", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много офферов. Подождите минуту." }, { status: 429 });
+  if (!(await enforceRateLimit(request, "advanced-gift-offer", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много предложений. Подождите минуту." }, { status: 429 });
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   try {
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
@@ -81,7 +81,7 @@ async function POSTHandler(request: Request) {
     const maxFills = Number(body.maxFills ?? 1);
     const durationHours = Number(body.durationHours ?? 72);
     if (!baseName || !scopeType || !Number.isFinite(amount) || amount <= 0 || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
-      return NextResponse.json({ error: "Некорректные параметры оффера" }, { status: 400 });
+      return NextResponse.json({ error: "Некорректные параметры предложения" }, { status: 400 });
     }
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.rpc("create_advanced_gift_offer_v056", {
@@ -93,12 +93,12 @@ async function POSTHandler(request: Request) {
       p_max_fills: maxFills,
       p_duration_hours: durationHours,
     });
-    if (error) return apiFailure(error, "Не удалось создать оффер", 400);
+    if (error) return apiFailure(error, "Не удалось создать предложение", 400);
     return NextResponse.json({ offer: data }, { status: 201 });
   } catch (error) {
     console.error("create advanced offer", error);
     await recordAppError("/api/market/offers", error, String(profile.id), { method: "POST" });
-    return apiFailure(error, "Не удалось создать оффер");
+    return apiFailure(error, "Не удалось создать предложение");
   }
 }
 export const GET = withApiErrors("app/api/market/offers/route.ts:GET", GETHandler);

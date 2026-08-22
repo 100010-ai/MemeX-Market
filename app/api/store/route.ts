@@ -43,14 +43,14 @@ async function GETHandler() {
   ]);
 
   const firstError = productsResult.error || snapshotResult.error || caseLootResult.error || caseDefinitionsResult.error || seasonResult.error;
-  if (firstError) return apiFailure(firstError, "Не удалось загрузить MXM Store");
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить магазин MXM");
 
   try {
     const snapshot = snapshotResult.data && typeof snapshotResult.data === "object" && !Array.isArray(snapshotResult.data)
       ? snapshotResult.data as Record<string, unknown>
       : {};
     if (!snapshot.wallet || typeof snapshot.wallet !== "object" || Array.isArray(snapshot.wallet)) {
-      return NextResponse.json({ error: "Wallet snapshot повреждён", code: "DATA_INTEGRITY" }, { status: 500 });
+      return NextResponse.json({ error: "Данные кошелька повреждены", code: "DATA_INTEGRITY" }, { status: 500 });
     }
     const wallet = snapshot.wallet;
     const lootRows = caseLootResult.data || [];

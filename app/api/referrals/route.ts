@@ -33,7 +33,7 @@ async function GETHandler() {
   const code = String(meResult.data?.referral_code || "");
   const bot = String(process.env.NEXT_PUBLIC_BOT_USERNAME || "MemeXMarketBot").replace(/^@/, "");
   if (!partnerResult.data || typeof partnerResult.data !== "object" || Array.isArray(partnerResult.data)) {
-    return NextResponse.json({ error: "Реферальный snapshot повреждён", code: "DATA_INTEGRITY" }, { status: 500 });
+    return NextResponse.json({ error: "Реферальные данные повреждены", code: "DATA_INTEGRITY" }, { status: 500 });
   }
   const partner = partnerResult.data as Record<string, unknown>;
   return NextResponse.json({

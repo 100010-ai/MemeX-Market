@@ -98,7 +98,7 @@ export async function applyMainChannelMembership(
   status: string,
 ): Promise<ChannelMembershipResult> {
   const id = String(profileId || "").trim();
-  if (!id || !Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Telegram profile is invalid");
+  if (!id || !Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Некорректный профиль Telegram");
   const supabase = getSupabaseAdmin();
   const applied = await supabase.rpc("apply_main_channel_membership_v700", {
     p_profile_id: id,
@@ -109,7 +109,7 @@ export async function applyMainChannelMembership(
   });
   if (applied.error) throw applied.error;
   const refreshed = await getMainChannelTaskState(id);
-  if (!refreshed) throw new Error("Channel membership state was not persisted");
+  if (!refreshed) throw new Error("Не удалось сохранить состояние подписки на канал");
   return { ...refreshed, cached: false };
 }
 
@@ -132,7 +132,7 @@ export async function verifyMainChannelMembership(
 ): Promise<ChannelMembershipResult> {
   const profileId = String(profile.id || "").trim();
   const telegramId = Number(profile.telegram_id ?? profile.telegramId);
-  if (!profileId || !Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Telegram profile is invalid");
+  if (!profileId || !Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Некорректный профиль Telegram");
 
   const supabase = getSupabaseAdmin();
   const existing = await supabase

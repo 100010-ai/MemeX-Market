@@ -15,10 +15,10 @@ type SearchPayload = {
 type Result = { key: string; label: string; meta: string; href: string; icon: "gift" | "coin" | "collection" | "user" };
 
 const staticResults: Result[] = [
-  { key: "nav-market", label: "Маркет", meta: "Gifts и мемкоины", href: "/market", icon: "collection" },
-  { key: "nav-vault", label: "Портфель", meta: "Активы и PnL", href: "/vault", icon: "collection" },
-  { key: "nav-orders", label: "Ордера", meta: "Листинги и офферы", href: "/orders", icon: "collection" },
-  { key: "nav-watchlist", label: "Избранное", meta: "Watchlist и price alerts", href: "/watchlist", icon: "collection" },
+  { key: "nav-market", label: "Рынок", meta: "Подарки и мемкоины", href: "/market", icon: "collection" },
+  { key: "nav-vault", label: "Портфель", meta: "Активы и прибыль", href: "/vault", icon: "collection" },
+  { key: "nav-orders", label: "Заявки", meta: "Лоты и предложения", href: "/orders", icon: "collection" },
+  { key: "nav-watchlist", label: "Избранное", meta: "Избранное и ценовые уведомления", href: "/watchlist", icon: "collection" },
   { key: "nav-profile", label: "Профиль", meta: "Аккаунт и настройки", href: "/profile", icon: "user" },
 ];
 
@@ -80,7 +80,7 @@ export function CommandPalette() {
     if (!q) return staticResults;
     const items: Result[] = [];
     if (remote) {
-      items.push(...remote.gifts.slice(0, 6).map((gift) => ({ key: `gift:${gift.virtualGiftId}`, label: `${gift.baseName} #${gift.number}`, meta: gift.modelName || "Gift", href: `/gifts/${gift.virtualGiftId}`, icon: "gift" as const })));
+      items.push(...remote.gifts.slice(0, 6).map((gift) => ({ key: `gift:${gift.virtualGiftId}`, label: `${gift.baseName} #${gift.number}`, meta: gift.modelName || "Подарок", href: `/gifts/${gift.virtualGiftId}`, icon: "gift" as const })));
       items.push(...remote.collections.slice(0, 5).map((collection) => ({ key: `collection:${collection.baseName}`, label: collection.baseName, meta: `${collection.listedCount} лотов`, href: `/collections/${encodeURIComponent(collection.baseName)}`, icon: "collection" as const })));
       items.push(...remote.coins.slice(0, 5).map((coin) => ({ key: `coin:${coin.id}`, label: coin.name, meta: `$${coin.symbol}`, href: `/coin/${coin.id}`, icon: "coin" as const })));
       items.push(...remote.users.slice(0, 5).map((user) => ({ key: `user:${user.id}`, label: user.name, meta: "Профиль", href: `/u/${user.id}`, icon: "user" as const })));
@@ -116,7 +116,7 @@ export function CommandPalette() {
       <section role="dialog" aria-modal="true" aria-label="Быстрый поиск" className="w-full max-w-[560px] overflow-hidden rounded-[20px] border border-white/[.10] bg-[#111318] shadow-2xl">
         <div className="flex items-center gap-2 border-b border-white/[.07] px-3">
           <Search size={16} className="shrink-0 text-[var(--muted)]" />
-          <input ref={inputRef} value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Gift, коллекция, @user, $COIN или раздел" className="h-12 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
+          <input ref={inputRef} value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Подарок, коллекция, @пользователь, тикер или раздел" className="h-12 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[var(--muted-2)]" />
           <button type="button" onClick={close} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] hover:bg-white/[.05]"><X size={15} /></button>
         </div>
         <div className="max-h-[min(62vh,520px)] overflow-y-auto p-2">

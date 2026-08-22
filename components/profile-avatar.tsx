@@ -2,9 +2,10 @@ import Image from "next/image";
 import { Award, Sparkles, UserRound } from "lucide-react";
 import type { ProfileBadge } from "@/lib/types";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
+import { rarityLabel } from "@/lib/ui-copy";
 
 const FRAME_TITLES: Record<string, string> = {
-  neon_frame: "Neon Frame",
+  neon_frame: "Неоновая рамка",
 };
 
 export function ProfileAvatar({
@@ -48,7 +49,7 @@ const BADGE_RARITY_CLASS: Record<string, string> = {
 export function ProfileBadgeList({ badges }: { badges: ProfileBadge[] }) {
   return <div className="flex flex-wrap gap-1.5">{badges.map((badge) => <span
     key={badge.key}
-    title={`${badge.title} · ${badge.rarity}`}
+    title={`${badge.title} · ${rarityLabel(badge.rarity)}`}
     className={`inline-flex items-center gap-1 rounded-[10px] bg-white/[.04] px-2 py-1 text-[9px] ring-1 ring-white/[.06] ${BADGE_RARITY_CLASS[badge.rarity] || BADGE_RARITY_CLASS.common}`}
   ><Award size={10} />{badge.title}</span>)}</div>;
 }

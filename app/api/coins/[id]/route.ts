@@ -21,7 +21,7 @@ function profileName(row: DbRow) {
 async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   try {
@@ -36,7 +36,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       supabase.rpc("coin_economy_snapshot_v200", { p_profile_id: profile.id, p_coin_id: id }),
       supabase.from("coin_early_buyers").select("profile_id,ordinal").eq("coin_id", id),
     ]);
-    if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Coin not found" }, { status: 404 });
+    if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Мемкоин не найден" }, { status: 404 });
     const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error || earlyBuyersResult.error;
     if (otherError) throw otherError;
     const economy = economyResult.data && typeof economyResult.data === "object" && !Array.isArray(economyResult.data)
@@ -70,7 +70,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     }, { headers: { "server-timing": `coin-detail;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {
     console.error("coin detail", error);
-    return apiFailure(error, "Could not load coin");
+    return apiFailure(error, "Не удалось загрузить мемкоин");
   }
 }
 export const GET = withApiErrors("app/api/coins/[id]/route.ts:GET", GETHandler);

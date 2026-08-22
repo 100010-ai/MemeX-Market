@@ -163,14 +163,17 @@ button:disabled { cursor: not-allowed; }
 }
 .mxm-gift-media {
   contain: paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 .mxm-gift-media canvas,
 .mxm-gift-media svg,
 .mxm-gift-media img,
 .mxm-gift-media video {
   display: block;
+}
+.mxm-gift-media canvas,
+.mxm-gift-media video {
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 .mxm-glassbar {
   -webkit-backdrop-filter: none;
@@ -1339,4 +1342,207 @@ img { content-visibility: auto; }
 /* MRKT-style market modes */
 .mxm-feed-link.is-active {
   color:#f0f3ff;
+}
+
+/* v0.57 — production UI cleanup: player-market cards, task actions and Russian-only system copy. */
+.mxm-collection-grid { align-items:start; }
+.mxm-collection-card {
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.075);
+  border-radius:20px;
+  background:linear-gradient(180deg,rgba(17,21,26,.98),rgba(10,13,17,.99));
+  padding:11px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 10px 26px rgba(0,0,0,.12);
+}
+.mxm-collection-card-head { display:flex; min-width:0; align-items:flex-start; gap:12px; margin-bottom:10px; }
+.mxm-collection-count {
+  display:inline-flex;
+  min-width:44px;
+  height:28px;
+  flex:none;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  border:1px solid rgba(139,164,255,.16);
+  border-radius:11px;
+  background:rgba(139,164,255,.08);
+  color:#dbe3ff;
+  font-size:9px;
+  font-weight:650;
+  font-variant-numeric:tabular-nums;
+}
+.mxm-collection-count svg { color:var(--accent); }
+.mxm-collection-previews { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.mxm-collection-preview {
+  min-width:0;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.055);
+  border-radius:15px;
+  background:#0a0d11;
+  box-shadow:inset 0 1px rgba(255,255,255,.018);
+  transition:transform .14s ease,border-color .14s ease;
+}
+.mxm-collection-preview:active { transform:scale(.985); }
+.mxm-collection-preview:hover { border-color:rgba(255,255,255,.12); }
+.mxm-collection-preview-number {
+  position:absolute;
+  right:5px;
+  bottom:5px;
+  display:inline-flex;
+  min-height:18px;
+  align-items:center;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:7px;
+  background:rgba(4,6,8,.68);
+  padding:0 5px;
+  color:#f3f5f7;
+  font-size:8px;
+  font-weight:650;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+}
+.mxm-collection-card-actions { display:grid; grid-template-columns:minmax(0,1fr) 40px; gap:8px; margin-top:10px; }
+.mxm-collection-cheapest {
+  display:flex;
+  min-width:0;
+  min-height:40px;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:13px;
+  background:rgba(255,255,255,.03);
+  padding:0 11px;
+  color:#e7ebef;
+  font-size:10px;
+  font-weight:590;
+  transition:background .14s ease,border-color .14s ease;
+}
+.mxm-collection-cheapest:hover { border-color:rgba(255,255,255,.12); background:rgba(255,255,255,.05); }
+.mxm-collection-cheapest-price { display:inline-flex; flex:none; align-items:center; gap:4px; color:#f5f7fb; font-size:9px; font-weight:650; }
+.mxm-collection-cheapest-price svg { color:var(--accent); }
+.mxm-collection-cart {
+  display:grid;
+  height:40px;
+  width:40px;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.075);
+  border-radius:13px;
+  background:rgba(255,255,255,.035);
+  color:#d9dee5;
+  transition:background .14s ease,color .14s ease,transform .12s ease;
+}
+.mxm-collection-cart:hover:not(:disabled) { background:rgba(139,164,255,.09); color:#eef2ff; }
+.mxm-collection-cart:active:not(:disabled) { transform:scale(.96); }
+.mxm-collection-cart:disabled { opacity:.35; }
+
+.mxm-task-card {
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.065);
+  border-radius:18px;
+  background:linear-gradient(180deg,rgba(15,19,24,.98),rgba(10,13,17,.98));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+}
+.mxm-task-card.is-ready { border-color:rgba(89,213,161,.13); }
+.mxm-task-card.is-claimed { opacity:.86; }
+.mxm-task-card-main { display:flex; min-width:0; align-items:flex-start; gap:11px; padding:12px; }
+.mxm-task-card-icon {
+  display:grid;
+  height:34px;
+  width:34px;
+  flex:none;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+  color:#76818d;
+}
+.mxm-task-card-icon.is-ready { border-color:rgba(139,164,255,.18); background:rgba(139,164,255,.065); color:var(--accent); }
+.mxm-task-card-icon.is-done { border-color:rgba(89,213,161,.16); background:rgba(89,213,161,.055); color:var(--positive); }
+.mxm-task-reward {
+  display:inline-flex;
+  min-height:26px;
+  flex:none;
+  align-items:center;
+  gap:4px;
+  border:1px solid rgba(139,164,255,.12);
+  border-radius:10px;
+  background:rgba(139,164,255,.06);
+  padding:0 8px;
+  color:#dce4ff;
+  font-size:9px;
+  font-weight:660;
+  font-variant-numeric:tabular-nums;
+}
+.mxm-task-reward svg { color:var(--accent); }
+.mxm-task-card-footer {
+  display:flex;
+  min-width:0;
+  align-items:center;
+  gap:10px;
+  border-top:1px solid rgba(255,255,255,.05);
+  background:rgba(0,0,0,.08);
+  padding:9px 11px;
+}
+.mxm-task-actions { display:flex; flex:none; align-items:center; justify-content:flex-end; gap:7px; }
+.mxm-task-action-secondary,
+.mxm-task-action-primary {
+  display:inline-flex;
+  min-height:32px;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  border-radius:11px;
+  padding:0 10px;
+  font-size:9px;
+  font-weight:630;
+  white-space:nowrap;
+  transition:background .14s ease,color .14s ease,transform .12s ease;
+}
+.mxm-task-action-secondary { border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.035); color:#d4dae0; }
+.mxm-task-action-secondary:hover:not(:disabled) { background:rgba(255,255,255,.06); color:white; }
+.mxm-task-action-primary { border:1px solid rgba(139,164,255,.18); background:rgba(139,164,255,.12); color:#eef2ff; }
+.mxm-task-action-primary:hover:not(:disabled) { background:rgba(139,164,255,.17); }
+.mxm-task-action-secondary:active:not(:disabled),.mxm-task-action-primary:active:not(:disabled) { transform:scale(.975); }
+.mxm-task-action-secondary:disabled,.mxm-task-action-primary:disabled { opacity:.45; }
+
+@media (max-width:560px) {
+  .mxm-collection-card { border-radius:18px; padding:10px; }
+  .mxm-collection-previews { gap:7px; }
+  .mxm-collection-cheapest { min-height:38px; padding-inline:10px; font-size:9.5px; }
+  .mxm-collection-cart { width:38px; height:38px; }
+  .mxm-collection-card-actions { grid-template-columns:minmax(0,1fr) 38px; gap:7px; }
+  .mxm-task-card-main { gap:9px; padding:11px; }
+  .mxm-task-card-icon { height:32px; width:32px; border-radius:11px; }
+  .mxm-task-card-footer { align-items:stretch; flex-direction:column; gap:8px; padding:9px 10px 10px; }
+  .mxm-task-actions { width:100%; justify-content:stretch; }
+  .mxm-task-action-secondary,.mxm-task-action-primary { min-width:0; flex:1 1 0; min-height:34px; padding-inline:8px; }
+  .mxm-task-action-primary { flex-basis:100%; }
+}
+
+/* v0.57.1 — narrow Telegram task actions must wrap instead of clipping. */
+@media (max-width:560px) {
+  .mxm-task-actions { flex-wrap:wrap; }
+  .mxm-task-action-primary { flex:1 0 100%; }
+}
+
+/* v0.58 — production smoothness/performance pass. Keep mobile WebViews on the
+   compositor, skip off-screen card layout and avoid expensive decorative work
+   on coarse-pointer devices. */
+a, button, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.mxm-collection-card,
+.mxm-task-card,
+.mxm-feed-row {
+  content-visibility: auto;
+  contain: layout paint style;
+}
+.mxm-collection-card { contain-intrinsic-size: 330px; }
+.mxm-task-card { contain-intrinsic-size: 118px; }
+.mxm-feed-row { contain-intrinsic-size: 56px; }
+@media (pointer: coarse) {
+  .mxm-profile-frame-neon { animation: none; box-shadow: none; }
+  .mxm-collection-card { box-shadow: inset 0 1px 0 rgba(255,255,255,.018); }
+  .mxm-skeleton::after { animation-duration: 1.7s; }
 }

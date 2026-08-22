@@ -8,7 +8,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-trade", String(profile.id), 90, 60))) return NextResponse.json({ error: "Слишком много торговых запросов. Подождите минуту." }, { status: 429 });
   const runtimeConfig = await getRuntimeConfig();

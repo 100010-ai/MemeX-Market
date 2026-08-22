@@ -7,7 +7,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-quote", String(profile.id), 180, 60))) return NextResponse.json({ error: "Слишком много запросов котировки" }, { status: 429 });
   const { id } = await params;
@@ -15,12 +15,12 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const side = body.side === "buy" ? "buy" : body.side === "sell" ? "sell" : null;
   const amount = Number(body.amount);
-  if (!side || !Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "Invalid quote request" }, { status: 400 });
+  if (!side || !Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "Некорректный запрос котировки" }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
   const { data: coin, error } = await supabase.from("coins").select("id,status,token_reserve,quote_reserve,current_price").eq("id", id).maybeSingle();
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
-  if (!coin || coin.status !== "active") return NextResponse.json({ error: "Coin is not tradeable" }, { status: 404 });
+  if (!coin || coin.status !== "active") return NextResponse.json({ error: "Этот мемкоин недоступен для торговли" }, { status: 404 });
 
   const quote = calculateCoinQuote({
     side,
@@ -29,7 +29,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     quoteReserve: Number(coin.quote_reserve),
     currentPrice: Number(coin.current_price),
   });
-  if (!quote) return NextResponse.json({ error: "Trade is too small" }, { status: 400 });
+  if (!quote) return NextResponse.json({ error: "Сумма сделки слишком мала" }, { status: 400 });
   return NextResponse.json({ quote });
 }
 export const POST = withApiErrors("app/api/coins/[id]/quote/route.ts:POST", POSTHandler);

@@ -59,7 +59,7 @@ async function evaluatePriceAlerts() {
         p_alert_id: row.id,
         p_price: price,
         p_hit: hit,
-        p_title: "Price alert сработал",
+        p_title: "Ценовое уведомление сработало",
         p_body: `${label} · ${price.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`,
         p_href: href,
         p_metadata: { source: "notifications_dispatch" },
@@ -130,7 +130,7 @@ async function dispatchTelegram() {
 }
 
 async function handler(request: Request) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorized(request)) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   try {
     const priceAlerts = await evaluatePriceAlerts();
     const telegram = await dispatchTelegram();

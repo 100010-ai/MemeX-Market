@@ -14,10 +14,10 @@ async function POSTHandler(request: Request) {
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const initData = typeof body.initData === "string" ? body.initData : "";
-    if (!initData) return NextResponse.json({ error: "initData is required" }, { status: 400 });
+    if (!initData) return NextResponse.json({ error: "Не переданы данные мини-приложения Telegram" }, { status: 400 });
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) return NextResponse.json({ error: "Telegram bot is not configured" }, { status: 503 });
+    if (!botToken) return NextResponse.json({ error: "Telegram-бот не настроен" }, { status: 503 });
     if (!getSessionConfigStatus().configured) return NextResponse.json({ error: "Сессии временно недоступны" }, { status: 503 });
 
     // Validate first so the rate-limit key belongs to the actual signed
@@ -41,7 +41,7 @@ async function POSTHandler(request: Request) {
     });
     if (error) return apiFailure(error, "Не удалось синхронизировать профиль Telegram", 503);
     if (!data || typeof data !== "object") {
-      return NextResponse.json({ error: "Supabase вернул неполный профиль" }, { status: 503 });
+      return NextResponse.json({ error: "Сервис профиля вернул неполные данные" }, { status: 503 });
     }
     if (startParam?.startsWith("ref_")) {
       const code = startParam.slice(4);
@@ -58,7 +58,7 @@ async function POSTHandler(request: Request) {
     await setSession(user.id);
     return NextResponse.json({ profile }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
-    return apiFailure(error, "Telegram authentication failed");
+    return apiFailure(error, "Не удалось выполнить авторизацию Telegram");
   }
 }
 export const POST = withApiErrors("app/api/auth/telegram/route.ts:POST", POSTHandler);

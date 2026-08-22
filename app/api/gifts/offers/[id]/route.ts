@@ -23,7 +23,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (action === "accept" || action === "reject") {
     if (action === "accept") {
       const runtimeConfig = await getRuntimeConfig();
-      if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+      if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
     }
     const { data, error } = await supabase.rpc("resolve_gift_offer_v2", { p_owner_id: profile.id, p_offer_id: id, p_action: action });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -6,7 +6,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "promo-code", String(profile.id), 12, 300))) return NextResponse.json({ error: "Слишком много попыток. Попробуйте позже." }, { status: 429 });
   const body = await readJsonObject(request);

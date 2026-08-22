@@ -23,7 +23,6 @@ type RawCollection = {
   baseName?: unknown;
   listedCount?: unknown;
   floorPrice?: unknown;
-  previewTotal?: unknown;
   previews?: unknown;
 };
 
@@ -34,10 +33,10 @@ function finite(value: unknown): number | null {
 
 async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.gifts) {
-    return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+    return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   }
   const requested = Number(request.nextUrl.searchParams.get("limit") || 30);
   const limit = Number.isFinite(requested) ? Math.max(1, Math.min(60, Math.trunc(requested))) : 30;
@@ -76,7 +75,7 @@ async function GETHandler(request: NextRequest) {
         baseName,
         listedCount: Math.max(0, finite(row.listedCount) || 0),
         floorPrice: finite(row.floorPrice),
-        previewTotal: Math.max(0, finite(row.previewTotal) || 0),
+        previewTotal: previews.reduce((sum, preview) => sum + preview.listingPrice, 0),
         previews,
       }];
     });

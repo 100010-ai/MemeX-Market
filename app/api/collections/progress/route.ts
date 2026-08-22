@@ -33,7 +33,7 @@ async function GETHandler() {
       : Promise.resolve({ data: [] as Array<{ base_name: string; item_count: number; holder_count: number; floor_price: number | null }>, error: null }),
     supabase.from("collection_bonus_claims").select("base_name,claimed_at").eq("profile_id", profile.id),
   ]);
-  if (overviewResult.error) return apiFailure(overviewResult.error, "Не удалось загрузить серии Gifts");
+  if (overviewResult.error) return apiFailure(overviewResult.error, "Не удалось загрузить серии подарков");
   if (claimsResult.error) return apiFailure(claimsResult.error, "Не удалось загрузить бонусы коллекций");
   const claimed = new Set((claimsResult.data || []).map((row) => String(row.base_name)));
   const overviewRows = (overviewResult.data || []) as Array<{ base_name: string; item_count: number; holder_count: number; floor_price: number | null }>;

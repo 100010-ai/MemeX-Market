@@ -45,7 +45,7 @@ const sortOptions: Choice[] = [
   { value: "random", label: "Перемешано", hint: "Каждый заход — новая подборка" },
   { value: "price", label: "Сначала дешевле" },
   { value: "newest", label: "Сначала новые" },
-  { value: "offers", label: "Больше офферов" },
+  { value: "offers", label: "Больше предложений" },
   { value: "number", label: "По номеру" },
   { value: "rarity", label: "По редкости" },
 ];

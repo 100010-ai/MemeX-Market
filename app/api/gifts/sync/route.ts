@@ -16,7 +16,7 @@ async function POSTHandler(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("gift sync", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось синхронизировать Telegram Gifts" }, { status: 502 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось синхронизировать подарки Telegram" }, { status: 502 });
   }
 }
 export const POST = withApiErrors("app/api/gifts/sync/route.ts:POST", POSTHandler);

@@ -12,12 +12,12 @@ const eligibilityMessages: Record<string, string> = {
   product_unavailable: "Товар временно недоступен",
   profile_missing: "Профиль не найден",
   case_sold_out: "Этот кейс распродан",
-  season_pass_owned: "Premium Track текущего сезона уже открыт",
+  season_pass_owned: "Премиум-ветка текущего сезона уже открыта",
   profile_item_owned: "Этот предмет профиля уже получен",
-  energy_full: "Energy уже заполнена",
+  energy_full: "Энергия уже заполнена",
   invalid_creator_coin: "Выберите свой активный мемкоин",
   memecoins_disabled: "Рынок мемкоинов временно отключён",
-  boost_capacity_full: "Все слоты Coin Boost сейчас заняты",
+  boost_capacity_full: "Все слоты продвижения мемкоинов сейчас заняты",
   stars_disabled: "Покупки за Stars временно отключены",
 };
 
@@ -42,7 +42,7 @@ async function POSTHandler(request: Request) {
   const sku = typeof body.sku === "string" ? body.sku.trim().toLowerCase() : "";
   let stars = 0;
   const virtualTon = 0;
-  let title = "MXM Store";
+  let title = "Магазин MXM";
   let description = "Игровая покупка внутри виртуальной экономики MXM. Не является настоящим TON и не выводится.";
   let rewardLabel = "Покупка MXM";
   let productSku: string | null = null;
@@ -67,7 +67,7 @@ async function POSTHandler(request: Request) {
     stars = Number(product.stars_price);
     if (!Number.isInteger(stars) || stars < 5 || stars > 100_000) return NextResponse.json({ error: "Некорректная цена товара" }, { status: 500 });
     productSku = String(product.sku);
-    title = String(product.title || "MXM Store").slice(0, 32);
+    title = String(product.title || "Магазин MXM").slice(0, 32);
     description = `${String(product.description || "Игровая покупка MXM")} Только внутри MXM; без вывода и денежной стоимости.`.slice(0, 255);
     rewardLabel = String(product.reward_label || product.title || "Покупка MXM").slice(0, 32);
     if (metadata.requiresCoin === true) {
@@ -96,7 +96,7 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ error: eligibilityMessages[reason] || "Покупка сейчас недоступна", reason }, { status: 409 });
     }
     if (Number(eligibilityData.stars) !== stars) return NextResponse.json({ error: "Цена товара изменилась. Обновите магазин." }, { status: 409 });
-  } else return NextResponse.json({ error: "Не выбран товар MXM Store" }, { status: 400 });
+  } else return NextResponse.json({ error: "Не выбран товар в магазине MXM" }, { status: 400 });
 
   if (!Number.isInteger(stars) || stars < 5 || stars > 100_000) return NextResponse.json({ error: "Некорректная цена Stars" }, { status: 400 });
 

@@ -46,16 +46,16 @@ export default function HubPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <RealtimeRefresh channelName="mxm-hub" tables={realtimeTables} onChange={realtimeReload} />
+      <RealtimeRefresh channelName="mxm-hub" tables={realtimeTables} onChange={realtimeReload} debounceMs={1800} />
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div><h1 className="text-[15px] font-semibold tracking-[-.02em]">Лента рынка</h1><p className="mt-1 text-[10px] text-[var(--muted)]">Сделки, листинги и лидеры MXM</p></div>
+        <div><h1 className="text-[15px] font-semibold tracking-[-.02em]">Лента рынка</h1><p className="mt-1 text-[10px] text-[var(--muted)]">Сделки, новые лоты и лидеры MXM</p></div>
         {meRank !== null ? <Link href="/leaderboard" className="rounded-[15px] border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-right"><p className="text-[9px] text-[var(--muted)]">Ваше место</p><p className="mt-0.5 text-sm font-semibold text-[var(--accent)]">#{meRank}</p></Link> : null}
       </div>
 
       <div className="mxm-hscroll mb-4 gap-2 pb-1">
-        <QuickLink href="/market" icon={<LineChart size={15} />} label="Маркет" />
-        <QuickLink href="/orders" icon={<Activity size={15} />} label="Ордера" />
+        <QuickLink href="/market" icon={<LineChart size={15} />} label="Рынок" />
+        <QuickLink href="/orders" icon={<Activity size={15} />} label="Заявки" />
         <QuickLink href="/tasks" icon={<ListChecks size={15} />} label="Задания" />
         <QuickLink href="/vault" icon={<Boxes size={15} />} label="Портфель" />
         <QuickLink href="/leaderboard" icon={<Trophy size={15} />} label="Рейтинг" />
@@ -107,4 +107,4 @@ function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode;
 }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-44 place-items-center px-4 text-center text-[11px] text-[var(--muted)]">{text}</div>; }
 function RowsSkeleton({ count }: { count: number }) { return <div className="space-y-2 p-3">{Array.from({ length: count }, (_, i) => <div key={i} className="mxm-skeleton h-12 rounded-[14px]" />)}</div>; }
-function activityKind(kind: ActivityItem["kind"]) { return kind === "coin" ? "коин" : kind === "gift" ? "покупка" : kind === "launch" ? "запуск" : kind === "listing" ? "листинг" : kind === "reprice" ? "цена" : kind === "unlist" ? "снят" : "оффер"; }
+function activityKind(kind: ActivityItem["kind"]) { return kind === "coin" ? "мемкоин" : kind === "gift" ? "покупка" : kind === "launch" ? "запуск" : kind === "listing" ? "выставлен" : kind === "reprice" ? "цена" : kind === "unlist" ? "снят" : "предложение"; }

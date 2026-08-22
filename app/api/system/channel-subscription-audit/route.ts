@@ -15,7 +15,7 @@ function authorized(request: Request) {
 }
 
 async function handler(request: Request) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorized(request)) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const candidates = await supabase

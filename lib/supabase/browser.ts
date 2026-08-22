@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RealtimeConfig = { enabled: true; url: string; key: string } | { enabled: false; reason: string };
 
@@ -20,10 +20,10 @@ export function getSupabaseBrowser(): Promise<SupabaseClient | null> {
       console.warn(`[MXM] Supabase Realtime отключён: ${config.reason}`);
       return null;
     }
-    return createClient(config.url, config.key, {
+    return import("@supabase/supabase-js").then(({ createClient }) => createClient(config.url, config.key, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       realtime: { params: { eventsPerSecond: 10 } },
-    });
+    }));
   });
   return clientPromise;
 }

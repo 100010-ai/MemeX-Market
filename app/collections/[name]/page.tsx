@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BarChart3, Gem, Layers3, RefreshCw, Search, ShoppingBasket, Star, Users } from "lucide-react";
@@ -8,10 +9,17 @@ import { apiFetch } from "@/lib/api";
 import { ago, money, percent } from "@/lib/format";
 import type { GiftAsset, GiftCollectionDetail, GiftTraitGroup } from "@/lib/types";
 import { safeDecodeURIComponent } from "@/lib/safe-data";
-import { CoinChart } from "@/components/coin-chart";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
-import { AdvancedOffersPanel } from "@/components/gifts/advanced-offers-panel";
+
+const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
+  ssr: false,
+  loading: () => <div className="mxm-skeleton h-[320px] rounded-[16px]" />,
+});
+const AdvancedOffersPanel = dynamic(() => import("@/components/gifts/advanced-offers-panel").then((module) => module.AdvancedOffersPanel), {
+  ssr: false,
+  loading: () => <div className="mxm-skeleton h-28 rounded-[18px]" />,
+});
 
 const realtimeTables = ["virtual_gifts", "gift_trades", "gift_offers", "gift_listing_events", "market_events"];
 
@@ -116,8 +124,8 @@ export default function GiftCollectionPage() {
     const cheapest = data.gifts.filter((gift) => gift.listingPrice != null).slice().sort((a, b) => Number(a.listingPrice) - Number(b.listingPrice)).slice(0, count);
     const estimate = cheapest.length === count ? cheapest.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0) : null;
     const question = estimate == null
-      ? `Купить ${count} самых дешёвых Gifts из ${data.collection.baseName}?`
-      : `Купить ${count} самых дешёвых Gifts примерно за ${money(estimate)}? Итог проверится сервером перед покупкой.`;
+      ? `Купить ${count} самых дешёвых подарков из ${data.collection.baseName}?`
+      : `Купить ${count} самых дешёвых подарков примерно за ${money(estimate)}? Итог проверится сервером перед покупкой.`;
     if (!window.confirm(question)) return;
     setBusySweep(count);
     setSweepMessage(null);
@@ -128,10 +136,10 @@ export default function GiftCollectionPage() {
         body: JSON.stringify({ count }),
       });
       const total = Number(result.sweep?.total || 0);
-      setSweepMessage(`Куплено ${Number(result.sweep?.itemCount || count)} Gifts${total > 0 ? ` · ${money(total)}` : ""}`);
+      setSweepMessage(`Куплено ${Number(result.sweep?.itemCount || count)} подарков${total > 0 ? ` · ${money(total)}` : ""}`);
       await load(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось выполнить Sweep");
+      setError(cause instanceof Error ? cause.message : "Не удалось выполнить быструю покупку");
     } finally {
       setBusySweep(null);
     }
@@ -161,9 +169,9 @@ export default function GiftCollectionPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <RealtimeRefresh channelName={`mxm-collection-${encodeURIComponent(c.baseName)}`} tables={realtimeTables} onChange={reload} />
+      <RealtimeRefresh channelName={`mxm-collection-${encodeURIComponent(c.baseName)}`} tables={realtimeTables} onChange={reload} debounceMs={1200} />
       <div className="mb-3 flex items-center justify-between gap-3">
-        <Link href="/market" className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-white"><ArrowLeft size={15} />Маркет</Link>
+        <Link href="/market" className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-white"><ArrowLeft size={15} />Рынок</Link>
         <button onClick={toggleWatch} disabled={busyWatch} aria-label={data.watched ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-9 w-9 place-items-center rounded-[20px] border ${data.watched ? "border-[var(--accent)] bg-[rgba(198,170,88,.09)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button>
       </div>
 
@@ -172,10 +180,10 @@ export default function GiftCollectionPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-semibold tracking-tight md:text-lg">{c.baseName}</h1>
-              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} NFT · {c.holderCount} владельцев · {c.listedPct.toFixed(1)}% в продаже</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{c.itemCount} подарков · {c.holderCount} владельцев · {c.listedPct.toFixed(1)}% в продаже</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-[var(--muted)]">MXM floor</p>
+              <p className="text-[10px] text-[var(--muted)]">Мин. цена</p>
               <p className="mt-1 flex items-center justify-end gap-1 text-base font-semibold"><Gem size={14} fill="currentColor" />{c.floorPrice == null ? "—" : money(c.floorPrice)}</p>
               <p className={`mt-1 text-[11px] ${c.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(c.change24h)} 24h</p>
             </div>
@@ -190,14 +198,14 @@ export default function GiftCollectionPage() {
         <div className="grid grid-cols-4 border-t border-[var(--border-soft)]">
           <Metric icon={<BarChart3 size={12} />} label="Объём 7д" value={money(c.volume7d)} />
           <Metric icon={<Gem size={12} />} label="Продажи 7д" value={String(c.tradeCount7d)} />
-          <Metric icon={<Gem size={12} />} label="High sale" value={c.highSale == null ? "—" : money(c.highSale)} />
-          <Metric icon={<Gem size={12} />} label="Внешний floor" value={c.externalFloor == null ? "—" : money(c.externalFloor)} />
+          <Metric icon={<Gem size={12} />} label="Макс. продажа" value={c.highSale == null ? "—" : money(c.highSale)} />
+          <Metric icon={<Gem size={12} />} label="Внешняя мин. цена" value={c.externalFloor == null ? "—" : money(c.externalFloor)} />
         </div>
       </section>
 
       <section className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3">
-        <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Sweep</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
-        <div className="mt-3 grid grid-cols-3 gap-2">{([3,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} Gifts`}</button>)}</div>
+        <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Быстрая покупка</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
+        <div className="mt-3 grid grid-cols-3 gap-2">{([3,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} подарков`}</button>)}</div>
       </section>
 
       <div className="mt-3"><AdvancedOffersPanel baseName={c.baseName} models={data.models} backdrops={data.backdrops} symbols={data.symbols} /></div>
@@ -225,7 +233,7 @@ export default function GiftCollectionPage() {
                 <FilterSelect value={model} onChange={setModel} label="Все модели" values={data.models.map((item) => item.name)} />
                 <FilterSelect value={backdrop} onChange={setBackdrop} label="Все фоны" values={data.backdrops.map((item) => item.name)} />
                 <FilterSelect value={symbol} onChange={setSymbol} label="Все символы" values={data.symbols.map((item) => item.name)} />
-                <select value={sort} onChange={(event) => setSort(event.target.value as GiftSort)} className="h-8 shrink-0 rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-2 text-[10px] outline-none"><option value="price-asc">Цена ↑</option><option value="price-desc">Цена ↓</option><option value="rarity">Редкость</option><option value="offers">Офферы</option><option value="number">Номер</option><option value="newest">Новые лоты</option></select>
+                <select value={sort} onChange={(event) => setSort(event.target.value as GiftSort)} className="h-8 shrink-0 rounded-[14px] border border-[var(--border-soft)] bg-[var(--surface)] px-2 text-[10px] outline-none"><option value="price-asc">Цена ↑</option><option value="price-desc">Цена ↓</option><option value="rarity">Редкость</option><option value="offers">Предложения</option><option value="number">Номер</option><option value="newest">Новые лоты</option></select>
               </div>
             </div>
             {visibleGifts.length ? <div className="market-grid grid gap-2.5">{visibleGifts.map((gift, index) => <GiftCard key={gift.virtualGiftId} gift={gift} priority={index < 4} />)}</div> : <div className="rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-xs text-[var(--muted)]">По этим фильтрам активных лотов нет.</div>}
@@ -252,9 +260,9 @@ function activityLabel(kind: string) {
   if (kind === "listed") return "выставлен";
   if (kind === "repriced") return "цена изменена";
   if (kind === "unlisted") return "снят с продажи";
-  if (kind === "expired") return "листинг истёк";
+  if (kind === "expired") return "срок продажи истёк";
   if (kind === "sold") return "продан";
-  if (kind === "offer_accepted") return "оффер принят";
+  if (kind === "offer_accepted") return "предложение принято";
   return kind;
 }
 
@@ -272,5 +280,5 @@ function TraitTabButton({ active, onClick, children }: { active: boolean; onClic
 
 function TraitTable({ rows }: { rows: GiftTraitGroup[] }) {
   if (!rows.length) return <div className="p-6 text-center text-xs text-[var(--muted)]">Нет данных.</div>;
-  return <div className="divide-y divide-[var(--border-soft)]">{rows.slice(0, 40).map((row) => <div key={row.name} className="grid grid-cols-[minmax(0,1fr)_56px_74px] items-center gap-2 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-xs">{row.name}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{row.count} шт. · {row.listedCount} в продаже{row.rarityPerMille == null ? "" : ` · ${(row.rarityPerMille / 10).toFixed(row.rarityPerMille % 10 ? 1 : 0)}%`}</p></div><span className="text-right text-[10px] text-[var(--muted)]">флор</span><span className="truncate text-right text-xs font-medium">{row.floorPrice == null ? "—" : money(row.floorPrice)}</span></div>)}</div>;
+  return <div className="divide-y divide-[var(--border-soft)]">{rows.slice(0, 40).map((row) => <div key={row.name} className="grid grid-cols-[minmax(0,1fr)_56px_74px] items-center gap-2 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-xs">{row.name}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{row.count} шт. · {row.listedCount} в продаже{row.rarityPerMille == null ? "" : ` · ${(row.rarityPerMille / 10).toFixed(row.rarityPerMille % 10 ? 1 : 0)}%`}</p></div><span className="text-right text-[10px] text-[var(--muted)]">мин. цена</span><span className="truncate text-right text-xs font-medium">{row.floorPrice == null ? "—" : money(row.floorPrice)}</span></div>)}</div>;
 }

@@ -82,7 +82,7 @@ export type GiftSyncResult = {
 
 function botToken() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured");
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN не настроен");
   return token;
 }
 
@@ -121,7 +121,7 @@ function assertRarity(value: unknown, label: string) {
 
 function assertUniqueGift(gift: TelegramUniqueGift) {
   if (!gift.gift_id || !gift.name || !gift.base_name || !Number.isInteger(gift.number) || gift.number <= 0) {
-    throw new Error("Telegram returned an invalid unique gift identity");
+    throw new Error("Telegram вернул некорректный идентификатор подарка");
   }
   if (!gift.model?.name) throw new Error(`Telegram gift ${gift.name} has no model name`);
   if (!gift.symbol?.name) throw new Error(`Telegram gift ${gift.name} has no symbol name`);
@@ -244,14 +244,14 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
         limit: 100,
       });
       pagesFetched += 1;
-      if (!Number.isInteger(result.total_count) || result.total_count < 0) throw new Error("Telegram returned an invalid gift count");
+      if (!Number.isInteger(result.total_count) || result.total_count < 0) throw new Error("Telegram вернул некорректное количество подарков");
       if (expectedTotal === null) expectedTotal = result.total_count;
-      else if (expectedTotal !== result.total_count) throw new Error("Telegram Gift collection changed during sync; retry the sync");
-      if (!Array.isArray(result.gifts)) throw new Error("Telegram returned an invalid gifts payload");
+      else if (expectedTotal !== result.total_count) throw new Error("Коллекция подарков Telegram изменилась во время синхронизации. Повторите синхронизацию");
+      if (!Array.isArray(result.gifts)) throw new Error("Telegram вернул некорректные данные подарков");
       all.push(...result.gifts);
       if (!result.next_offset) break;
       offset = result.next_offset;
-      if (page === 99) throw new Error("Telegram Gift collection exceeds the supported sync window");
+      if (page === 99) throw new Error("Коллекция подарков Telegram превышает поддерживаемый объём синхронизации");
     }
 
     const receivedUnique = all.filter((entry): entry is UniqueOwnedGift => entry.type === "unique");
@@ -314,7 +314,7 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
       ? await supabase.from("gift_assets").select("id,telegram_name,is_burned").in("telegram_name", seenNames)
       : { data: [] as Array<{ id: string; telegram_name: string; is_burned: boolean }>, error: null };
     if (assetsResult.error) throw assetsResult.error;
-    if ((assetsResult.data || []).length !== seenNames.length) throw new Error("Supabase did not return every synced Telegram Gift asset");
+    if ((assetsResult.data || []).length !== seenNames.length) throw new Error("База данных вернула не все синхронизированные подарки Telegram");
 
     const assets = (assetsResult.data || []) as Array<{ id: unknown; telegram_name: unknown; is_burned: boolean }>;
     const burnedAssetIds = assets.filter((asset) => asset.is_burned).map((asset) => String(asset.id));
@@ -420,13 +420,13 @@ export async function getTelegramFile(fileId: string, maxBytes = MAX_TELEGRAM_GI
     fileSize = cached.size;
   } else {
     const file = await telegramApi<{ file_id: string; file_unique_id: string; file_size?: number; file_path?: string }>("getFile", { file_id: fileId });
-    if (!file.file_path) throw new Error("Telegram did not return file_path");
+    if (!file.file_path) throw new Error("Telegram не вернул путь к файлу");
     filePath = file.file_path;
     fileSize = file.file_size ?? null;
     telegramPathCache.set(fileId, { path: filePath, size: fileSize, expiresAt: Date.now() + 45 * 60_000 });
     if (telegramPathCache.size > 1000) telegramPathCache.delete(telegramPathCache.keys().next().value as string);
   }
-  if (fileSize !== null && fileSize > maxBytes) throw new Error("Telegram gift media exceeds the allowed size");
+  if (fileSize !== null && fileSize > maxBytes) throw new Error("Медиа подарка Telegram превышает допустимый размер");
 
   const response = await fetch(`https://api.telegram.org/file/bot${botToken()}/${filePath}`, {
     cache: "force-cache",
@@ -436,7 +436,7 @@ export async function getTelegramFile(fileId: string, maxBytes = MAX_TELEGRAM_GI
   const contentLength = Number(response.headers.get("content-length") || 0);
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     await response.body?.cancel();
-    throw new Error("Telegram gift media exceeds the allowed size");
+    throw new Error("Медиа подарка Telegram превышает допустимый размер");
   }
   return { response, filePath, fileSize };
 }
@@ -446,13 +446,13 @@ export async function getTelegramTgsJson(fileId: string) {
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   const { response } = await getTelegramFile(fileId, MAX_TGS_COMPRESSED_BYTES);
   const limited = await readResponseBytesLimited(response, MAX_TGS_COMPRESSED_BYTES);
-  if (!limited) throw new Error("Telegram TGS is empty or too large");
+  if (!limited) throw new Error("TGS-анимация Telegram пуста или превышает допустимый размер");
   const bytes = Buffer.from(limited);
   const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
   const jsonBytes = isGzip ? gunzipSync(bytes, { maxOutputLength: MAX_TGS_JSON_BYTES }) : bytes;
-  if (jsonBytes.length > MAX_TGS_JSON_BYTES) throw new Error("Telegram TGS JSON is too large");
+  if (jsonBytes.length > MAX_TGS_JSON_BYTES) throw new Error("Данные TGS-анимации Telegram превышают допустимый размер");
   const parsed = JSON.parse(jsonBytes.toString("utf8"));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Telegram TGS did not contain Lottie JSON");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("TGS-анимация Telegram не содержит корректные данные Lottie");
   const data = parsed as Record<string, unknown>;
   tgsJsonCache.set(fileId, { data, expiresAt: Date.now() + 6 * 60 * 60_000 });
   if (tgsJsonCache.size > 300) tgsJsonCache.delete(tgsJsonCache.keys().next().value as string);
@@ -472,7 +472,7 @@ export type GiftCatalogImportResult = {
 /**
  * Imports verified Telegram Unique Gift metadata into the shared MXM catalogue
  * without assigning the real Telegram owner's inventory to any MXM player.
- * Uses only the Bot API token already required by the Mini App.
+ * Uses only the Bot API token already required by the мини-приложение.
  */
 export async function importTelegramGiftCatalog(telegramId: number): Promise<GiftCatalogImportResult> {
   if (!Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error("Некорректный Telegram ID источника каталога");
@@ -493,10 +493,10 @@ export async function importTelegramGiftCatalog(telegramId: number): Promise<Gif
       limit: 100,
     });
     pagesFetched += 1;
-    if (!Number.isInteger(result.total_count) || result.total_count < 0) throw new Error("Telegram вернул некорректное количество Gifts");
+    if (!Number.isInteger(result.total_count) || result.total_count < 0) throw new Error("Telegram вернул некорректное количество подарков");
     if (expectedTotal === null) expectedTotal = result.total_count;
     else if (expectedTotal !== result.total_count) throw new Error("Коллекция Telegram изменилась во время импорта; повторите импорт");
-    if (!Array.isArray(result.gifts)) throw new Error("Telegram вернул некорректный payload Gifts");
+    if (!Array.isArray(result.gifts)) throw new Error("Telegram вернул некорректные данные подарков");
     all.push(...result.gifts);
     if (!result.next_offset) break;
     offset = result.next_offset;

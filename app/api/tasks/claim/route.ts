@@ -7,13 +7,13 @@ import { MAIN_CHANNEL_MISSION_KEY, MAIN_CHANNEL_URL, verifyMainChannelMembership
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "mission-claim", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов. Подождите немного." }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const missionId = typeof body.missionId === "string" ? body.missionId.trim() : "";
-  if (!missionId) return NextResponse.json({ error: "Mission is required" }, { status: 400 });
+  if (!missionId) return NextResponse.json({ error: "Не указано задание" }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
   const mission = await supabase.from("missions").select("key").eq("id", missionId).eq("active", true).maybeSingle();

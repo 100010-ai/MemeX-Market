@@ -26,8 +26,6 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://telegram.org" />
-        <link rel="preconnect" href="https://nft.fragment.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://nft.fragment.com" />
       </head>
       <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />

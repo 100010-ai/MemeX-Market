@@ -12,17 +12,17 @@ type Body = { virtualGiftIds?: unknown };
 
 async function POSTHandler(request: NextRequest) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "cart-bulk", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
 
   const body = await readJsonObject(request) as Body | null;
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const ids = [...new Set(Array.isArray(body.virtualGiftIds) ? body.virtualGiftIds.map((value) => String(value || "").trim()).filter(validUuidLike) : [])].slice(0, 5);
-  if (!ids.length) return NextResponse.json({ error: "Не выбраны Gifts" }, { status: 400 });
+  if (!ids.length) return NextResponse.json({ error: "Подарки не выбраны" }, { status: 400 });
 
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
 
   const supabase = getSupabaseAdmin();
   try {
@@ -71,7 +71,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ ok: true, added: addIds, count: existingIds.size + addIds.length });
   } catch (error) {
-    return apiFailure(error, "Не удалось добавить набор Gifts в корзину");
+    return apiFailure(error, "Не удалось добавить набор подарков в корзину");
   }
 }
 

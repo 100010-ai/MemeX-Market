@@ -15,7 +15,7 @@ export function getSessionConfigStatus() {
 
 function secret() {
   const value = process.env.SESSION_SECRET;
-  if (!value || value.length < 32) throw new Error("SESSION_SECRET must contain at least 32 characters");
+  if (!value || value.length < 32) throw new Error("SESSION_SECRET должен содержать минимум 32 символа");
   return value;
 }
 

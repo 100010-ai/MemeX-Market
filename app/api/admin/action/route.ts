@@ -168,7 +168,7 @@ async function POSTHandler(request: Request) {
         ]);
         if (owner.error) throw owner.error;
         if (liquidity.playerOnly && owner.data?.is_system) {
-          return NextResponse.json({ error: "Рынок уже передан игрокам. Системные/NPC Gifts больше нельзя выставлять." }, { status: 409 });
+          return NextResponse.json({ error: "Рынок уже передан игрокам. Системные подарки больше нельзя выставлять." }, { status: 409 });
         }
       }
       const result = await supabase.rpc("list_virtual_gift", { p_profile_id: gift.data.owner_profile_id, p_virtual_gift_id: id, p_price: price });

@@ -72,15 +72,39 @@ export function normalizeRuntimeConfig(row: Record<string, unknown>): RuntimeCon
   };
 }
 
+type RuntimeConfigCache = { expiresAt: number; value: RuntimeConfig };
+
+const RUNTIME_CONFIG_TTL_MS = 8_000;
+let runtimeConfigCache: RuntimeConfigCache | null = null;
+let runtimeConfigInFlight: Promise<RuntimeConfig> | null = null;
+
+export function invalidateRuntimeConfigCache() {
+  runtimeConfigCache = null;
+}
+
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("runtime_config_v056")
-    .select("maintenance_mode,maintenance_message,feature_flags,remote_config,updated_at")
-    .eq("singleton", true)
-    .single();
-  if (error) throw error;
-  if (!data) throw new Error("Runtime configuration is missing");
-  return normalizeRuntimeConfig(data as Record<string, unknown>);
+  const now = Date.now();
+  if (runtimeConfigCache && runtimeConfigCache.expiresAt > now) return runtimeConfigCache.value;
+  if (runtimeConfigInFlight) return runtimeConfigInFlight;
+
+  runtimeConfigInFlight = (async () => {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from("runtime_config_v056")
+      .select("maintenance_mode,maintenance_message,feature_flags,remote_config,updated_at")
+      .eq("singleton", true)
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Конфигурация приложения отсутствует");
+    const value = normalizeRuntimeConfig(data as Record<string, unknown>);
+    runtimeConfigCache = { expiresAt: Date.now() + RUNTIME_CONFIG_TTL_MS, value };
+    return value;
+  })();
+
+  try {
+    return await runtimeConfigInFlight;
+  } finally {
+    runtimeConfigInFlight = null;
+  }
 }
 
 export function validateRuntimeConfigInput(value: unknown) {

@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { ArrowLeft, Share2, Star, Users } from "lucide-react";
-import { CoinChart } from "@/components/coin-chart";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
-import { CoinConditionalOrders } from "@/components/coin-conditional-orders";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
 import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
 import { compact, money, percent, price } from "@/lib/format";
 import type { Candle, Coin, Trade } from "@/lib/types";
+
+const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
+  ssr: false,
+  loading: () => <div className="mxm-skeleton h-[260px] rounded-[16px]" />,
+});
+const CoinConditionalOrders = dynamic(() => import("@/components/coin-conditional-orders").then((module) => module.CoinConditionalOrders), {
+  ssr: false,
+  loading: () => <div className="mxm-skeleton h-32 rounded-[16px]" />,
+});
 
 const realtimeTables = ["coins", "trades"];
 type CoinEconomy = {
@@ -43,6 +51,7 @@ function makeTradeRequestId() {
 export default function CoinPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<Payload | null>(null);
+  const realtimeFilters = useMemo(() => ({ coins: `id=eq.${id}`, trades: `coin_id=eq.${id}` }), [id]);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [marketTab, setMarketTab] = useState<"overview" | "orders" | "holders" | "activity">("overview");
   const [amount, setAmount] = useState("");
@@ -64,7 +73,7 @@ export default function CoinPage() {
       setData(payload);
       setError(null);
     } catch (e) {
-      if (!silent && seq === loadSeq.current) setError(e instanceof Error ? e.message : "Не удалось загрузить коин");
+      if (!silent && seq === loadSeq.current) setError(e instanceof Error ? e.message : "Не удалось загрузить мемкоин");
     }
   }, [id]);
 
@@ -204,10 +213,10 @@ export default function CoinPage() {
 
   return (
     <div className="mx-auto max-w-6xl mxm-page-enter">
-      <RealtimeRefresh channelName={`mxm-coin-${id}`} tables={realtimeTables} onChange={realtimeReload} />
+      <RealtimeRefresh channelName={`mxm-coin-${id}`} tables={realtimeTables} filters={realtimeFilters} onChange={realtimeReload} debounceMs={900} />
       <div className="mb-3 flex items-center justify-between gap-3">
-        <Link href="/market" className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-white"><ArrowLeft size={15} />Маркет</Link>
-        <div className="flex items-center gap-1"><button onClick={shareCoin} aria-label="Поделиться мемкоином" className="grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white"><Share2 size={15} /></button><button onClick={toggleWatch} disabled={watchBusy} aria-label={data.watched ? "Убрать коин из избранного" : "Добавить коин в избранное"} className={`grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white ${data.watched ? "text-[var(--accent)]" : ""}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button></div>
+        <Link href="/market" className="inline-flex items-center gap-2 text-xs text-[var(--muted)] hover:text-white"><ArrowLeft size={15} />Рынок</Link>
+        <div className="flex items-center gap-1"><button onClick={shareCoin} aria-label="Поделиться мемкоином" className="grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white"><Share2 size={15} /></button><button onClick={toggleWatch} disabled={watchBusy} aria-label={data.watched ? "Убрать мемкоин из избранного" : "Добавить мемкоин в избранное"} className={`grid h-8 w-8 place-items-center text-[var(--muted)] transition hover:text-white ${data.watched ? "text-[var(--accent)]" : ""}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button></div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
@@ -219,10 +228,10 @@ export default function CoinPage() {
 
           <section className="border-b border-[var(--border-soft)] pb-4"><CoinChart candles={data.candles} height={260} /></section>
 
-          <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-[var(--border-soft)] pb-4 sm:grid-cols-3 lg:grid-cols-6"><Stat label="MCAP" value={money(coin.marketCap)} /><Stat label="Объём 24ч" value={money(coin.volume24h)} /><Stat label="Ликвидность" value={money(coin.liquidity)} /><Stat label="ATH" value={price(coin.athPrice)} /><Stat label="Холдеры" value={String(coin.holderCount)} /><Stat label="Сделки" value={String(coin.tradeCount24h)} /></div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-[var(--border-soft)] pb-4 sm:grid-cols-3 lg:grid-cols-6"><Stat label="Капитализация" value={money(coin.marketCap)} /><Stat label="Объём 24ч" value={money(coin.volume24h)} /><Stat label="Ликвидность" value={money(coin.liquidity)} /><Stat label="Макс. цена" value={price(coin.athPrice)} /><Stat label="Владельцы" value={String(coin.holderCount)} /><Stat label="Сделки" value={String(coin.tradeCount24h)} /></div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-3 border-b border-[var(--border-soft)] py-3 text-[10px] sm:grid-cols-4">
             <Stat label="Стартовая цена" value={price(data.economy.startPrice)} />
-            <Stat label="Floor" value={data.economy.floorActive && data.economy.floorPrice ? price(data.economy.floorPrice) : "не активен"} />
+            <Stat label="Мин. цена" value={data.economy.floorActive && data.economy.floorPrice ? price(data.economy.floorPrice) : "не активен"} />
             <Stat label="Доля создателя" value={`${data.economy.creatorFeeBps / 100}% из комиссии`} />
             <Stat label="Заблокировано" value={data.economy.lock ? `${compact(data.economy.lock.remaining)} ${coin.symbol}` : "—"} />
           </div>
@@ -233,7 +242,7 @@ export default function CoinPage() {
             <div className="mt-2 flex justify-between text-[10px]"><span className="text-[var(--positive)]">Покупки {money(coin.buyVolume24h)}</span><span className="text-[var(--negative)]">Продажи {money(coin.sellVolume24h)}</span></div>
           </section>
 
-          <section><div className="mb-3 flex gap-2 overflow-x-auto border-b border-[var(--border-soft)] pb-2">{[["overview","Обзор"],["orders","Ордера"],["holders","Холдеры"],["activity","Активность"]].map(([key,label])=><button key={key} onClick={()=>setMarketTab(key as typeof marketTab)} className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] ${marketTab===key?"bg-[var(--panel-3)] text-white":"text-[var(--muted)]"}`}>{label}</button>)}</div>{marketTab==="overview" ? <div className="text-xs text-[var(--muted)]">Покупки {money(coin.buyVolume24h)} · Продажи {money(coin.sellVolume24h)}</div> : null}{marketTab==="activity" ? (data.trades.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.trades.map((trade) => <div key={trade.id} className="flex justify-between py-2 text-xs"><span>{trade.side === "buy" ? "BUY" : "SELL"} {trade.traderName}</span><span>{money(trade.quoteAmount)}</span></div>)}</div> : <Empty text="Сделок пока нет" />) : null}{marketTab==="holders" ? (data.topHolders.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder)=><div key={holder.id} className="flex justify-between py-2 text-xs"><span>{holder.name}</span><span>{compact(holder.quantity)}</span></div>)}</div> : <Empty text="Холдеров нет" />) : null}{marketTab==="orders" ? <div className="text-xs text-[var(--muted)]">Ордера управления доступны в торговом блоке.</div> : null}</section>
+          <section><div className="mb-3 flex gap-2 overflow-x-auto border-b border-[var(--border-soft)] pb-2">{[["overview","Обзор"],["orders","Заявки"],["holders","Владельцы"],["activity","Активность"]].map(([key,label])=><button key={key} onClick={()=>setMarketTab(key as typeof marketTab)} className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] ${marketTab===key?"bg-[var(--panel-3)] text-white":"text-[var(--muted)]"}`}>{label}</button>)}</div>{marketTab==="overview" ? <div className="text-xs text-[var(--muted)]">Покупки {money(coin.buyVolume24h)} · Продажи {money(coin.sellVolume24h)}</div> : null}{marketTab==="activity" ? (data.trades.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.trades.map((trade) => <div key={trade.id} className="flex justify-between py-2 text-xs"><span>{trade.side === "buy" ? "Покупка" : "Продажа"} {trade.traderName}</span><span>{money(trade.quoteAmount)}</span></div>)}</div> : <Empty text="Сделок пока нет" />) : null}{marketTab==="holders" ? (data.topHolders.length ? <div className="max-h-72 overflow-auto divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder)=><div key={holder.id} className="flex justify-between py-2 text-xs"><span>{holder.name}</span><span>{compact(holder.quantity)}</span></div>)}</div> : <Empty text="Владельцев нет" />) : null}{marketTab==="orders" ? <div className="text-xs text-[var(--muted)]">Заявки управления доступны в торговом блоке.</div> : null}</section>
         </div>
 
         <aside className="space-y-4">
@@ -241,7 +250,7 @@ export default function CoinPage() {
             <div className="grid grid-cols-2 border-b border-[var(--border-soft)]"><button onClick={() => switchSide("buy")} className={`py-2.5 text-xs font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button><button onClick={() => switchSide("sell")} className={`py-2.5 text-xs font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button></div>
             <div className="mt-3 flex items-center justify-between text-[11px]"><span className="text-[var(--muted)]">Доступно</span><span>{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
             {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1 text-right text-[9px] text-[#f3d789]">{compact(data.economy.lock.remaining)} заблокировано до {new Date(data.economy.lock.endsAt).toLocaleDateString("ru-RU")}</p> : null}
-            {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} в резерве по офферам подарков</p> : null}
+            {side === "buy" && data.reservedBalance > 0 ? <p className="mt-1 text-right text-[9px] text-[var(--muted-2)]">{money(data.reservedBalance)} в резерве по предложениям на подарки</p> : null}
             <div className="mt-2 flex items-center border-b border-[var(--border)] px-1"><input value={amount} onChange={(e) => { tradeRequestId.current = null; setAmount(e.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /><span className="text-xs text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span></div>
             <div className="mxm-hscroll mt-2 gap-4 border-b border-[var(--border-soft)] pb-2">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} onClick={() => applyFraction(fraction)} className="shrink-0 py-1 text-[10px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
 
@@ -251,11 +260,11 @@ export default function CoinPage() {
             {error ? <div className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1.5 text-xs text-[#ff9aa4]">{error}</div> : null}
             <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-3 w-full py-3 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
             <p className="mt-2 text-center text-[9px] text-[var(--muted-2)]">Расчёт показывается мгновенно. Сервер подтверждает итоговую сделку атомарно.</p>
-            <div className="mt-4 grid grid-cols-2 gap-x-4 border-t border-[var(--border-soft)] pt-3"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Нереализованный PnL" value={money(holdingPnl)} tone={holdingPnl} /></div>
+            <div className="mt-4 grid grid-cols-2 gap-x-4 border-t border-[var(--border-soft)] pt-3"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Нереализованный результат" value={money(holdingPnl)} tone={holdingPnl} /></div>
             <CoinConditionalOrders coin={coin} holdingQuantity={data.holding.availableQuantity} availableBalance={data.availableBalance} onBalanceChange={() => { void refreshProfile(); void load(true); }} />
           </section>
 
-          <section><div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-2 text-xs font-medium"><Users size={14} />Топ холдеров</div>{data.topHolders.length ? <div className="divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="flex items-center justify-between gap-3 py-2.5 text-xs"><span className="truncate"><span className="mr-2 text-[var(--muted)]">{index + 1}</span>{holder.name}{holder.genesisOrdinal ? <span className="ml-2 text-[8px] text-[#f3d789]">Genesis #{holder.genesisOrdinal}</span> : null}</span><span>{compact(holder.quantity)}</span></Link>)}</div> : <Empty text="Холдеров пока нет" />}</section>
+          <section><div className="flex items-center gap-2 border-b border-[var(--border-soft)] pb-2 text-xs font-medium"><Users size={14} />Крупнейшие владельцы</div>{data.topHolders.length ? <div className="divide-y divide-[var(--border-soft)]">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="flex items-center justify-between gap-3 py-2.5 text-xs"><span className="truncate"><span className="mr-2 text-[var(--muted)]">{index + 1}</span>{holder.name}{holder.genesisOrdinal ? <span className="ml-2 text-[8px] text-[#f3d789]">Ранний #{holder.genesisOrdinal}</span> : null}</span><span>{compact(holder.quantity)}</span></Link>)}</div> : <Empty text="Владельцев пока нет" />}</section>
         </aside>
       </div>
     </div>

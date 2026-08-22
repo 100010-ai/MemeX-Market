@@ -10,11 +10,11 @@ export const runtime = "nodejs";
 
 async function POSTHandler(request: NextRequest) {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "cart-checkout", String(profile.id), 12, 60))) return NextResponse.json({ error: "Слишком много попыток покупки" }, { status: 429 });
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   const requestKey = request.headers.get("x-idempotency-key")?.trim() || `srv-cart-${crypto.randomUUID()}`;
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
 

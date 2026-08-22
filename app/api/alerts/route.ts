@@ -63,7 +63,7 @@ async function POSTHandler(request: Request) {
   } else if (kind === "gift") {
     const { data: gift, error } = await supabase.from("virtual_gifts").select("id").eq("id", String(row.virtual_gift_id)).maybeSingle();
     if (error) return apiFailure(error, "Не удалось выполнить запрос");
-    if (!gift) return NextResponse.json({ error: "Gift не найден" }, { status: 404 });
+    if (!gift) return NextResponse.json({ error: "Подарок не найден" }, { status: 404 });
   } else {
     const { data: collection, error } = await supabase.from("gift_collection_overview").select("base_name").eq("base_name", String(row.gift_collection)).maybeSingle();
     if (error) return apiFailure(error, "Не удалось выполнить запрос");

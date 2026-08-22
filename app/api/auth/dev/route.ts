@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 async function POSTHandler() {
   if (process.env.NODE_ENV === "production" || process.env.DEV_AUTH_ENABLED !== "true") {
-    return NextResponse.json({ error: "Dev auth is disabled" }, { status: 403 });
+    return NextResponse.json({ error: "Авторизация разработчика отключена" }, { status: 403 });
   }
   try {
     const telegramId = Number(process.env.DEV_TELEGRAM_ID || 900000001);
@@ -25,7 +25,7 @@ async function POSTHandler() {
     return NextResponse.json({ profile: await getProfileSnapshot(data) });
   } catch (error) {
     console.error("dev auth", error);
-    return apiFailure(error, "Dev auth failed");
+    return apiFailure(error, "Не удалось выполнить авторизацию разработчика");
   }
 }
 export const POST = withApiErrors("app/api/auth/dev/route.ts:POST", POSTHandler);

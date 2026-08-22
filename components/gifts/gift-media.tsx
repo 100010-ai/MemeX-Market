@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GiftAsset, GiftMediaKind } from "@/lib/types";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
+import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 type LottieAnimation = {
   destroy: () => void;
@@ -16,6 +17,8 @@ type LottieAnimation = {
 type DeviceMemoryNavigator = Navigator & { deviceMemory?: number };
 
 const LOTTIE_CACHE_LIMIT = 10;
+const CLIENT_TGS_COMPRESSED_LIMIT = 4 * 1024 * 1024;
+const CLIENT_TGS_JSON_LIMIT = 12 * 1024 * 1024;
 const lottieJsonCache = new Map<string, Promise<unknown>>();
 let lottieModulePromise: Promise<typeof import("lottie-web")> | null = null;
 
@@ -49,21 +52,24 @@ async function loadLottieJson(source: string) {
 
   const task = (async () => {
     const response = await fetch(source, { cache: "force-cache" });
-    if (!response.ok) throw new Error(`Media ${response.status}`);
+    if (!response.ok) throw new Error(`Не удалось загрузить медиа: ${response.status}`);
 
-    const buffer = await response.arrayBuffer();
-    let bytes = new Uint8Array(buffer);
+    const compressed = await readResponseBytesLimited(response, CLIENT_TGS_COMPRESSED_LIMIT);
+    if (!compressed) throw new Error("Медиа подарка пустое или превышает допустимый размер");
+    let bytes = compressed;
     const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
     if (isGzip) {
       const Decompression = (globalThis as typeof globalThis & { DecompressionStream?: new (format: string) => TransformStream }).DecompressionStream;
-      if (!Decompression) throw new Error("TGS decompression is unavailable in this WebView");
-      const stream = new Blob([bytes]).stream().pipeThrough(new Decompression("gzip"));
-      bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      if (!Decompression) throw new Error("Этот Telegram WebView не поддерживает распаковку TGS");
+      const stream = new Blob([toBodyArrayBuffer(bytes)]).stream().pipeThrough(new Decompression("gzip"));
+      const decompressed = await readResponseBytesLimited(new Response(stream), CLIENT_TGS_JSON_LIMIT);
+      if (!decompressed) throw new Error("Анимация подарка превышает допустимый размер");
+      bytes = decompressed;
     }
 
     const text = new TextDecoder().decode(bytes);
     const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== "object") throw new Error("Invalid Lottie payload");
+    if (!parsed || typeof parsed !== "object") throw new Error("Некорректная анимация подарка");
     return parsed;
   })();
 

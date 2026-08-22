@@ -8,7 +8,7 @@ async function GETHandler() {
   if (!getSessionConfigStatus().configured) return NextResponse.json({ error: "Сессии временно недоступны" }, { status: 503 });
   try {
     let profile = await getSessionProfileSnapshot();
-    if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
     try {
       const audit = await auditMainChannelRewardIfNeeded(profile);
       // A clawback changes balance. Refresh the snapshot so the client never

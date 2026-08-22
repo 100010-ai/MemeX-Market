@@ -10,7 +10,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   const { id } = await params;
-  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID оффера" }, { status: 400 });
+  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID предложения" }, { status: 400 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const action = body.action === "cancel" ? "cancel" : body.action === "accept" ? "accept" : null;
@@ -22,9 +22,9 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ result: data });
   }
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   const virtualGiftId = typeof body.virtualGiftId === "string" ? body.virtualGiftId : "";
-  if (!validUuidLike(virtualGiftId)) return NextResponse.json({ error: "Выберите Gift для принятия оффера" }, { status: 400 });
+  if (!validUuidLike(virtualGiftId)) return NextResponse.json({ error: "Выберите подарок для принятия предложения" }, { status: 400 });
   const { data, error } = await supabase.rpc("accept_advanced_gift_offer_v056", { p_owner_id: profile.id, p_virtual_gift_id: virtualGiftId, p_offer_id: id });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ result: data });

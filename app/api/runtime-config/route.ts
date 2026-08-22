@@ -5,7 +5,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 
 async function GETHandler() {
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   try {
     return NextResponse.json({ config: await getRuntimeConfig() }, {
       headers: { "cache-control": "private, max-age=15, stale-while-revalidate=30" },

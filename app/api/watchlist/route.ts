@@ -91,8 +91,8 @@ async function POSTHandler(request: Request) {
   const giftId = kind === "gift" && typeof body.giftId === "string" ? body.giftId : null;
   const baseName = kind === "gift_collection" && typeof body.baseName === "string" ? body.baseName.trim() : null;
   if (kind === "coin" && !validUuidLike(coinId || "")) return NextResponse.json({ error: "Некорректный ID мемкоина" }, { status: 400 });
-  if (kind === "gift" && !validUuidLike(giftId || "")) return NextResponse.json({ error: "Некорректный ID Gift" }, { status: 400 });
-  if (kind === "gift_collection" && (!baseName || baseName.length > 160)) return NextResponse.json({ error: "Некорректная коллекция Gifts" }, { status: 400 });
+  if (kind === "gift" && !validUuidLike(giftId || "")) return NextResponse.json({ error: "Некорректный идентификатор подарка" }, { status: 400 });
+  if (kind === "gift_collection" && (!baseName || baseName.length > 160)) return NextResponse.json({ error: "Некорректная коллекция подарков" }, { status: 400 });
 
   const { data, error } = await supabase.rpc("set_watchlist_v200", {
     p_profile_id: profileId,

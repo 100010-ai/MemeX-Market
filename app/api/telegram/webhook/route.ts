@@ -34,14 +34,14 @@ type TelegramUpdate = {
 async function POSTHandler(request: Request) {
   const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
   const provided = String(request.headers.get("x-telegram-bot-api-secret-token") || "").trim();
-  if (process.env.NODE_ENV === "production" && (!expected || expected.length < 16)) return NextResponse.json({ error: "Webhook secret is not configured" }, { status: 503 });
-  if (expected && !safeSecretEquals(provided, expected)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (process.env.NODE_ENV === "production" && (!expected || expected.length < 16)) return NextResponse.json({ error: "Секрет Telegram webhook не настроен" }, { status: 503 });
+  if (expected && !safeSecretEquals(provided, expected)) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
 
   const raw = await readJsonObject(request);
-  if (!raw) return NextResponse.json({ error: "Invalid Telegram update" }, { status: 400 });
+  if (!raw) return NextResponse.json({ error: "Некорректное обновление Telegram" }, { status: 400 });
   const update = raw as TelegramUpdate;
   const updateId = Number(update.update_id);
-  if (!Number.isSafeInteger(updateId) || updateId < 0) return NextResponse.json({ error: "Invalid Telegram update_id" }, { status: 400 });
+  if (!Number.isSafeInteger(updateId) || updateId < 0) return NextResponse.json({ error: "Некорректное обновление Telegram_id" }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
   const claim = await supabase.rpc("claim_telegram_webhook_update_v300", { p_update_id: updateId });
@@ -128,7 +128,7 @@ async function POSTHandler(request: Request) {
         && String(purchaseData.payer_telegram_id || "") === String(update.message?.from?.id || "");
       if (!matches || !purchaseData) {
         console.error("refunded Stars payment mismatch", purchase.error || { purchaseId });
-        return await done(NextResponse.json({ error: "Refund verification failed" }, { status: 409 }));
+        return await done(NextResponse.json({ error: "Не удалось подтвердить возврат платежа" }, { status: 409 }));
       }
       const transition = await supabase.rpc("mark_star_purchase_refunded_v200", {
         p_purchase_id: purchaseId,
@@ -153,7 +153,7 @@ async function POSTHandler(request: Request) {
       if (purchase.error) return await failed(purchase.error, "Не удалось проверить Stars-покупку");
       if (!purchase.data || String(purchase.data.payer_telegram_id || "") !== String(update.message?.from?.id || "")) {
         console.error("star purchase payer mismatch", { purchaseId });
-        return await done(NextResponse.json({ error: "Payment payer verification failed" }, { status: 403 }));
+        return await done(NextResponse.json({ error: "Не удалось подтвердить плательщика" }, { status: 403 }));
       }
       const result = await supabase.rpc("finalize_star_purchase_v200", {
         p_purchase_id: purchaseId,
@@ -170,7 +170,7 @@ async function POSTHandler(request: Request) {
         : {};
       if (finalized.status !== "paid") {
         console.error("star purchase was not finalized", { purchaseId, status: finalized.status });
-        return await done(NextResponse.json({ error: "Payment was not finalized" }, { status: 409 }));
+        return await done(NextResponse.json({ error: "Платёж не был завершён" }, { status: 409 }));
       }
       if (payment.provider_payment_charge_id) {
         const providerCharge = await supabase.from("star_purchases").update({ provider_payment_charge_id: payment.provider_payment_charge_id, updated_at: new Date().toISOString() }).eq("id", purchaseId);

@@ -14,17 +14,17 @@ function personName(names: Map<string, string>, id: string) {
 async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { id } = await params;
   const supabase = getSupabaseAdmin();
 
   try {
     const giftRow = await resolveGiftAlias(id);
-    if (!giftRow) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
+    if (!giftRow) return NextResponse.json({ error: "Подарок не найден" }, { status: 404 });
 
     const virtualGiftId = nonEmptyId(giftRow.virtual_gift_id);
-    if (!virtualGiftId) return NextResponse.json({ error: "Gift record is invalid" }, { status: 422 });
-    const baseName = text(giftRow.base_name, "Gift", 180);
+    if (!virtualGiftId) return NextResponse.json({ error: "Запись подарка повреждена" }, { status: 422 });
+    const baseName = text(giftRow.base_name, "Подарок", 180);
     const nowIso = new Date().toISOString();
 
     const [tradesResult, offersResult, advancedOffersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
@@ -172,7 +172,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `gift-detail;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     console.error("gift detail", error);
-    return apiFailure(error, "Не удалось загрузить Gift");
+    return apiFailure(error, "Не удалось загрузить подарок");
   }
 }
 export const GET = withApiErrors("app/api/gifts/[id]/route.ts:GET", GETHandler);

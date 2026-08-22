@@ -12,9 +12,9 @@ import { telegramAvatarProxyUrl } from "@/lib/avatar";
 type Board = "overall" | "pnl" | "giftPnl" | "coinPnl" | "gifts" | "coins";
 const tabs: { key: Board; label: string; icon: typeof Trophy }[] = [
   { key: "overall", label: "Общий", icon: Crown },
-  { key: "pnl", label: "PnL", icon: TrendingUp },
-  { key: "giftPnl", label: "Gifts PnL", icon: Gift },
-  { key: "coinPnl", label: "Coins PnL", icon: Coins },
+  { key: "pnl", label: "Прибыль", icon: TrendingUp },
+  { key: "giftPnl", label: "Подарки", icon: Gift },
+  { key: "coinPnl", label: "Мемкоины", icon: Coins },
   { key: "gifts", label: "Коллекция", icon: Trophy },
   { key: "coins", label: "Создатели", icon: LineChart },
 ];
@@ -30,11 +30,11 @@ function boardValue(player: LeaderboardPlayer, board: Board) {
 
 function boardCaption(board: Board) {
   if (board === "overall") return "капитал";
-  if (board === "pnl") return "реализованный PnL";
-  if (board === "giftPnl") return "PnL подарков";
-  if (board === "coinPnl") return "PnL коинов";
+  if (board === "pnl") return "реализованная прибыль";
+  if (board === "giftPnl") return "прибыль по подаркам";
+  if (board === "coinPnl") return "прибыль по мемкоинам";
   if (board === "gifts") return "стоимость коллекции";
-  return "капитализация созданных коинов";
+  return "капитализация созданных мемкоинов";
 }
 
 export default function LeaderboardPage() {

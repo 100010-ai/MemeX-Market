@@ -7,12 +7,12 @@ import { resolveGiftAlias } from "@/lib/gifts/resolver";
 async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const startedAt = performance.now();
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { id } = await params;
 
   try {
     const gift = await resolveGiftAlias(id);
-    if (!gift) return NextResponse.json({ error: "Gift not found" }, { status: 404 });
+    if (!gift) return NextResponse.json({ error: "Подарок не найден" }, { status: 404 });
     const baseName = String(gift.base_name);
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -38,7 +38,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     } });
   } catch (error) {
     console.error("gift candles", error);
-    return apiFailure(error, "Could not load chart");
+    return apiFailure(error, "Не удалось загрузить график");
   }
 }
 export const GET = withApiErrors("app/api/gifts/[id]/candles/route.ts:GET", GETHandler);

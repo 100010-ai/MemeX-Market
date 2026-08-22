@@ -29,7 +29,7 @@ function profileName(row: { username?: unknown; first_name?: unknown }) {
 
 async function GETHandler(request: NextRequest) {
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!(await enforceRateLimit(request, "market-search", String(session.telegramId), 80, 60))) return NextResponse.json({ error: "Слишком много поисковых запросов" }, { status: 429 });
 
   const q = cleanTerm(request.nextUrl.searchParams.get("q") || "");
@@ -38,7 +38,7 @@ async function GETHandler(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const runtimeConfig = await getRuntimeConfig();
   const liquidityResult = await supabase.rpc("gift_market_liquidity_state");
-  if (liquidityResult.error) return apiFailure(liquidityResult.error, "Не удалось проверить режим Gift-рынка");
+  if (liquidityResult.error) return apiFailure(liquidityResult.error, "Не удалось проверить режим рынка подарков");
   const playerOnly = Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly);
   let systemOwnerIds: string[] = [];
   if (playerOnly) {

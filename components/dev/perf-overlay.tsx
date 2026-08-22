@@ -25,6 +25,7 @@ type Snapshot = {
 type PerformanceMemory = { usedJSHeapSize?: number };
 
 function enabledFromLocation() {
+  if (process.env.NODE_ENV === "production") return false;
   if (typeof window === "undefined") return false;
   const query = new URLSearchParams(window.location.search);
   if (query.get("perf") === "1") {

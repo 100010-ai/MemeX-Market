@@ -129,7 +129,7 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ error: `Стартовая цена: от ${startPriceMin} до ${startPriceMax}` }, { status: 400 });
     }
     if (!Number.isFinite(floorPrice) || floorPrice < 0 || floorPrice > floorMax) {
-      return NextResponse.json({ error: "Floor не может превышать 50% стартовой цены" }, { status: 400 });
+      return NextResponse.json({ error: "Минимальная цена не может превышать 50% стартовой цены" }, { status: 400 });
     }
     if (imageFile) {
       const uploaded = await uploadCoinImage(imageFile, String(profile.id));

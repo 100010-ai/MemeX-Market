@@ -165,7 +165,7 @@ export async function getMarketActivity(supabase: SupabaseClient, limit = 30): P
     } else if (row.kind === "repriced") {
       items.push({ id: `listing-${eventId}`, kind: "reprice", actorId, label: `${actorName} изменил цену`, detail, amount: nullableNumber(row.price), createdAt, href: `/gifts/${virtualGiftId}`, imageUrl: resolveGiftImageUrl(gift) });
     } else if (row.kind === "unlisted" || row.kind === "expired") {
-      items.push({ id: `listing-${eventId}`, kind: "unlist", actorId, label: row.kind === "expired" ? `${actorName} · листинг истёк` : `${actorName} снял с продажи`, detail, amount: nullableNumber(row.previous_price), createdAt, href: `/gifts/${virtualGiftId}`, imageUrl: resolveGiftImageUrl(gift) });
+      items.push({ id: `listing-${eventId}`, kind: "unlist", actorId, label: row.kind === "expired" ? `${actorName} · срок продажи истёк` : `${actorName} снял с продажи`, detail, amount: nullableNumber(row.previous_price), createdAt, href: `/gifts/${virtualGiftId}`, imageUrl: resolveGiftImageUrl(gift) });
     }
     // Sales are already represented by gift_trades, and accepted offers become
     // trades as well. Ignoring them here prevents duplicate public feed rows.

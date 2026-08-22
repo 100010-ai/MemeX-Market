@@ -40,9 +40,9 @@ function parseGiftPage(value: unknown) {
 async function GETHandler(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const startedAt = performance.now();
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const runtimeConfig = await getRuntimeConfig();
-  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
   const { name } = await params;
   const baseName = safeDecodeURIComponent(name);
   if (!baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 async function GETHandler() {
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const settings = await supabase.from("market_settings").select("external_quote_hours").eq("singleton", true).maybeSingle();
   const quoteHours = Math.max(1, Math.min(168, Number(settings.data?.external_quote_hours || 12)));

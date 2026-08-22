@@ -2,7 +2,7 @@ import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getRuntimeConfig, validateRuntimeConfigInput } from "@/lib/runtime-config";
+import { getRuntimeConfig, invalidateRuntimeConfigCache, validateRuntimeConfigInput } from "@/lib/runtime-config";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 async function GETHandler() {
@@ -42,6 +42,7 @@ async function POSTHandler(request: Request) {
       payload: input,
     });
     if (audit.error) throw audit.error;
+    invalidateRuntimeConfigCache();
     return NextResponse.json({ config: await getRuntimeConfig() });
   } catch (error) {
     return apiFailure(error, "Не удалось сохранить Runtime Config", 400);

@@ -92,20 +92,20 @@ alter table public.store_products drop constraint if exists store_products_stars
 alter table public.store_products add constraint store_products_stars_price_v200_check check(stars_price between 5 and 100000);
 
 insert into public.store_products(sku,category,title,description,stars_price,reward_label,badge,sort_order,metadata,active) values
-  ('mxm_starter','currency','Starter Pack','Virtual currency for the MXM closed-loop game economy.',50,'1 000 MXM Coins',null,10,'{"mxmCoins":1000}',true),
-  ('mxm_trader','currency','Trader Pack','Virtual currency for the MXM closed-loop game economy.',180,'5 000 MXM Coins','+10%',20,'{"mxmCoins":5000}',true),
-  ('mxm_whale','currency','Whale Pack','Virtual currency for the MXM closed-loop game economy.',650,'25 000 MXM Coins','Best value',30,'{"mxmCoins":25000}',true),
-  ('mxm_investor','currency','Investor Pack','Virtual currency for the MXM closed-loop game economy.',1990,'100 000 MXM Coins','Maximum',40,'{"mxmCoins":100000}',true),
-  ('premium_30d','membership','MXM Premium','Thirty days of Premium game benefits.',299,'30 days Premium','Premium',50,'{"entitlement":"premium","durationDays":30}',true),
-  ('season_premium','season','Premium Track','Premium reward track for the current 30-day season.',199,'Premium Battle Pass','Season',60,'{"entitlement":"season_pass"}',true),
-  ('case_starter','cases','Starter Case','A paid virtual case with disclosed odds.',25,'1 Starter Case',null,70,'{"caseTier":"starter","quantity":1}',true),
-  ('case_rare','cases','Rare Case','A paid virtual case with disclosed odds.',79,'1 Rare Case','Rare',80,'{"caseTier":"rare","quantity":1}',true),
-  ('case_legendary','cases','Legendary Case','A paid virtual case with disclosed odds.',199,'1 Legendary Case','Legendary',90,'{"caseTier":"legendary","quantity":1}',true),
-  ('energy_refill','energy','Energy Refill','Restores virtual Energy to the account maximum.',20,'Full Energy',null,100,'{"energyRefill":true}',true),
-  ('creator_boost_24h','creator','Coin Boost','Highlights one creator-owned coin for 24 hours.',99,'24 hour Boost','Creator',110,'{"creatorTool":"boost","durationHours":24,"requiresCoin":true}',true),
-  ('creator_verified_30d','creator','Verified Creator','A 30-day virtual creator profile entitlement.',349,'Verified for 30 days','Verified',120,'{"entitlement":"creator_verified","durationDays":30}',true),
-  ('creator_analytics_30d','creator','Advanced Analytics','A 30-day creator analytics entitlement.',249,'Analytics for 30 days',null,130,'{"entitlement":"creator_analytics","durationDays":30}',true),
-  ('profile_neon_frame','profile','Neon Frame','A permanent virtual profile frame.',89,'Permanent profile item','Limited',140,'{"profileItem":"neon_frame","itemType":"frame"}',true)
+  ('mxm_starter','currency','Стартовый набор','Виртуальная валюта для внутренней игровой экономики MXM.',50,'1 000 MXM',null,10,'{"mxmCoins":1000}',true),
+  ('mxm_trader','currency','Набор трейдера','Виртуальная валюта для внутренней игровой экономики MXM.',180,'5 000 MXM','+10%',20,'{"mxmCoins":5000}',true),
+  ('mxm_whale','currency','Большой набор','Виртуальная валюта для внутренней игровой экономики MXM.',650,'25 000 MXM','Выгодно',30,'{"mxmCoins":25000}',true),
+  ('mxm_investor','currency','Максимальный набор','Виртуальная валюта для внутренней игровой экономики MXM.',1990,'100 000 MXM','Максимум',40,'{"mxmCoins":100000}',true),
+  ('premium_30d','membership','Премиум MXM','30 дней премиум-возможностей внутри игры.',299,'Премиум на 30 дней','Премиум',50,'{"entitlement":"premium","durationDays":30}',true),
+  ('season_premium','season','Премиум-ветка','Премиальная дорожка наград текущего 30-дневного сезона.',199,'Сезонный пропуск','Сезон',60,'{"entitlement":"season_pass"}',true),
+  ('case_starter','cases','Стартовый кейс','Виртуальный кейс с заранее раскрытыми шансами наград.',25,'1 стартовый кейс',null,70,'{"caseTier":"starter","quantity":1}',true),
+  ('case_rare','cases','Редкий кейс','Виртуальный кейс с заранее раскрытыми шансами наград.',79,'1 редкий кейс','Редкий',80,'{"caseTier":"rare","quantity":1}',true),
+  ('case_legendary','cases','Легендарный кейс','Виртуальный кейс с заранее раскрытыми шансами наград.',199,'1 легендарный кейс','Легендарный',90,'{"caseTier":"legendary","quantity":1}',true),
+  ('energy_refill','energy','Восстановление энергии','Восстанавливает виртуальную энергию до максимума.',20,'Полная энергия',null,100,'{"energyRefill":true}',true),
+  ('creator_boost_24h','creator','Продвижение мемкоина','Выделяет один мемкоин автора на 24 часа.',99,'Продвижение на 24 часа','Автор',110,'{"creatorTool":"boost","durationHours":24,"requiresCoin":true}',true),
+  ('creator_verified_30d','creator','Проверенный автор','Статус проверенного автора на 30 дней внутри приложения.',349,'Проверка на 30 дней','Проверено',120,'{"entitlement":"creator_verified","durationDays":30}',true),
+  ('creator_analytics_30d','creator','Расширенная аналитика','Расширенная аналитика автора на 30 дней.',249,'Аналитика на 30 дней',null,130,'{"entitlement":"creator_analytics","durationDays":30}',true),
+  ('profile_neon_frame','profile','Неоновая рамка','Постоянная виртуальная рамка профиля.',89,'Постоянный предмет профиля','Ограничено',140,'{"profileItem":"neon_frame","itemType":"frame"}',true)
 on conflict(sku) do update set
   category=excluded.category,title=excluded.title,description=excluded.description,
   stars_price=excluded.stars_price,reward_label=excluded.reward_label,badge=excluded.badge,
@@ -181,10 +181,10 @@ create table if not exists public.profile_items (
   created_at timestamptz not null default now()
 );
 insert into public.profile_items(item_key,item_type,title,rarity,metadata) values
-  ('neon_frame','frame','Neon Frame','epic','{"source":"store"}'),
-  ('case_pixel_badge','badge','Pixel Pioneer','common','{"source":"case"}'),
-  ('case_rare_badge','badge','Rare Signal','rare','{"source":"case"}'),
-  ('case_legend_badge','badge','Market Legend','legendary','{"source":"case"}')
+  ('neon_frame','frame','Неоновая рамка','epic','{"source":"store"}'),
+  ('case_pixel_badge','badge','Пиксельный первопроходец','common','{"source":"case"}'),
+  ('case_rare_badge','badge','Редкий сигнал','rare','{"source":"case"}'),
+  ('case_legend_badge','badge','Легенда рынка','legendary','{"source":"case"}')
 on conflict(item_key) do update set item_type=excluded.item_type,title=excluded.title,rarity=excluded.rarity,metadata=excluded.metadata,active=true;
 
 create table if not exists public.profile_item_inventory (
@@ -222,9 +222,9 @@ create table if not exists public.case_definitions (
   active boolean not null default true
 );
 insert into public.case_definitions(sku,title,tier,description,remaining_supply) values
-  ('case_starter','Starter Case','starter','MXM Coins, Energy and a common collectible.',100000),
-  ('case_rare','Rare Case','rare','Larger virtual rewards and rare profile items.',25000),
-  ('case_legendary','Legendary Case','legendary','The largest virtual rewards and legendary items.',5000)
+  ('case_starter','Стартовый кейс','starter','MXM, энергия и обычный коллекционный предмет.',100000),
+  ('case_rare','Редкий кейс','rare','Увеличенные виртуальные награды и редкие предметы профиля.',25000),
+  ('case_legendary','Легендарный кейс','legendary','Крупнейшие виртуальные награды и легендарные предметы.',5000)
 on conflict(sku) do update set title=excluded.title,tier=excluded.tier,description=excluded.description,active=true;
 
 create table if not exists public.case_loot_definitions (
@@ -241,17 +241,17 @@ create table if not exists public.case_loot_definitions (
   unique(case_sku,reward_key)
 );
 insert into public.case_loot_definitions(case_sku,reward_key,reward_kind,reward_label,amount,weight,rarity,metadata) values
-  ('case_starter','mxm_100','mxm_coins','100 MXM Coins',100,6000,'common','{}'),
-  ('case_starter','energy_25','energy','25 Energy (overflow: 5 MXM each)',25,3000,'common','{}'),
-  ('case_starter','pixel_badge','profile_item','Pixel Pioneer Badge (duplicate: 250 MXM)',1,1000,'rare','{"itemKey":"case_pixel_badge","duplicateMxm":250}'),
-  ('case_rare','mxm_500','mxm_coins','500 MXM Coins',500,5000,'common','{}'),
-  ('case_rare','energy_75','energy','75 Energy (overflow: 5 MXM each)',75,2500,'rare','{}'),
-  ('case_rare','rare_badge','profile_item','Rare Signal Badge (duplicate: 1 000 MXM)',1,2000,'epic','{"itemKey":"case_rare_badge","duplicateMxm":1000}'),
-  ('case_rare','mxm_2500','mxm_coins','2 500 MXM Coins',2500,500,'legendary','{}'),
-  ('case_legendary','mxm_2000','mxm_coins','2 000 MXM Coins',2000,5500,'rare','{}'),
-  ('case_legendary','energy_150','energy','150 Energy (overflow: 5 MXM each)',150,2500,'epic','{}'),
-  ('case_legendary','legend_badge','profile_item','Market Legend Badge (duplicate: 5 000 MXM)',1,1500,'legendary','{"itemKey":"case_legend_badge","duplicateMxm":5000}'),
-  ('case_legendary','mxm_10000','mxm_coins','10 000 MXM Coins',10000,500,'legendary','{}')
+  ('case_starter','mxm_100','mxm_coins','100 MXM',100,6000,'common','{}'),
+  ('case_starter','energy_25','energy','25 энергии (излишек: 5 MXM за единицу)',25,3000,'common','{}'),
+  ('case_starter','pixel_badge','profile_item','Значок «Пиксельный первопроходец» (дубликат: 250 MXM)',1,1000,'rare','{"itemKey":"case_pixel_badge","duplicateMxm":250}'),
+  ('case_rare','mxm_500','mxm_coins','500 MXM',500,5000,'common','{}'),
+  ('case_rare','energy_75','energy','75 энергии (излишек: 5 MXM за единицу)',75,2500,'rare','{}'),
+  ('case_rare','rare_badge','profile_item','Значок «Редкий сигнал» (дубликат: 1 000 MXM)',1,2000,'epic','{"itemKey":"case_rare_badge","duplicateMxm":1000}'),
+  ('case_rare','mxm_2500','mxm_coins','2 500 MXM',2500,500,'legendary','{}'),
+  ('case_legendary','mxm_2000','mxm_coins','2 000 MXM',2000,5500,'rare','{}'),
+  ('case_legendary','energy_150','energy','150 энергии (излишек: 5 MXM за единицу)',150,2500,'epic','{}'),
+  ('case_legendary','legend_badge','profile_item','Значок «Легенда рынка» (дубликат: 5 000 MXM)',1,1500,'legendary','{"itemKey":"case_legend_badge","duplicateMxm":5000}'),
+  ('case_legendary','mxm_10000','mxm_coins','10 000 MXM',10000,500,'legendary','{}')
 on conflict(case_sku,reward_key) do update set
   reward_kind=excluded.reward_kind,reward_label=excluded.reward_label,amount=excluded.amount,
   weight=excluded.weight,rarity=excluded.rarity,metadata=excluded.metadata,active=true;
@@ -284,7 +284,7 @@ create table if not exists public.seasons (
   created_at timestamptz not null default now()
 );
 insert into public.seasons(season_key,title,starts_at,ends_at,active)
-values('market-2-launch','Meme Season: Genesis',date_trunc('day',now()),date_trunc('day',now())+interval '30 days',true)
+values('market-2-launch','Сезон MEMEX: Начало',date_trunc('day',now()),date_trunc('day',now())+interval '30 days',true)
 on conflict(season_key) do nothing;
 
 create table if not exists public.season_rewards (
@@ -303,16 +303,16 @@ with s as (select id from public.seasons where season_key='market-2-launch')
 insert into public.season_rewards(season_id,level,track,required_xp,reward_kind,reward_label,amount,metadata)
 select s.id,v.level,v.track,v.required_xp,v.reward_kind,v.reward_label,v.amount,v.metadata
 from s cross join (values
-  (1,'free',0,'mxm_coins','100 MXM Coins',100,'{}'::jsonb),(1,'premium',0,'mxm_coins','500 MXM Coins',500,'{}'::jsonb),
-  (2,'free',20,'energy','25 Energy',25,'{}'),(2,'premium',20,'case','1 Starter Case',1,'{"sku":"case_starter"}'),
-  (3,'free',50,'mxm_coins','250 MXM Coins',250,'{}'),(3,'premium',50,'mxm_coins','1 000 MXM Coins',1000,'{}'),
-  (4,'free',90,'case','1 Starter Case',1,'{"sku":"case_starter"}'),(4,'premium',90,'energy','100 Energy',100,'{}'),
-  (5,'free',140,'mxm_coins','500 MXM Coins',500,'{}'),(5,'premium',140,'case','1 Rare Case',1,'{"sku":"case_rare"}'),
-  (6,'free',200,'energy','50 Energy',50,'{}'),(6,'premium',200,'mxm_coins','2 000 MXM Coins',2000,'{}'),
-  (7,'free',275,'mxm_coins','750 MXM Coins',750,'{}'),(7,'premium',275,'case','1 Rare Case',1,'{"sku":"case_rare"}'),
-  (8,'free',365,'case','1 Starter Case',1,'{"sku":"case_starter"}'),(8,'premium',365,'mxm_coins','3 000 MXM Coins',3000,'{}'),
-  (9,'free',470,'mxm_coins','1 000 MXM Coins',1000,'{}'),(9,'premium',470,'energy','150 Energy',150,'{}'),
-  (10,'free',600,'case','1 Rare Case',1,'{"sku":"case_rare"}'),(10,'premium',600,'case','1 Legendary Case',1,'{"sku":"case_legendary"}')
+  (1,'free',0,'mxm_coins','100 MXM',100,'{}'::jsonb),(1,'premium',0,'mxm_coins','500 MXM',500,'{}'::jsonb),
+  (2,'free',20,'energy','25 энергии',25,'{}'),(2,'premium',20,'case','1 стартовый кейс',1,'{"sku":"case_starter"}'),
+  (3,'free',50,'mxm_coins','250 MXM',250,'{}'),(3,'premium',50,'mxm_coins','1 000 MXM',1000,'{}'),
+  (4,'free',90,'case','1 стартовый кейс',1,'{"sku":"case_starter"}'),(4,'premium',90,'energy','100 энергии',100,'{}'),
+  (5,'free',140,'mxm_coins','500 MXM',500,'{}'),(5,'premium',140,'case','1 редкий кейс',1,'{"sku":"case_rare"}'),
+  (6,'free',200,'energy','50 энергии',50,'{}'),(6,'premium',200,'mxm_coins','2 000 MXM',2000,'{}'),
+  (7,'free',275,'mxm_coins','750 MXM',750,'{}'),(7,'premium',275,'case','1 редкий кейс',1,'{"sku":"case_rare"}'),
+  (8,'free',365,'case','1 стартовый кейс',1,'{"sku":"case_starter"}'),(8,'premium',365,'mxm_coins','3 000 MXM',3000,'{}'),
+  (9,'free',470,'mxm_coins','1 000 MXM',1000,'{}'),(9,'premium',470,'energy','150 энергии',150,'{}'),
+  (10,'free',600,'case','1 редкий кейс',1,'{"sku":"case_rare"}'),(10,'premium',600,'case','1 легендарный кейс',1,'{"sku":"case_legendary"}')
 ) as v(level,track,required_xp,reward_kind,reward_label,amount,metadata)
 on conflict(season_id,level,track) do update set
   required_xp=excluded.required_xp,reward_kind=excluded.reward_kind,reward_label=excluded.reward_label,
@@ -339,7 +339,7 @@ begin
   update public.seasons set active=false where active=true and ends_at<=now();
   select id into v_source from public.seasons where season_key='market-2-launch';
   insert into public.seasons(season_key,title,starts_at,ends_at,active)
-  values('season-'||to_char(clock_timestamp(),'YYYYMMDDHH24MISSMS'),'Meme Season '||to_char(v_start,'YYYY-MM'),v_start,v_start+interval '30 days',true)
+  values('season-'||to_char(clock_timestamp(),'YYYYMMDDHH24MISSMS'),'Сезон MEMEX '||to_char(v_start,'YYYY-MM'),v_start,v_start+interval '30 days',true)
   returning id into v_current;
   insert into public.season_rewards(season_id,level,track,required_xp,reward_kind,reward_label,amount,metadata)
   select v_current,level,track,required_xp,reward_kind,reward_label,amount,metadata
@@ -563,7 +563,7 @@ begin
     'label',case when p_kind='energy' and v_overflow>0 then
       v_energy_credit::text||' Energy + '||v_overflow_mxm::text||' MXM overflow compensation'
     else coalesce(nullif(p_metadata->>'label',''),
-      case p_kind when 'mxm_coins' then p_amount::text||' MXM Coins'
+      case p_kind when 'mxm_coins' then p_amount::text||' MXM'
                   when 'energy' then p_amount::text||' Energy'
                   when 'case' then p_amount::text||' case'
                   else coalesce(v_item_key,'Profile item') end) end
@@ -1802,7 +1802,7 @@ begin
   return jsonb_build_object(
     'verified',v_verified,'analyticsUnlocked',v_analytics,
     'level',v_level||jsonb_build_object('platformFeeBps',v_total_bps-(v_level->>'creatorFeeBps')::integer,
-      'verified',v_verified,'trustLabel',case when v_verified then 'Verified Creator' else 'Community Creator' end),
+      'verified',v_verified,'trustLabel',case when v_verified then 'Проверенный автор' else 'Автор сообщества' end),
     'totals',jsonb_build_object(
       'coins',coalesce((v_level->>'coinCount')::integer,0),
       'holders',coalesce((v_level->>'holderCount')::integer,0),

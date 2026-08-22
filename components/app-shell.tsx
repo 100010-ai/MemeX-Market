@@ -2,28 +2,31 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy, UserRound } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
-import { PerfOverlay } from "@/components/dev/perf-overlay";
 import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
-import { CommandPalette } from "@/components/command-palette";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 
+
+const DeferredCommandPalette = dynamic(() => import("@/components/command-palette").then((module) => module.CommandPalette), { ssr: false });
+const DeferredPerfOverlay = dynamic(() => import("@/components/dev/perf-overlay").then((module) => module.PerfOverlay), { ssr: false });
+
 const nav = [
-  { href: "/market", label: "Маркет", icon: Store },
-  { href: "/orders", label: "Ордера", icon: ReceiptText },
+  { href: "/market", label: "Рынок", icon: Store },
+  { href: "/orders", label: "Заявки", icon: ReceiptText },
   { href: "/hub", label: "Лента", icon: Activity },
   { href: "/tasks", label: "Задания", icon: ListChecks },
   { href: "/vault", label: "Портфель", icon: Boxes },
 ];
 
 const routeTitles: Array<[string, string]> = [
-  ["/market", "Маркет"],
-  ["/orders", "Ордера"],
+  ["/market", "Рынок"],
+  ["/orders", "Заявки"],
   ["/hub", "Лента"],
   ["/tasks", "Задания"],
   ["/vault", "Портфель"],
@@ -32,18 +35,18 @@ const routeTitles: Array<[string, string]> = [
   ["/profile", "Профиль"],
   ["/watchlist", "Избранное"],
   ["/notifications", "Уведомления"],
-  ["/store", "MXM Store"],
-  ["/support", "MXM Store"],
+  ["/store", "Магазин MXM"],
+  ["/support", "Магазин MXM"],
   ["/referrals", "Рефералы"],
   ["/cart", "Корзина"],
-  ["/create", "Создать коин"],
+  ["/create", "Создать мемкоин"],
   ["/collections", "Коллекция"],
   ["/gifts", "Подарок"],
   ["/coin", "Мемкоин"],
 ];
 
 function currentTitle(pathname: string) {
-  return routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || "MX Market";
+  return routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || "Рынок MXM";
 }
 
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
@@ -57,6 +60,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   const pathname = usePathname();
   const { profile, loading, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
+  const [desktopToolsReady, setDesktopToolsReady] = useState(false);
   const title = currentTitle(pathname);
   const profileId = profile?.id;
 
@@ -68,6 +72,22 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       .catch((cause) => console.error("runtime config", cause));
     return () => { cancelled = true; };
   }, [profileId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
+    let cancelled = false;
+    let timeout = 0;
+    let idleId: number | null = null;
+    const enable = () => { if (!cancelled) setDesktopToolsReady(true); };
+    const idle = window.requestIdleCallback;
+    if (typeof idle === "function") idleId = idle(enable, { timeout: 1_500 });
+    else timeout = window.setTimeout(enable, 900);
+    return () => {
+      cancelled = true;
+      if (timeout) window.clearTimeout(timeout);
+      if (idleId != null && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idleId);
+    };
+  }, []);
 
   if (pathname.startsWith("/control") || pathname.startsWith("/admin") || pathname === "/about" || pathname === "/terms" || pathname === "/paysupport") return <>{children}</>;
 
@@ -88,7 +108,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
           <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
-          <span className="text-[9px] text-[var(--muted)]">market</span>
+          <span className="text-[9px] text-[var(--muted)]">рынок</span>
         </Link>
         <nav className="mt-4 space-y-1">
           {nav.map((item) => {
@@ -102,7 +122,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         </nav>
 
         <Link href="/profile" className="mt-auto border-t border-[var(--border-soft)] px-1 pt-4">
-          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} XP</span></div>
+          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} опыта</span></div>
           <div className="mt-3 h-px overflow-hidden bg-white/[.05]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div>
         </Link>
       </aside>
@@ -113,10 +133,10 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
             <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
-            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="MXM Store" className="mxm-top-plus"><Plus size={14}/></Link></div>
+            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
-        <main key={pathname} className="mxm-page-enter min-h-0 px-3 py-4 md:px-5 md:py-5">{children}</main>
+        <main className="mxm-page-enter min-h-0 px-3 py-4 md:px-5 md:py-5">{children}</main>
       </div>
 
       <nav className="mxm-bottom-nav safe-bottom fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 lg:hidden">
@@ -127,8 +147,8 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         })}
       </nav>
 
-      <CommandPalette />
-      <PerfOverlay />
+      {desktopToolsReady ? <DeferredCommandPalette /> : null}
+      {process.env.NODE_ENV !== "production" && desktopToolsReady ? <DeferredPerfOverlay /> : null}
       {modal}
     </div>
   );

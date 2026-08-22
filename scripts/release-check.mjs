@@ -125,6 +125,7 @@ check("Migration 9994 player market handoff present", Boolean(migration9994));
 check("Migration 9995 player-only consistency present", exists("supabase/migrations/9995_mrkt_player_only_consistency.sql"));
 check("Migration 9996 resilient Gift sync present", exists("supabase/migrations/9996_gift_sync_resilience.sql"));
 check("Migration 9997 Telegram channel task present", exists("supabase/migrations/9997_main_channel_subscription_task.sql"));
+check("Migration 9998 player UI copy cleanup present", exists("supabase/migrations/9998_ui_copy_polish.sql"));
 check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 
@@ -132,7 +133,22 @@ check("Runtime config schema", migration026.includes("create table if not exists
 check("Maintenance mode + feature flags", read("components/app-shell.tsx").includes("maintenanceMode") && read("app/api/admin/runtime-config/route.ts").includes("validateRuntimeConfigInput"));
 check("Advanced Gift offers", migration026.includes("advanced_gift_offers_v056") && migration026.includes("create_advanced_gift_offer_v056") && migration026.includes("accept_advanced_gift_offer_v056") && exists("components/gifts/advanced-offers-panel.tsx"));
 check("Conditional memecoin orders", migration026.includes("coin_conditional_orders_v056") && exists("components/coin-conditional-orders.tsx") && exists("app/api/system/coin-orders/route.ts"));
-check("Command palette", exists("components/command-palette.tsx") && read("components/app-shell.tsx").includes("<CommandPalette"));
+check("Command palette", exists("components/command-palette.tsx") && /<(?:Deferred)?CommandPalette\b/.test(read("components/app-shell.tsx")));
+check("Player market collection cards use Russian product copy",
+  marketPage.includes("самых дешёвых")
+  && marketPage.includes("Лента пока пуста")
+  && !marketPage.includes(">Feed<")
+  && !marketPage.includes("3 cheapest")
+);
+check("Task cards use responsive SVG-only actions",
+  tasks.includes("mxm-task-card")
+  && tasks.includes("Подписка на официальный канал")
+  && !/[\u{1F300}-\u{1FAFF}]/u.test(tasks)
+  && read("app/globals.css").includes(".mxm-task-actions { flex-wrap:wrap; }")
+);
+check("Public UI debug overlay is disabled in production",
+  read("components/dev/perf-overlay.tsx").includes('process.env.NODE_ENV === "production"')
+);
 check("Admin Economy & Risk", exists("app/admin/economy-risk/page.tsx") && exists("app/api/admin/economy-risk/route.ts"));
 check("Admin Health Center", exists("app/admin/health/page.tsx") && exists("app/api/admin/health/route.ts"));
 check("Error Inbox infrastructure", exists("lib/error-inbox.ts") && migration026.includes("error_inbox_v056"));
@@ -253,7 +269,7 @@ check("NPC liquidity has irreversible player-only handoff",
 check("Player-only market filters stale system listings",
   migration9994.includes("policy.mode<>'player_only' or coalesce(owner_profile.is_system,false)=false")
   && read("app/api/market/search/route.ts").includes("playerOnly")
-  && read("app/api/cart/route.ts").includes("NPC liquidity is disabled")
+  && read("app/api/cart/route.ts").includes("Стартовая ликвидность отключена")
   && read("app/api/collections/[name]/sweep/route.ts").includes("playerOnly")
 );
 check("MRKT-style collections + activity feed are real-data backed",

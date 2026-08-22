@@ -7,7 +7,7 @@ import { getMainChannelTaskState, MAIN_CHANNEL_MISSION_KEY, MAIN_CHANNEL_URL, ve
 
 async function GETHandler() {
   const profile = await requireProfile();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const { error: ensureError } = await supabase.rpc("ensure_user_missions", { p_profile_id: profile.id });
   if (ensureError) return apiFailure(ensureError, "Не удалось подготовить задания");

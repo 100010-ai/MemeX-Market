@@ -16,7 +16,7 @@ export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
-    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[22px] border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition duration-150 will-change-transform hover:border-white/[.12] active:scale-[.992]">
+    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[22px] border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition-[border-color,transform] duration-150 hover:border-white/[.12] active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block min-w-0">
         <div className="mxm-gift-cover relative overflow-hidden rounded-2xl bg-black/20">
           <GiftMedia gift={gift} compact priority={priority} className="aspect-square w-full" />
@@ -26,7 +26,7 @@ export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart
         <div className="px-0.5 pt-2.5">
           <div className="flex min-w-0 items-baseline justify-between gap-2">
             <p className="truncate text-[12px] font-semibold tracking-[-.018em] text-white">{gift.baseName}</p>
-            <span className="shrink-0 text-[9px] text-[var(--muted)]">{floorDelta != null ? `${floorDelta >= 0 ? "+" : ""}${floorDelta.toFixed(0)}% к флору` : `редкость ${rarityLabel}`}</span>
+            <span className="shrink-0 text-[9px] text-[var(--muted)]">{floorDelta != null ? `${floorDelta >= 0 ? "+" : ""}${floorDelta.toFixed(0)}% к мин. цене` : `редкость ${rarityLabel}`}</span>
           </div>
           <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[9px] text-[var(--muted)]">
             <span className="truncate">{gift.modelName || "Коллекционный"}</span>

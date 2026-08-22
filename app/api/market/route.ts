@@ -14,6 +14,46 @@ export const revalidate = 10;
 
 const coinMarketSelect = "id,creator_profile_id,name,symbol,description,current_price,market_cap,status,created_at,total_supply,token_reserve,quote_reserve,volume_24h,change_24h,holder_count,trade_count_24h,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,image_url";
 
+type SharedMarketCache<T> = { expiresAt: number; value: T };
+
+let filterOptionsCache: SharedMarketCache<unknown> | null = null;
+let filterOptionsInFlight: Promise<unknown> | null = null;
+let collectionOverviewCache: SharedMarketCache<Array<Record<string, unknown>>> | null = null;
+let collectionOverviewInFlight: Promise<Array<Record<string, unknown>>> | null = null;
+
+async function getCachedGiftFilterOptions() {
+  const now = Date.now();
+  if (filterOptionsCache && filterOptionsCache.expiresAt > now) return filterOptionsCache.value;
+  if (filterOptionsInFlight) return filterOptionsInFlight;
+  filterOptionsInFlight = (async () => {
+    const result = await getSupabaseAdmin().rpc("gift_market_filter_options_v046");
+    if (result.error) throw result.error;
+    const value = result.data ?? { collections: [], models: [], backdrops: [], symbols: [] };
+    filterOptionsCache = { expiresAt: Date.now() + 60_000, value };
+    return value;
+  })();
+  try { return await filterOptionsInFlight; }
+  finally { filterOptionsInFlight = null; }
+}
+
+async function getCachedGiftCollectionOverview() {
+  const now = Date.now();
+  if (collectionOverviewCache && collectionOverviewCache.expiresAt > now) return collectionOverviewCache.value;
+  if (collectionOverviewInFlight) return collectionOverviewInFlight;
+  collectionOverviewInFlight = (async () => {
+    const result = await getSupabaseAdmin().from("gift_collection_overview")
+      .select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor")
+      .order("volume_24h", { ascending: false })
+      .limit(24);
+    if (result.error) throw result.error;
+    const value = (result.data || []) as unknown as Array<Record<string, unknown>>;
+    collectionOverviewCache = { expiresAt: Date.now() + 5_000, value };
+    return value;
+  })();
+  try { return await collectionOverviewInFlight; }
+  finally { collectionOverviewInFlight = null; }
+}
+
 function intParam(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
@@ -50,13 +90,13 @@ function parseGiftMarketPage(value: unknown): Required<GiftMarketPage> {
 async function GETHandler(request: NextRequest) {
   const startedAt = Date.now();
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const scope = request.nextUrl.searchParams.get("scope") === "coins" ? "coins" : "gifts";
   const runtimeConfig = await getRuntimeConfig().catch((error) => { console.error("market runtime config", error); return null; });
   if (!runtimeConfig) return NextResponse.json({ error: "Конфигурация рынка недоступна" }, { status: 503 });
   if (scope === "coins" && !runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Мемкоины временно отключены" }, { status: 503 });
-  if (scope === "gifts" && !runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
+  if (scope === "gifts" && !runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
 
   // Expiry is already enforced in every market view/RPC. Cleanup therefore
   // happens after the response and can never extend first paint latency.
@@ -65,7 +105,7 @@ async function GETHandler(request: NextRequest) {
   try {
     if (scope === "coins") {
       const profile = await requireProfile();
-      if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
       const [coinsResult, newCoinsResult, boostsResult, watchlistResult, cartResult] = await Promise.all([
         supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(72),
         // Discovery must not be derived from the volume leaderboard: a freshly
@@ -149,18 +189,18 @@ async function GETHandler(request: NextRequest) {
     }
 
     const profile = await requireProfile();
-    if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
 
-    const [giftsResult, collectionsResult, watchlistResult, cartResult, genesisResult, liquidityResult, filterOptionsResult] = await Promise.all([
+    const [giftsResult, collectionRows, watchlistResult, cartResult, genesisResult, liquidityResult, filterOptions] = await Promise.all([
       supabase.rpc("gift_market_filtered_page_v200", giftPageArgs),
-      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").order("volume_24h", { ascending: false }).limit(80),
+      getCachedGiftCollectionOverview(),
       supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id),
       supabase.rpc("gift_genesis_public_state"),
       supabase.rpc("gift_market_liquidity_state"),
-      supabase.rpc("gift_market_filter_options_v046"),
+      getCachedGiftFilterOptions(),
     ]);
-    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || liquidityResult.error || filterOptionsResult.error;
+    const firstError = giftsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || liquidityResult.error;
     if (firstError) throw firstError;
 
     const page = parseGiftMarketPage(giftsResult.data);
@@ -169,14 +209,14 @@ async function GETHandler(request: NextRequest) {
       coins: [],
       newCoins: [],
       gifts: page.gifts.map(mapGift),
-      collections: (collectionsResult.data || []).map((row) => mapGiftCollection(row as Record<string, unknown>)),
+      collections: collectionRows.map((row) => mapGiftCollection(row)),
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
       bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
       genesis: genesisResult.data || null,
       liquidity: liquidityResult.data || null,
-      filterOptions: filterOptionsResult.data,
+      filterOptions,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
         giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),

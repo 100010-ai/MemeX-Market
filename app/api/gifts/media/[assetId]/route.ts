@@ -125,10 +125,10 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
 
 async function GETHandler(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
   const session = await readSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const { assetId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(assetId)) {
-    return NextResponse.json({ error: "Invalid Gift asset" }, { status: 400 });
+    return NextResponse.json({ error: "Некорректный идентификатор подарка" }, { status: 400 });
   }
 
   const requestUrl = new URL(request.url);
@@ -149,10 +149,10 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
           ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
           : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
         const response = await previewResponse(candidates, controller.signal);
-        return response || NextResponse.json({ error: "Gift preview not found" }, { status: 404 });
+        return response || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
       }
       const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
-      return response || NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
+      return response || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
     } catch (error) {
       const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
       return NextResponse.json({ error: message }, { status: 502 });
@@ -171,9 +171,9 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   const queryError = primary.error;
   const row = primary.data as unknown as GiftMediaRow | null;
 
-  if (queryError) return apiFailure(queryError, "Gift media lookup failed");
+  if (queryError) return apiFailure(queryError, "Не удалось получить медиа подарка");
   if (!row || row.is_burned || row.catalog_source !== "tonapi") {
-    return NextResponse.json({ error: "Gift media not found" }, { status: 404 });
+    return NextResponse.json({ error: "Медиа подарка не найдено" }, { status: 404 });
   }
 
   const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
@@ -197,7 +197,7 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
         trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ], controller.signal);
-      return response || NextResponse.json({ error: "Gift preview not found" }, { status: 404 });
+      return response || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
     }
 
     // Prefer Fragment's full collectible Lottie. Unlike the TGS extracted from
@@ -207,7 +207,7 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
       trustedUrl(fragment?.animation),
       row.model_is_animated ? trustedUrl(row.model_media_url) : null,
     ], controller.signal);
-    return response || NextResponse.json({ error: "Animated Gift media not found" }, { status: 404 });
+    return response || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
   } catch (error) {
     const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
     return NextResponse.json({ error: message }, { status: 502 });
