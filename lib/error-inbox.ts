@@ -17,13 +17,14 @@ export async function recordAppError(route: string, cause: unknown, profileId?: 
     const normalized = `${route}|${errorName}|${message.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "[uuid]").replace(/\d{5,}/g, "[n]")}`;
     const hash = crypto.createHash("sha256").update(normalized).digest("hex");
     const supabase = getSupabaseAdmin();
-    await supabase.rpc("record_app_error_v056", {
+    const result = await supabase.rpc("record_app_error_v056", {
       p_hash: hash,
       p_route: route,
       p_message: message,
       p_profile_id: profileId || null,
       p_metadata: { ...metadata, errorName },
     });
+    if (result.error) throw result.error;
   } catch (loggingError) {
     console.error("error inbox write failed", loggingError);
   }

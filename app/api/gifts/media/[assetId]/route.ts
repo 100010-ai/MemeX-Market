@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { readSession } from "@/lib/session";
+import { readResponseBytesLimited } from "@/lib/http-body";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -61,7 +62,11 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
       referer: "https://fragment.com/",
     },
   });
-  return response.ok ? response : null;
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  return response;
 }
 
 async function previewResponse(candidates: Array<URL | null>, signal: AbortSignal) {
@@ -70,9 +75,13 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
     const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
     const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.startsWith("image/")) continue;
-    const bytes = Buffer.from(await upstream.arrayBuffer());
-    if (!bytes.length || bytes.length > MAX_PREVIEW_BYTES) continue;
+    if (!contentType.startsWith("image/")) {
+      await upstream.body?.cancel().catch(() => undefined);
+      continue;
+    }
+    const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
+    if (!limited) continue;
+    const bytes = Buffer.from(limited);
     return new Response(bytes, {
       status: 200,
       headers: {
@@ -90,12 +99,15 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
     if (!candidate) continue;
     const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
-    const compressed = Buffer.from(await upstream.arrayBuffer());
-    if (!compressed.length || compressed.length > MAX_ANIMATION_SOURCE_BYTES) continue;
+    const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
+    if (!limited) continue;
+    const compressed = Buffer.from(limited);
 
     try {
       const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
-      const jsonBytes = isGzip ? gunzipSync(compressed) : compressed;
+      const jsonBytes = isGzip
+        ? gunzipSync(compressed, { maxOutputLength: MAX_ANIMATION_BYTES })
+        : compressed;
       if (!jsonBytes.length || jsonBytes.length > MAX_ANIMATION_BYTES) continue;
       const animation = JSON.parse(jsonBytes.toString("utf8")) as Record<string, unknown>;
       if (!animation || typeof animation !== "object" || !Array.isArray(animation.layers)) continue;

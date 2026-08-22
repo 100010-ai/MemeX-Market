@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { looseRowsQuery } from "@/lib/supabase/loose-query";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { safeDecodeURIComponent } from "@/lib/safe-data";
@@ -38,20 +39,29 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
     systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
   }
   const nowIso = new Date().toISOString();
-  let candidateQuery = supabase
-    .from("gift_market_overview")
+  type SweepCandidate = { virtual_gift_id: unknown; listing_price: unknown; owner_profile_id: unknown };
+  const candidateQuery = () => looseRowsQuery<SweepCandidate>(supabase.from("gift_market_overview"))
     .select("virtual_gift_id,listing_price,owner_profile_id")
     .eq("base_name", baseName)
     .eq("is_burned", false)
     .eq("status", "listed")
     .not("listing_price", "is", null)
     .neq("owner_profile_id", profile.id)
-    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
-    .order("listing_price", { ascending: true })
-    .order("virtual_gift_id", { ascending: true })
-    .limit(count);
-  if (systemOwnerIds.length) candidateQuery = candidateQuery.not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`);
-  const candidates = await candidateQuery;
+    .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`);
+
+  // The builder is widened before composition so Supabase's recursive type-level
+  // filter/select parser cannot hit TS2589 during `next build`. Runtime calls
+  // still execute on the real PostgREST builder.
+  const candidates = systemOwnerIds.length
+    ? await candidateQuery()
+      .not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`)
+      .order("listing_price", { ascending: true })
+      .order("virtual_gift_id", { ascending: true })
+      .limit(count)
+    : await candidateQuery()
+      .order("listing_price", { ascending: true })
+      .order("virtual_gift_id", { ascending: true })
+      .limit(count);
 
   if (candidates.error) return apiFailure(candidates.error, "Не удалось выполнить запрос");
   const rows = candidates.data || [];

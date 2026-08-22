@@ -96,6 +96,11 @@ const npcMarket = read("lib/npc-market.ts");
 const marketCollectionsRoute = read("app/api/market/collections/route.ts");
 const bulkCartRoute = read("app/api/cart/bulk/route.ts");
 const giftsBootstrapRoute = read("app/api/gifts/bootstrap/route.ts");
+const sweepRoute = read("app/api/collections/[name]/sweep/route.ts");
+const marketSearchRoute = read("app/api/market/search/route.ts");
+const looseQuery = read("lib/supabase/loose-query.ts");
+const giftMediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
+const httpBody = read("lib/http-body.ts");
 
 function normalizedTelegramUsername(value) {
   return String(value || "").trim().replace(/^@+/, "");
@@ -116,6 +121,7 @@ check("Migration 028 advertising teardown present", Boolean(migration028));
 check("Migration 029 scalable market present", Boolean(migration029));
 check("Migration 9994 player market handoff present", Boolean(migration9994));
 check("Migration 9995 player-only consistency present", exists("supabase/migrations/9995_mrkt_player_only_consistency.sql"));
+check("Migration 9996 resilient Gift sync present", exists("supabase/migrations/9996_gift_sync_resilience.sql"));
 check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 
@@ -316,7 +322,18 @@ check("Gift market fee treasury", migration020.includes("MXM Treasury") && migra
 
 check("Telegram Gift download timeout", gifts.includes("AbortSignal.timeout(TELEGRAM_FILE_TIMEOUT_MS)"));
 check("Telegram Gift file-size bound", gifts.includes("MAX_TELEGRAM_GIFT_FILE_BYTES") && gifts.includes("content-length"));
-check("TGS decompression bound", gifts.includes("MAX_TGS_JSON_BYTES") && gifts.includes("maxOutputLength"));
+check("TGS decompression bound", gifts.includes("MAX_TGS_JSON_BYTES") && gifts.includes("maxOutputLength") && gifts.includes("readResponseBytesLimited"));
+check("Remote Gift media bodies are bounded before buffering",
+  Boolean(httpBody)
+  && giftMediaRoute.includes("readResponseBytesLimited")
+  && giftMediaRoute.includes("MAX_ANIMATION_SOURCE_BYTES")
+  && giftMediaRoute.includes("MAX_PREVIEW_BYTES")
+);
+check("Supabase TS2589 guard on large dynamic market queries",
+  looseQuery.includes("LooseRowsQuery")
+  && sweepRoute.includes("looseRowsQuery<SweepCandidate>")
+  && marketSearchRoute.includes('looseRowsQuery<Record<string, unknown>>')
+);
 
 check("Gift resolver present", exists("lib/gifts/resolver.ts"));
 check("TonAPI resilient client present", exists("lib/providers/tonapi-client.ts"));

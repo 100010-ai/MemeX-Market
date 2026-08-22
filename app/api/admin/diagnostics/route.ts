@@ -16,6 +16,7 @@ type SyncRunRow = {
   telegram_total_count: unknown;
   unique_received: unknown;
   unique_imported: unknown;
+  skipped_invalid: unknown;
   assets_updated: unknown;
   virtual_created: unknown;
   error_message: unknown;
@@ -26,12 +27,14 @@ type SyncRunRow = {
 
 async function countRows(table: string, filter?: CountFilter) {
   const supabase = getSupabaseAdmin();
-  let query = supabase.from(table).select("id", { count: "exact", head: true });
-  if (filter?.kind === "eq") query = query.eq(filter.column, filter.value);
-  if (filter?.kind === "or") query = query.or(filter.expression);
-  const { count, error } = await query;
-  if (error) throw error;
-  return Number(count || 0);
+  const baseQuery = () => supabase.from(table).select("id", { count: "exact", head: true });
+  const result = filter?.kind === "eq"
+    ? await baseQuery().eq(filter.column, filter.value)
+    : filter?.kind === "or"
+      ? await baseQuery().or(filter.expression)
+      : await baseQuery();
+  if (result.error) throw result.error;
+  return Number(result.count || 0);
 }
 
 async function GETHandler() {
@@ -65,7 +68,7 @@ async function GETHandler() {
       countRows("coins", { kind: "eq", column: "status", value: "active" }),
       supabase
         .from("gift_sync_runs")
-        .select("id,profile_id,telegram_id,status,pages_fetched,telegram_total_count,unique_received,unique_imported,assets_updated,virtual_created,error_message,started_at,finished_at,profiles(username,first_name)")
+        .select("id,profile_id,telegram_id,status,pages_fetched,telegram_total_count,unique_received,unique_imported,skipped_invalid,assets_updated,virtual_created,error_message,started_at,finished_at,profiles(username,first_name)")
         .order("started_at", { ascending: false })
         .limit(20),
     ]);
@@ -84,6 +87,7 @@ async function GETHandler() {
         telegramTotalCount: row.telegram_total_count == null ? null : Number(row.telegram_total_count),
         uniqueReceived: Number(row.unique_received),
         uniqueImported: Number(row.unique_imported),
+        skippedInvalid: Number(row.skipped_invalid),
         assetsUpdated: Number(row.assets_updated),
         virtualCreated: Number(row.virtual_created),
         errorMessage: row.error_message == null ? null : String(row.error_message),

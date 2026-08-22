@@ -71,17 +71,21 @@ async function POSTHandler(request: Request) {
   }
 
   // Creating the same alert twice is idempotent and must not consume the limit.
-  let duplicateQuery = supabase
+  // Avoid mutating/reassigning Supabase builders: long generic chains can hit
+  // TypeScript's recursive-instantiation limit during `next build`.
+  const duplicateBase = () => supabase
     .from("price_alerts")
     .select("id,enabled")
     .eq("profile_id", profile.id)
     .eq("kind", kind)
     .eq("direction", direction)
     .eq("target_price", targetPrice);
-  if (kind === "coin") duplicateQuery = duplicateQuery.eq("coin_id", String(row.coin_id));
-  if (kind === "gift") duplicateQuery = duplicateQuery.eq("virtual_gift_id", String(row.virtual_gift_id));
-  if (kind === "gift_collection") duplicateQuery = duplicateQuery.eq("gift_collection", String(row.gift_collection));
-  const { data: duplicate, error: duplicateError } = await duplicateQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const duplicateResult = kind === "coin"
+    ? await duplicateBase().eq("coin_id", String(row.coin_id)).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    : kind === "gift"
+      ? await duplicateBase().eq("virtual_gift_id", String(row.virtual_gift_id)).order("created_at", { ascending: false }).limit(1).maybeSingle()
+      : await duplicateBase().eq("gift_collection", String(row.gift_collection)).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: duplicate, error: duplicateError } = duplicateResult;
   if (duplicateError) return apiFailure(duplicateError, "Не удалось проверить существующий алерт");
   if (duplicate) {
     if (!duplicate.enabled) {

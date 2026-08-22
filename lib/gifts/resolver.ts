@@ -44,7 +44,7 @@ export async function resolveGiftAlias(routeId: string): Promise<ResolvedGiftRow
   if (byTelegram) return byTelegram;
 
   if (TON_ADDRESS_RE.test(id)) {
-    const byChain = await lookup("chain_nft_address", id).catch(() => null);
+    const byChain = await lookup("chain_nft_address", id);
     if (byChain) return byChain;
   }
 

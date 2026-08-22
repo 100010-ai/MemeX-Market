@@ -19,9 +19,12 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ fil
   // Media requests are numerous; verifying the signed Telegram session cookie is
   // enough here and avoids a Supabase profile query for every image tile.
   if (!(await readSession())) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+  const { fileId } = await params;
+  if (!/^[A-Za-z0-9_-]{16,512}$/.test(fileId)) return NextResponse.json({ error: "Некорректный ID файла" }, { status: 400 });
+  // DB/schema failures must propagate to the shared API guard (500/503), not be
+  // disguised as a media 404. Only upstream Telegram failures are soft here.
+  if (!(await isKnownGiftFile(fileId))) return NextResponse.json({ error: "Файл подарка не найден" }, { status: 404 });
   try {
-    const { fileId } = await params;
-    if (!(await isKnownGiftFile(fileId))) return NextResponse.json({ error: "Файл подарка не найден" }, { status: 404 });
     const { response, filePath } = await getTelegramFile(fileId);
     const headers = new Headers({
       "content-type": response.headers.get("content-type") || contentType(filePath),
@@ -33,7 +36,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ fil
     return new NextResponse(response.body, { headers });
   } catch (error) {
     console.warn("telegram gift file unavailable", error);
-    return NextResponse.json({ error: "Медиа подарка временно недоступно" }, { status: 404 });
+    return NextResponse.json({ error: "Медиа подарка временно недоступно" }, { status: 502 });
   }
 }
 export const GET = withApiErrors("app/api/telegram/file/[fileId]/route.ts:GET", GETHandler);

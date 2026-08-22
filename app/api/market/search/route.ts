@@ -2,6 +2,7 @@ import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { looseRowsQuery } from "@/lib/supabase/loose-query";
 import { giftMarketSelect, mapCoin, mapGift, mapGiftCollection } from "@/lib/mappers";
 import { nonEmptyId, nullableText, text } from "@/lib/safe-data";
 import { enforceRateLimit } from "@/lib/security";
@@ -10,7 +11,14 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 export const runtime = "nodejs";
 
 function cleanTerm(value: string) {
-  return value.trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ").slice(0, 64);
+  // `.or()` accepts raw PostgREST filter syntax. Keep search input to display
+  // characters only so user text can never become an extra filter operator.
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/[^\p{L}\p{N}\s@#$._-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 64);
 }
 
 function profileName(row: { username?: unknown; first_name?: unknown }) {
@@ -39,16 +47,22 @@ async function GETHandler(request: NextRequest) {
     systemOwnerIds = (systemProfiles.data || []).map((row) => String(row.id)).filter(Boolean);
   }
   const nowIso = new Date().toISOString();
+  // Search maps rows through a runtime-safe Record mapper. Widen the builder
+  // before composing the large view query so Supabase's recursive type-level
+  // select/filter parser cannot hit TS2589 during `next build`.
   const baseQuery = () => {
-    let query = supabase
-      .from("gift_market_overview")
+    const query = looseRowsQuery<Record<string, unknown>>(supabase.from("gift_market_overview"))
       .select(giftMarketSelect)
       .eq("status", "listed")
       .eq("is_burned", false)
       .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`)
       .not("telegram_name", "is", null);
-    if (systemOwnerIds.length) query = query.not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`);
-    return query;
+
+    // Return a fresh builder instead of reassigning it. Reassignment after a
+    // conditional `.not()` is another known trigger for Supabase TS2589.
+    return systemOwnerIds.length
+      ? query.not("owner_profile_id", "in", `(${systemOwnerIds.join(",")})`)
+      : query;
   };
 
   const giftTerm = q.replace(/^#/, "");

@@ -1,5 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { readResponseBytesLimited } from "@/lib/http-body";
 
 export type TelegramSticker = {
   file_id: string;
@@ -73,6 +74,7 @@ export type GiftSyncResult = {
   totalHosted: number;
   uniqueReceived: number;
   uniqueImported: number;
+  skippedInvalid: number;
   assetsUpdated: number;
   virtualCreated: number;
   syncedAt: string;
@@ -136,20 +138,73 @@ function assertUniqueGift(gift: TelegramUniqueGift) {
   }
 }
 
-function assertNoSourceConflicts(entries: Extract<TelegramOwnedGift, { type: "unique" }>[]) {
-  const names = new Map<string, string>();
-  const numbers = new Map<string, string>();
-  for (const { gift } of entries) {
+type UniqueOwnedGift = Extract<TelegramOwnedGift, { type: "unique" }>;
+
+type ValidatedUniqueGifts = {
+  valid: UniqueOwnedGift[];
+  skippedInvalid: number;
+  issues: string[];
+};
+
+/**
+ * Telegram is an external data source: one malformed collectible must never
+ * abort an otherwise valid user/catalogue sync. Validate each object and then
+ * reject every member of an identity-conflict group so we never arbitrarily
+ * choose one side of inconsistent upstream data.
+ */
+function validateUniqueGiftEntries(entries: UniqueOwnedGift[]): ValidatedUniqueGifts {
+  const individuallyValid: UniqueOwnedGift[] = [];
+  const issues: string[] = [];
+  let invalidCount = 0;
+
+  for (const entry of entries) {
+    try {
+      assertUniqueGift(entry.gift);
+      individuallyValid.push(entry);
+    } catch (error) {
+      invalidCount += 1;
+      const label = typeof entry.gift?.name === "string" && entry.gift.name.trim() ? entry.gift.name.trim() : "unknown Gift";
+      const reason = error instanceof Error ? error.message : "invalid Telegram Gift";
+      issues.push(`${label}: ${reason}`);
+    }
+  }
+
+  const names = new Map<string, Set<string>>();
+  const numbers = new Map<string, Set<string>>();
+  for (const { gift } of individuallyValid) {
     const identity = `${gift.base_name}#${gift.number}`;
-    const existingByName = names.get(gift.name);
-    if (existingByName && existingByName !== identity) throw new Error(`Telegram returned conflicting identity for ${gift.name}`);
-    names.set(gift.name, identity);
+    const nameIdentities = names.get(gift.name) || new Set<string>();
+    nameIdentities.add(identity);
+    names.set(gift.name, nameIdentities);
 
     const numberKey = `${gift.base_name}\u0000${gift.number}`;
-    const existingByNumber = numbers.get(numberKey);
-    if (existingByNumber && existingByNumber !== gift.name) throw new Error(`Telegram returned conflicting unique name for ${identity}`);
-    numbers.set(numberKey, gift.name);
+    const numberNames = numbers.get(numberKey) || new Set<string>();
+    numberNames.add(gift.name);
+    numbers.set(numberKey, numberNames);
   }
+
+  const conflictNames = new Set([...names].filter(([, values]) => values.size > 1).map(([name]) => name));
+  const conflictNumbers = new Set([...numbers].filter(([, values]) => values.size > 1).map(([key]) => key));
+  const deduped = new Map<string, UniqueOwnedGift>();
+  let conflictCount = 0;
+
+  for (const entry of individuallyValid) {
+    const { gift } = entry;
+    const numberKey = `${gift.base_name}\u0000${gift.number}`;
+    if (conflictNames.has(gift.name) || conflictNumbers.has(numberKey)) {
+      conflictCount += 1;
+      issues.push(`${gift.name}: conflicting Telegram Gift identity`);
+      continue;
+    }
+    // Exact duplicates from overlapping Telegram pages are harmless.
+    if (!deduped.has(gift.name)) deduped.set(gift.name, entry);
+  }
+
+  const valid = [...deduped.values()];
+  // Exact duplicate rows can appear across paginated upstream responses and are
+  // deduplicated, but they are not malformed and therefore must not inflate
+  // diagnostics.skippedInvalid.
+  return { valid, skippedInvalid: invalidCount + conflictCount, issues: issues.slice(0, 20) };
 }
 
 async function markSyncFailed(runId: string, error: unknown) {
@@ -199,9 +254,16 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
       if (page === 99) throw new Error("Telegram Gift collection exceeds the supported sync window");
     }
 
-    const unique = all.filter((entry): entry is Extract<TelegramOwnedGift, { type: "unique" }> => entry.type === "unique");
-    unique.forEach(({ gift }) => assertUniqueGift(gift));
-    assertNoSourceConflicts(unique);
+    const receivedUnique = all.filter((entry): entry is UniqueOwnedGift => entry.type === "unique");
+    const validated = validateUniqueGiftEntries(receivedUnique);
+    const unique = validated.valid;
+    if (validated.skippedInvalid > 0) {
+      console.warn("gift sync skipped malformed Telegram Gifts", {
+        profileId,
+        skippedInvalid: validated.skippedInvalid,
+        issues: validated.issues,
+      });
+    }
 
     const seenNames = [...new Set(unique.map(({ gift }) => gift.name))];
     const beforeResult = seenNames.length
@@ -310,7 +372,8 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
         status: "succeeded",
         pages_fetched: pagesFetched,
         telegram_total_count: expectedTotal ?? 0,
-        unique_received: unique.length,
+        unique_received: receivedUnique.length,
+        skipped_invalid: validated.skippedInvalid,
         unique_imported: uniqueImported,
         assets_updated: assetsUpdated,
         virtual_created: missingVirtualRows.length,
@@ -323,8 +386,9 @@ export async function syncTelegramGifts(profileId: string, telegramId: number): 
       runId,
       pagesFetched,
       totalHosted: expectedTotal ?? 0,
-      uniqueReceived: unique.length,
+      uniqueReceived: receivedUnique.length,
       uniqueImported,
+      skippedInvalid: validated.skippedInvalid,
       assetsUpdated,
       virtualCreated: missingVirtualRows.length,
       syncedAt: now,
@@ -381,8 +445,9 @@ export async function getTelegramTgsJson(fileId: string) {
   const cached = tgsJsonCache.get(fileId);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
   const { response } = await getTelegramFile(fileId, MAX_TGS_COMPRESSED_BYTES);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > MAX_TGS_COMPRESSED_BYTES) throw new Error("Telegram TGS is too large");
+  const limited = await readResponseBytesLimited(response, MAX_TGS_COMPRESSED_BYTES);
+  if (!limited) throw new Error("Telegram TGS is empty or too large");
+  const bytes = Buffer.from(limited);
   const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
   const jsonBytes = isGzip ? gunzipSync(bytes, { maxOutputLength: MAX_TGS_JSON_BYTES }) : bytes;
   if (jsonBytes.length > MAX_TGS_JSON_BYTES) throw new Error("Telegram TGS JSON is too large");
@@ -399,6 +464,7 @@ export type GiftCatalogImportResult = {
   pagesFetched: number;
   totalHosted: number;
   uniqueReceived: number;
+  skippedInvalid: number;
   assetsUpserted: number;
   syncedAt: string;
 };
@@ -437,9 +503,16 @@ export async function importTelegramGiftCatalog(telegramId: number): Promise<Gif
     if (page === 99) throw new Error("Коллекция источника превышает поддерживаемое окно импорта");
   }
 
-  const unique = all.filter((entry): entry is Extract<TelegramOwnedGift, { type: "unique" }> => entry.type === "unique");
-  unique.forEach(({ gift }) => assertUniqueGift(gift));
-  assertNoSourceConflicts(unique);
+  const receivedUnique = all.filter((entry): entry is UniqueOwnedGift => entry.type === "unique");
+  const validated = validateUniqueGiftEntries(receivedUnique);
+  const unique = validated.valid;
+  if (validated.skippedInvalid > 0) {
+    console.warn("catalog import skipped malformed Telegram Gifts", {
+      telegramId,
+      skippedInvalid: validated.skippedInvalid,
+      issues: validated.issues,
+    });
+  }
 
   const now = new Date().toISOString();
   const rows = unique.map(({ gift }) => ({
@@ -487,7 +560,8 @@ export async function importTelegramGiftCatalog(telegramId: number): Promise<Gif
     telegramId,
     pagesFetched,
     totalHosted: expectedTotal ?? 0,
-    uniqueReceived: unique.length,
+    uniqueReceived: receivedUnique.length,
+    skippedInvalid: validated.skippedInvalid,
     assetsUpserted: rows.length,
     syncedAt: now,
   };

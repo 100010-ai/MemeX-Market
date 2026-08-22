@@ -1,5 +1,6 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
+import { readResponseBytesLimited } from "@/lib/http-body";
 
 export const runtime = "nodejs";
 
@@ -34,8 +35,8 @@ async function GETHandler(request: NextRequest) {
     });
     const type = response.headers.get("content-type") || "";
     if (!response.ok || !/^image\//i.test(type)) return fallback();
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength <= 0 || bytes.byteLength > 2_000_000) return fallback();
+    const bytes = await readResponseBytesLimited(response, 2_000_000);
+    if (!bytes) return fallback();
     return new NextResponse(bytes, {
       status: 200,
       headers: {

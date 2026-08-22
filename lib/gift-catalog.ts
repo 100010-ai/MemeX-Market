@@ -38,21 +38,23 @@ export async function syncConfiguredGiftCatalogSources(): Promise<{
     const telegramId = Number(source.telegram_id);
     try {
       const result = await importTelegramGiftCatalog(telegramId);
-      successful += 1;
-      assetsUpserted += result.assetsUpserted;
-      results.push(result);
-      await supabase
+      const sourceUpdate = await supabase
         .from("gift_catalog_sources")
         .update({ last_synced_at: result.syncedAt, last_error: null, updated_at: result.syncedAt })
         .eq("id", source.id);
+      if (sourceUpdate.error) throw sourceUpdate.error;
+      successful += 1;
+      assetsUpserted += result.assetsUpserted;
+      results.push(result);
     } catch (sourceError) {
       failed += 1;
       const message = sourceError instanceof Error ? sourceError.message : "Неизвестная ошибка Telegram каталога";
       results.push({ telegramId, error: message });
-      await supabase
+      const failureUpdate = await supabase
         .from("gift_catalog_sources")
         .update({ last_error: message.slice(0, 1000), updated_at: new Date().toISOString() })
         .eq("id", source.id);
+      if (failureUpdate.error) console.error("gift catalog source failure state", failureUpdate.error);
     }
   }
 

@@ -33,7 +33,8 @@ export async function uploadCoinImage(file: File, ownerKey: string) {
   if (error) throw error;
   const { data } = supabase.storage.from("coin-media").getPublicUrl(path);
   if (!data.publicUrl) {
-    await supabase.storage.from("coin-media").remove([path]);
+    const cleanup = await supabase.storage.from("coin-media").remove([path]);
+    if (cleanup.error) console.error("coin media rollback cleanup", cleanup.error);
     throw new Error("Supabase не вернул URL изображения");
   }
   return { path, url: data.publicUrl };

@@ -16,23 +16,24 @@ async function GETHandler(request: NextRequest) {
   const baseName = cleanText(request.nextUrl.searchParams.get("baseName"));
   const supabase = getSupabaseAdmin();
   try {
-    let outgoingQuery = supabase.from("advanced_gift_offers_v056")
+    const outgoingBase = () => supabase.from("advanced_gift_offers_v056")
       .select("id,buyer_profile_id,base_name,scope_type,trait_value,amount,max_fills,filled_count,status,expires_at,created_at")
       .eq("buyer_profile_id", profile.id)
-      .in("status", ["active", "filled", "failed"])
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (baseName) outgoingQuery = outgoingQuery.eq("base_name", baseName);
+      .in("status", ["active", "filled", "failed"]);
 
-    let marketQuery = supabase.from("advanced_gift_offers_v056")
+    const marketBase = () => supabase.from("advanced_gift_offers_v056")
       .select("id,buyer_profile_id,base_name,scope_type,trait_value,amount,max_fills,filled_count,status,expires_at,created_at,profiles(username,first_name)")
       .eq("status", "active")
-      .gt("expires_at", new Date().toISOString())
-      .order("amount", { ascending: false })
-      .limit(120);
-    if (baseName) marketQuery = marketQuery.eq("base_name", baseName);
+      .gt("expires_at", new Date().toISOString());
 
-    const [outgoing, market] = await Promise.all([outgoingQuery, marketQuery]);
+    const outgoingPromise = baseName
+      ? outgoingBase().eq("base_name", baseName).order("created_at", { ascending: false }).limit(100)
+      : outgoingBase().order("created_at", { ascending: false }).limit(100);
+    const marketPromise = baseName
+      ? marketBase().eq("base_name", baseName).order("amount", { ascending: false }).limit(120)
+      : marketBase().order("amount", { ascending: false }).limit(120);
+
+    const [outgoing, market] = await Promise.all([outgoingPromise, marketPromise]);
     if (outgoing.error || market.error) throw outgoing.error || market.error;
     const map = (row: Record<string, unknown>) => {
       const relatedBuyer = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
