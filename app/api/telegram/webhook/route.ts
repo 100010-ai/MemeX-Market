@@ -4,12 +4,24 @@ import { safeSecretEquals } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
 import { getHumanSupportUsername } from "@/lib/support";
+import { applyMainChannelMembership, MAIN_CHANNEL_USERNAME, telegramChatMemberIsMember } from "@/lib/telegram-membership";
 
 export const runtime = "nodejs";
+
+type TelegramChatMemberState = {
+  status?: string;
+  is_member?: boolean;
+  user?: { id?: number };
+};
 
 type TelegramUpdate = {
   update_id?: number;
   pre_checkout_query?: { id: string; from: { id: number }; currency: string; total_amount: number; invoice_payload: string };
+  chat_member?: {
+    chat?: { id?: number; username?: string; type?: string };
+    old_chat_member?: TelegramChatMemberState;
+    new_chat_member?: TelegramChatMemberState;
+  };
   message?: {
     chat?: { id: number };
     from?: { id: number };
@@ -55,6 +67,26 @@ async function POSTHandler(request: Request) {
   };
 
   try {
+    if (update.chat_member) {
+      const memberUpdate = update.chat_member;
+      const channelUsername = String(memberUpdate.chat?.username || "").replace(/^@/, "");
+      const userId = Number(memberUpdate.new_chat_member?.user?.id || memberUpdate.old_chat_member?.user?.id || 0);
+      if (channelUsername.toLowerCase() === MAIN_CHANNEL_USERNAME.toLowerCase() && Number.isSafeInteger(userId) && userId > 0) {
+        const profile = await supabase.from("profiles").select("id,telegram_id").eq("telegram_id", userId).maybeSingle();
+        if (profile.error) return await failed(profile.error, "Не удалось сопоставить Telegram подписчика");
+        if (profile.data) {
+          const nextMember = memberUpdate.new_chat_member || {};
+          const status = String(nextMember.status || "unknown");
+          try {
+            await applyMainChannelMembership(String(profile.data.id), Number(profile.data.telegram_id), telegramChatMemberIsMember(nextMember), status);
+          } catch (membershipError) {
+            return await failed(membershipError, "Не удалось обновить статус подписки");
+          }
+        }
+      }
+      return await done(NextResponse.json({ ok: true }));
+    }
+
     if (update.pre_checkout_query) {
       const checkoutStartedAt = Date.now();
       const query = update.pre_checkout_query;

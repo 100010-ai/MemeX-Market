@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { readSession } from "@/lib/session";
-import { readResponseBytesLimited } from "@/lib/http-body";
+import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -81,8 +81,7 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
     }
     const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
     if (!limited) continue;
-    const bytes = Buffer.from(limited);
-    return new Response(bytes, {
+    return new Response(toBodyArrayBuffer(limited), {
       status: 200,
       headers: {
         "content-type": contentType.split(";")[0] || "image/jpeg",

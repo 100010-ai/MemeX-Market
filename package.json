@@ -12,7 +12,8 @@
     "env:check": "node scripts/check-env.mjs",
     "release:check": "node scripts/release-check.mjs",
     "cleanup:retired": "node scripts/cleanup-retired-source.mjs",
-    "prebuild": "node scripts/cleanup-retired-source.mjs"
+    "prebuild": "node scripts/cleanup-retired-source.mjs",
+    "telegram:webhook": "node scripts/configure-telegram-webhook.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

@@ -297,3 +297,15 @@ No new database migration is required beyond `014_v012_tonapi_polish.sql`.
 - Apply `019_v041_remove_games_interface.sql` to disable the game mission.
 - Mobile navigation is reduced to five primary destinations and uses a floating compact bar.
 - Market controls, filters, cards, top bar and desktop sidebar received a unified dark product UI pass.
+
+## Main channel subscription mission
+
+The onboarding mission `join_main_channel` verifies membership in `@Meme_X_Market` with Telegram Bot API `getChatMember`. For reliable checks and instant unsubscribe events, the bot configured by `TELEGRAM_BOT_TOKEN` **must be an administrator** of the channel.
+
+Production setup after deploy:
+
+```bash
+pnpm telegram:webhook
+```
+
+The command reconfigures the existing webhook with `message`, `pre_checkout_query`, and `chat_member` updates. A claimed subscription reward is revoked if the user leaves the channel; if the reward has already been spent, the unrecovered amount is retained as clawback debt and is automatically deducted from future positive virtual-TON balance credits.

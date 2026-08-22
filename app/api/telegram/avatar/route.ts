@@ -1,12 +1,11 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
-import { readResponseBytesLimited } from "@/lib/http-body";
+import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 export const runtime = "nodejs";
 
-const fallbackSvg = Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#15191f"/><circle cx="32" cy="25" r="11" fill="#69727d"/><path d="M13 57c2-13 10-20 19-20s17 7 19 20" fill="#69727d"/></svg>',
-);
+const fallbackSvg =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#15191f"/><circle cx="32" cy="25" r="11" fill="#69727d"/><path d="M13 57c2-13 10-20 19-20s17 7 19 20" fill="#69727d"/></svg>';
 
 function fallback() {
   return new NextResponse(fallbackSvg, {
@@ -37,7 +36,7 @@ async function GETHandler(request: NextRequest) {
     if (!response.ok || !/^image\//i.test(type)) return fallback();
     const bytes = await readResponseBytesLimited(response, 2_000_000);
     if (!bytes) return fallback();
-    return new NextResponse(bytes, {
+    return new NextResponse(toBodyArrayBuffer(bytes), {
       status: 200,
       headers: {
         "content-type": type,

@@ -228,6 +228,10 @@ export type Mission = {
   progress: number;
   claimed: boolean;
   actionType: string;
+  actionUrl?: string | null;
+  membershipStatus?: "member" | "not_member" | "unknown" | null;
+  rewardRevoked?: boolean;
+  clawbackDue?: number;
 };
 
 export type ActivityItem = {

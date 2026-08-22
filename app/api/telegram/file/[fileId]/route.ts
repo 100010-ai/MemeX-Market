@@ -1,7 +1,8 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
-import { getTelegramFile, isKnownGiftFile } from "@/lib/gifts";
+import { getTelegramFile, isKnownGiftFile, MAX_TELEGRAM_GIFT_FILE_BYTES } from "@/lib/gifts";
+import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 export const runtime = "nodejs";
 
@@ -31,9 +32,10 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ fil
       "cache-control": "private, max-age=86400, stale-while-revalidate=604800",
       "x-content-type-options": "nosniff",
     });
-    const length = response.headers.get("content-length");
-    if (length) headers.set("content-length", length);
-    return new NextResponse(response.body, { headers });
+    const bytes = await readResponseBytesLimited(response, MAX_TELEGRAM_GIFT_FILE_BYTES);
+    if (!bytes) return NextResponse.json({ error: "Медиа подарка пустое или превышает допустимый размер" }, { status: 502 });
+    headers.set("content-length", String(bytes.byteLength));
+    return new NextResponse(toBodyArrayBuffer(bytes), { headers });
   } catch (error) {
     console.warn("telegram gift file unavailable", error);
     return NextResponse.json({ error: "Медиа подарка временно недоступно" }, { status: 502 });

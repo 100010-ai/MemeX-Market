@@ -101,6 +101,8 @@ const marketSearchRoute = read("app/api/market/search/route.ts");
 const looseQuery = read("lib/supabase/loose-query.ts");
 const giftMediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
 const httpBody = read("lib/http-body.ts");
+const telegramAvatarRoute = read("app/api/telegram/avatar/route.ts");
+const telegramFileRoute = read("app/api/telegram/file/[fileId]/route.ts");
 
 function normalizedTelegramUsername(value) {
   return String(value || "").trim().replace(/^@+/, "");
@@ -122,6 +124,7 @@ check("Migration 029 scalable market present", Boolean(migration029));
 check("Migration 9994 player market handoff present", Boolean(migration9994));
 check("Migration 9995 player-only consistency present", exists("supabase/migrations/9995_mrkt_player_only_consistency.sql"));
 check("Migration 9996 resilient Gift sync present", exists("supabase/migrations/9996_gift_sync_resilience.sql"));
+check("Migration 9997 Telegram channel task present", exists("supabase/migrations/9997_main_channel_subscription_task.sql"));
 check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
 check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 
@@ -211,6 +214,15 @@ check("Migration 028 drops advertising data paths",
 );
 check("Virtual TON disclosure is visible", aboutPage.includes("не выводится") && aboutPage.includes("денежной стоимости"));
 check("Telegram Stars invoice endpoint", exists("app/api/stars/invoice/route.ts") && read("app/api/stars/invoice/route.ts").includes('currency: "XTR"'));
+check("Telegram channel subscription task is server-verified",
+  exists("lib/telegram-membership.ts")
+  && exists("app/api/tasks/channel/route.ts")
+  && exists("app/api/system/channel-subscription-audit/route.ts")
+  && webhookRoute.includes("chat_member")
+  && webhookRoute.includes("applyMainChannelMembership")
+  && read("supabase/migrations/9997_main_channel_subscription_task.sql").includes("settle_main_channel_clawback_v700")
+  && packageJson.includes("telegram:webhook")
+);
 check("Telegram Stars webhook verifier",
   exists("app/api/telegram/webhook/route.ts")
   && webhookRoute.includes("x-telegram-bot-api-secret-token")
@@ -323,6 +335,16 @@ check("Gift market fee treasury", migration020.includes("MXM Treasury") && migra
 check("Telegram Gift download timeout", gifts.includes("AbortSignal.timeout(TELEGRAM_FILE_TIMEOUT_MS)"));
 check("Telegram Gift file-size bound", gifts.includes("MAX_TELEGRAM_GIFT_FILE_BYTES") && gifts.includes("content-length"));
 check("TGS decompression bound", gifts.includes("MAX_TGS_JSON_BYTES") && gifts.includes("maxOutputLength") && gifts.includes("readResponseBytesLimited"));
+check("Binary media response bodies use exact ArrayBuffer bodies",
+  httpBody.includes("toBodyArrayBuffer")
+  && telegramAvatarRoute.includes("new NextResponse(toBodyArrayBuffer(bytes)")
+  && giftMediaRoute.includes("new Response(toBodyArrayBuffer(limited)")
+  && telegramFileRoute.includes("new NextResponse(toBodyArrayBuffer(bytes)")
+  && telegramFileRoute.includes("readResponseBytesLimited(response, MAX_TELEGRAM_GIFT_FILE_BYTES)")
+  && !telegramAvatarRoute.includes("new NextResponse(bytes,")
+  && !giftMediaRoute.includes("new Response(limited,")
+  && !telegramFileRoute.includes("new NextResponse(response.body")
+);
 check("Remote Gift media bodies are bounded before buffering",
   Boolean(httpBody)
   && giftMediaRoute.includes("readResponseBytesLimited")

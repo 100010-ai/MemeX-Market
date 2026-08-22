@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clock3, Flame, Gem, Gift, Sparkles, TicketCheck, Trophy } from "lucide-react";
+import { Check, Clock3, ExternalLink, Flame, Gem, Gift, RefreshCw, Sparkles, TicketCheck, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -18,6 +18,7 @@ export default function TasksPage() {
   const [promoCode, setPromoCode] = useState("");
   const [promoBusy, setPromoBusy] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [channelBusy, setChannelBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { profile, refreshProfile, haptic } = useTelegramProfile();
@@ -47,6 +48,32 @@ export default function TasksPage() {
       setError(cause instanceof Error ? cause.message : "Не удалось забрать награду");
     } finally {
       setBusy(null);
+    }
+  }
+
+  function openChannel(url: string) {
+    if (window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function verifyChannel() {
+    if (channelBusy) return;
+    setChannelBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await apiFetch<{ member: boolean; revokedAt?: string | null; clawbackDue?: number }>("/api/tasks/channel", { method: "POST" });
+      if (result.member) {
+        setNotice(result.revokedAt ? "Подписка подтверждена, но ранее полученная награда уже была отозвана." : "Подписка подтверждена. Теперь можно забрать награду.");
+        haptic("medium");
+      } else {
+        setError(result.revokedAt ? "Вы отписались после получения награды — бонус отозван." : "Подписка пока не найдена. Подпишитесь на канал и повторите проверку.");
+      }
+      await Promise.all([load(), refreshProfile()]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось проверить подписку");
+    } finally {
+      setChannelBusy(false);
     }
   }
 
@@ -103,11 +130,27 @@ export default function TasksPage() {
             <div>{items.map((mission) => {
               const done = mission.progress >= mission.target;
               const progress = Math.min(100, mission.progress / mission.target * 100);
+              const channelTask = mission.actionType === "telegram_channel_subscription";
               return (
                 <div key={mission.id} className="mxm-task-row">
                   <div className={`mxm-task-state ${mission.claimed ? "is-done" : done ? "is-ready" : ""}`}>{mission.claimed ? <Check size={13} /> : <Gift size={13} />}</div>
                   <div className="min-w-0 flex-1"><div className="flex items-baseline justify-between gap-3"><p className="truncate text-[11px] font-medium">{mission.title}</p><span className="shrink-0 text-[9px] text-[var(--muted)]">{mission.progress}/{mission.target}</span></div><p className="mt-1 truncate text-[9px] text-[var(--muted-2)]">{mission.description}</p><div className="mt-2 h-[2px] overflow-hidden bg-white/[.055]"><div className={`h-full ${done ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`} style={{ width: `${progress}%` }} /></div></div>
-                  <div className="shrink-0 text-right"><p className="flex items-center justify-end gap-1 text-[10px] font-semibold text-[var(--accent)]"><Gem size={9} fill="currentColor" />{money(mission.reward)}</p>{done && !mission.claimed ? <button onClick={() => void claim(mission.id)} disabled={busy !== null} className="mt-1.5 border-b border-white pb-0.5 text-[9px] font-semibold text-white">{busy === mission.id ? "…" : "Забрать"}</button> : mission.claimed ? <span className="mt-1.5 block text-[9px] text-[var(--positive)]">Получено</span> : null}</div>
+                  <div className="shrink-0 text-right">
+                    <p className="flex items-center justify-end gap-1 text-[10px] font-semibold text-[var(--accent)]"><Gem size={9} fill="currentColor" />{money(mission.reward)}</p>
+                    {mission.rewardRevoked ? (
+                      <div className="mt-1.5 max-w-[116px] text-right text-[9px] text-[var(--negative)]">Награда отозвана{Number(mission.clawbackDue || 0) > 0 ? ` · долг ${money(Number(mission.clawbackDue || 0))}` : ""}</div>
+                    ) : done && !mission.claimed ? (
+                      <button onClick={() => void claim(mission.id)} disabled={busy !== null || channelBusy} className="mt-1.5 border-b border-white pb-0.5 text-[9px] font-semibold text-white">{busy === mission.id ? "…" : "Забрать"}</button>
+                    ) : mission.claimed ? (
+                      <span className="mt-1.5 block text-[9px] text-[var(--positive)]">Получено</span>
+                    ) : null}
+                    {channelTask && !mission.claimed ? (
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        <button type="button" onClick={() => openChannel(mission.actionUrl || "https://t.me/Meme_X_Market")} className="inline-flex items-center gap-1 text-[9px] text-[var(--accent)]"><ExternalLink size={9} />Подписаться</button>
+                        <button type="button" onClick={() => void verifyChannel()} disabled={channelBusy} className="inline-flex items-center gap-1 text-[9px] text-white disabled:opacity-50"><RefreshCw size={9} className={channelBusy ? "animate-spin" : ""} />{channelBusy ? "…" : "Проверить"}</button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}</div>

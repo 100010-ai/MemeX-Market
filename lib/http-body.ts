@@ -2,6 +2,12 @@
  * Reads an upstream Response without ever buffering more than maxBytes.
  * Returns null when the body is empty or exceeds the configured bound.
  */
+export function toBodyArrayBuffer(bytes: Uint8Array<ArrayBufferLike>): ArrayBuffer {
+  const body = new Uint8Array(bytes.byteLength);
+  body.set(bytes);
+  return body.buffer;
+}
+
 export async function readResponseBytesLimited(response: Response, maxBytes: number): Promise<Uint8Array | null> {
   const limit = Math.max(1, Math.floor(maxBytes));
   const declared = Number(response.headers.get("content-length") || 0);
