@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -13,10 +13,7 @@ async function POSTHandler(request: Request) {
   }
 
   const { data, error } = await getSupabaseAdmin().rpc("claim_premium_daily_v200", { p_profile_id: profile.id });
-  if (error) {
-    const migrationMissing = error.code === "42883" || /claim_premium_daily_v200|schema cache|could not find the function/i.test(error.message || "");
-    return NextResponse.json({ error: migrationMissing ? "Примените миграцию экономики Market 2.0" : error.message }, { status: migrationMissing ? 503 : 400 });
-  }
+  if (error) return apiFailure(error, "Не удалось получить ежедневный бонус", 400);
   const payload = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
   if (payload.status !== "claimed") {
     const messages: Record<string, string> = { premium_required: "Нужен MXM Premium", already_claimed: "Сегодня бонус уже получен", missing: "Профиль не найден" };

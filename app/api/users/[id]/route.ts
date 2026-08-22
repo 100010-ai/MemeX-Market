@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { progressionForXp, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -26,7 +26,8 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID игрока" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   try {
-    await supabase.rpc("refresh_profile_meta_v048", { p_profile_id: id });
+    const refresh = await supabase.rpc("refresh_profile_meta_v048", { p_profile_id: id });
+    if (refresh.error) throw refresh.error;
     const [profileResult, coinsResult, giftsResult, reputationResult, achievementsResult, statsResult, verifiedEntitlementResult, presentationResult, badgeInventoryResult] = await Promise.all([
       supabase.from("profiles").select("id,username,first_name,photo_url,created_at,xp").eq("id", id).maybeSingle(),
       supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").eq("creator_profile_id", id).order("market_cap", { ascending: false }).limit(12),
@@ -78,8 +79,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       },
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
-    console.error("public profile", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить игрока" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить игрока");
   }
 }
 export const GET = withApiErrors("app/api/users/[id]/route.ts:GET", GETHandler);

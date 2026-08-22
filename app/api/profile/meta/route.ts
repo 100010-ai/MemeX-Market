@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -33,7 +33,7 @@ async function GETHandler() {
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const refreshed = await supabase.rpc("refresh_profile_meta_v048", { p_profile_id: profile.id });
-  if (refreshed.error) return NextResponse.json({ error: refreshed.error.message }, { status: 500 });
+  if (refreshed.error) return apiFailure(refreshed.error, "Не удалось выполнить запрос");
   const [reputation, achievements, presentation, verifiedEntitlement, badgeInventory] = await Promise.all([
     supabase.from("profile_reputation").select("score,trade_score,age_score,activity_score,trust_score,updated_at").eq("profile_id", profile.id).maybeSingle(),
     supabase.from("user_achievements").select("achievement_key,unlocked_at,achievements(title,description,icon,xp_reward,sort_order)").eq("profile_id", profile.id).order("unlocked_at", { ascending: false }),
@@ -42,7 +42,7 @@ async function GETHandler() {
     supabase.from("profile_item_inventory").select("item_key,acquired_at,profile_items!inner(title,rarity,item_type,active)").eq("profile_id", profile.id).eq("profile_items.item_type", "badge").eq("profile_items.active", true).order("acquired_at", { ascending: false }).limit(12),
   ]);
   const error = reputation.error || achievements.error || presentation.error || verifiedEntitlement.error || badgeInventory.error;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiFailure(error, "Не удалось выполнить запрос");
   const verifiedExpiresAt = verifiedEntitlement.data?.expires_at;
   const verifiedExpiry = verifiedExpiresAt ? new Date(verifiedExpiresAt).getTime() : null;
   const creatorVerified = Boolean(verifiedEntitlement.data)

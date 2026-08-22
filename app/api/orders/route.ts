@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -66,7 +66,7 @@ async function GETHandler() {
     return NextResponse.json({ outgoing, incoming, listings: (listingsResult.data || []).map(mapGift) });
   } catch (error) {
     console.error("orders", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить ордера" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить ордера");
   }
 }
 export const GET = withApiErrors("app/api/orders/route.ts:GET", GETHandler);

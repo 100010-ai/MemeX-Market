@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -20,7 +20,7 @@ async function POSTHandler(request: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const cart = await supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).order("added_at", { ascending: true }).limit(20);
-  if (cart.error) return NextResponse.json({ error: cart.error.message }, { status: 500 });
+  if (cart.error) return apiFailure(cart.error, "Не удалось выполнить запрос");
   const ids = (cart.data || []).map((row) => String(row.virtual_gift_id));
   if (!ids.length) return NextResponse.json({ error: "Корзина пуста" }, { status: 409 });
 

@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -9,7 +9,7 @@ async function GETHandler() {
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const { error: ensureError } = await supabase.rpc("ensure_user_missions", { p_profile_id: profile.id });
-  if (ensureError) return NextResponse.json({ error: ensureError.message }, { status: 500 });
+  if (ensureError) return apiFailure(ensureError, "Не удалось подготовить задания");
 
   const missionResult = await supabase
     .from("user_missions_view")
@@ -18,7 +18,7 @@ async function GETHandler() {
     .neq("key", "daily_game_3")
     .order("sort_order", { ascending: true });
 
-  if (missionResult.error) return NextResponse.json({ error: missionResult.error.message }, { status: 500 });
+  if (missionResult.error) return apiFailure(missionResult.error, "Не удалось выполнить запрос");
 
   return NextResponse.json({
     missions: (missionResult.data || []).flatMap((mission) => {

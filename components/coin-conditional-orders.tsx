@@ -11,6 +11,10 @@ type Order = { id: string; kind: Kind; triggerPrice: number; inputAmount: number
 
 const labels: Record<Kind, string> = { limit_buy: "Лимитная покупка", limit_sell: "Лимитная продажа", take_profit: "Take Profit", stop_loss: "Stop Loss" };
 
+function orderKindLabel(kind: Kind): string {
+  return labels[kind];
+}
+
 function requestKey() {
   const value = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `coin-order:${value}`;
@@ -79,6 +83,6 @@ export function CoinConditionalOrders({ coin, holdingQuantity, availableBalance,
     {kind === "stop_loss" && numericTrigger > 0 && numericTrigger >= coin.currentPrice ? <p className="mt-2 text-[9px] text-[var(--negative)]">Stop Loss обычно ставят ниже текущей цены.</p> : null}
     {error ? <p className="mt-2 text-[10px] text-[var(--negative)]">{error}</p> : null}
     <button type="button" disabled={!valid || busy} onClick={() => void create()} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-[15px] bg-[var(--panel-3)] text-[11px] font-semibold disabled:opacity-40"><Gem size={11} fill="currentColor"/>{busy?"Сохраняем…":"Создать ордер"}</button>
-    {orders.length ? <div className="mt-3 divide-y divide-[var(--border-soft)] border-t border-[var(--border-soft)]">{orders.slice(0,12).map((order)=><div key={order.id} className="flex items-center gap-2 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{labels[order.kind]} · {price(order.triggerPrice)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{order.kind === "limit_buy" ? money(order.inputAmount) : `${compact(order.inputAmount)} ${coin.symbol}`} · <span className={order.status === "active" ? "text-[var(--positive)]" : order.status === "failed" ? "text-[var(--negative)]" : ""}>{order.status}</span>{order.failureReason ? ` · ${order.failureReason}` : ""}</p></div>{order.status === "active" ? <button type="button" disabled={busy} onClick={() => void cancel(order.id)} className="grid h-8 w-8 place-items-center text-[var(--muted)]"><X size={12}/></button> : <Clock3 size={11} className="text-[var(--muted)]"/>}</div>)}</div> : null}
+    {orders.length ? <div className="mt-3 divide-y divide-[var(--border-soft)] border-t border-[var(--border-soft)]">{orders.slice(0,12).map((order)=><div key={order.id} className="flex items-center gap-2 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{orderKindLabel(order.kind)} · {price(order.triggerPrice)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{order.kind === "limit_buy" ? money(order.inputAmount) : `${compact(order.inputAmount)} ${coin.symbol}`} · <span className={order.status === "active" ? "text-[var(--positive)]" : order.status === "failed" ? "text-[var(--negative)]" : ""}>{order.status}</span>{order.failureReason ? ` · ${order.failureReason}` : ""}</p></div>{order.status === "active" ? <button type="button" disabled={busy} onClick={() => void cancel(order.id)} className="grid h-8 w-8 place-items-center text-[var(--muted)]"><X size={12}/></button> : <Clock3 size={11} className="text-[var(--muted)]"/>}</div>)}</div> : null}
   </section>;
 }

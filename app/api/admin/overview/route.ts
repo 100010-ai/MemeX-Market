@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -16,9 +16,6 @@ const LIST_LIMITS = {
   refundReconciliation: 100,
 } as const;
 
-function missingOptionalTable(error: { code?: string; message?: string } | null | undefined, names: string[]) {
-  return Boolean(error && (error.code === "42P01" || names.some((name) => new RegExp(`${name}|schema cache`, "i").test(error.message || ""))));
-}
 
 function objectMetrics(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -72,7 +69,7 @@ async function GETHandler() {
 
     const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error;
     if (primaryError) throw primaryError;
-    if (promoCodes.error && !missingOptionalTable(promoCodes.error, ["promo_codes"])) throw promoCodes.error;
+    if (promoCodes.error) throw promoCodes.error;
 
     const [dashboard, tonapiCount, tonapiVerified, tonapiState, activeSourceCount, economy] = await Promise.all([
       supabase.rpc("admin_dashboard_metrics_v028"),
@@ -127,8 +124,7 @@ async function GETHandler() {
       checkedAt: new Date().toISOString(),
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
-    console.error("admin overview", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить админ-панель" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить админ-панель");
   }
 }
 export const GET = withApiErrors("app/api/admin/overview/route.ts:GET", GETHandler);

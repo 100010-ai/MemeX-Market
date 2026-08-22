@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,8 +11,7 @@ async function GETHandler() {
   try {
     return NextResponse.json({ config: await getRuntimeConfig() }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
-    console.error("admin runtime config", error);
-    return NextResponse.json({ error: "Не удалось загрузить Runtime Config" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить Runtime Config");
   }
 }
 
@@ -36,15 +35,16 @@ async function POSTHandler(request: Request) {
       updated_at: new Date().toISOString(),
     }).eq("singleton", true);
     if (error) throw error;
-    await supabase.from("admin_audit_log").insert({
+    const audit = await supabase.from("admin_audit_log").insert({
       actor: `admin:${admin.telegram_id}`,
       action: "runtime_config.update",
       target_type: "runtime_config",
       payload: input,
     });
+    if (audit.error) throw audit.error;
     return NextResponse.json({ config: await getRuntimeConfig() });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось сохранить Runtime Config" }, { status: 400 });
+    return apiFailure(error, "Не удалось сохранить Runtime Config", 400);
   }
 }
 export const GET = withApiErrors("app/api/admin/runtime-config/route.ts:GET", GETHandler);

@@ -43,6 +43,10 @@ export default function AdminHealthPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const services = data
+    ? (Object.entries(data.services) as Array<[string, HealthPayload["services"][string]]>)
+    : [];
+
   return <main className="control-main admin-main min-h-screen">
     <header className="control-topbar admin-topbar">
       <div className="flex items-center gap-3"><Link href="/admin" className="control-icon" aria-label="Назад"><ArrowLeft size={14}/></Link><div><h1 className="text-[15px] font-semibold">Health Center</h1><p className="mt-0.5 text-[10px] text-[var(--muted)]">Состояние интеграций и фоновых процессов без раскрытия секретов</p></div></div>
@@ -57,7 +61,7 @@ export default function AdminHealthPage() {
           <Metric label="Условных ордеров" value={String(data.counters.activeConditionalOrders)} />
         </div>
         <div className="mt-4 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
-          {Object.entries(data.services).map(([key, item]) => <div key={key} className="flex items-start gap-3 border-b border-[var(--border-soft)] p-3.5 last:border-b-0">
+          {services.map(([key, item]) => <div key={key} className="flex items-start gap-3 border-b border-[var(--border-soft)] p-3.5 last:border-b-0">
             <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[9px] ${item.status === "ok" ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{item.status === "ok" ? <Activity size={13}/> : <CircleAlert size={13}/>}</span>
             <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-xs font-medium">{labels[key] || key}</p>{item.latencyMs != null ? <span className="text-[9px] text-[var(--muted)]">{item.latencyMs} ms</span> : null}</div><p className="mt-1 break-words text-[10px] leading-4 text-[var(--muted)]">{item.detail}</p></div>
             <span className={`text-[9px] uppercase tracking-wide ${item.status === "ok" ? "text-emerald-300" : "text-amber-300"}`}>{item.status}</span>

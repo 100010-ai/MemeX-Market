@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, isDatabaseSchemaError, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,9 +11,6 @@ export const maxDuration = 60;
 
 function friendlyBootstrapError(error: unknown) {
   const message = error instanceof Error ? error.message : "Не удалось загрузить Telegram Gifts";
-  if (/tonapi_catalog_state|tonapi_gift_collections|acquire_tonapi_catalog_lock|chain_nft_address|chain_verified|model_preview_url|reconcile_npc_external_prices/i.test(message)) {
-    return "База данных не обновлена до актуальной схемы Gifts. Примените миграции 014_v012_tonapi_polish.sql и 015_v014_real_prices_animations.sql.";
-  }
   if (/TonAPI (401|403)/i.test(message)) {
     return "TonAPI отклонил TONAPI_KEY. MX Market попробует публичный режим автоматически; если ошибка повторяется, удалите невалидный TONAPI_KEY или выпустите новый ключ в TonConsole.";
   }
@@ -90,7 +87,7 @@ async function POSTHandler(request: Request) {
     if (catalog.skipped) {
       const concurrentListed = await waitForConcurrentBootstrap();
       if (concurrentListed > 0) return NextResponse.json({ ok: true, skipped: true, listed: concurrentListed, catalog });
-      return NextResponse.json({ error: "Каталог Gifts уже загружается. Повторите через несколько секунд." }, { status: 409 });
+      return NextResponse.json({ ok: true, pending: true, skipped: true, listed: 0, catalog, retryAfterMs: 5000 }, { status: 202, headers: { "retry-after": "5" } });
     }
 
     const genesis = await ensureGenesisGiftMarket({ batchSize: 700, force: true });
@@ -103,6 +100,7 @@ async function POSTHandler(request: Request) {
 
     return NextResponse.json({ ok: true, skipped: false, listed, catalog, genesis });
   } catch (error) {
+    if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема Gifts требует актуальной production-миграции");
     console.error("gift market bootstrap", error);
     return NextResponse.json({ error: friendlyBootstrapError(error) }, { status: 502 });
   }

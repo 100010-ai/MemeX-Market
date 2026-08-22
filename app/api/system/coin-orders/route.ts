@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { recordAppError } from "@/lib/error-inbox";
@@ -14,7 +14,7 @@ async function processOrders(request: Request) {
   if (error) {
     console.error("coin order processor", error);
     await recordAppError("/api/system/coin-orders", error, null);
-    return NextResponse.json({ error: "Order processor failed" }, { status: 500 });
+    return apiFailure(error, "Order processor failed");
   }
   return NextResponse.json({ ok: true, result: data }, { headers: { "cache-control": "no-store" } });
 }

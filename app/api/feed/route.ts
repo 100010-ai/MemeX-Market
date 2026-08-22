@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -14,7 +14,7 @@ async function GETHandler(request: NextRequest) {
     return NextResponse.json({ activity });
   } catch (error) {
     console.error("feed", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить ленту рынка" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить ленту рынка");
   }
 }
 export const GET = withApiErrors("app/api/feed/route.ts:GET", GETHandler);

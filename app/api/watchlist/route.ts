@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -32,7 +32,7 @@ async function GETHandler() {
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiFailure(error, "Не удалось загрузить избранное");
   const rows = data || [];
   const coinIds = rows.filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id));
   const giftCollections = rows.filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection));
@@ -42,10 +42,7 @@ async function GETHandler() {
     getRuntimeConfig(),
     supabase.from("profiles").select("premium_until").eq("id", profile.id).maybeSingle(),
   ]);
-  if (premiumResult.error) {
-    console.error("watchlist capacity", premiumResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить лимит избранного" }, { status: 500 });
-  }
+  if (premiumResult.error) return apiFailure(premiumResult.error, "Не удалось загрузить лимит избранного");
   const premiumActive = Boolean(premiumResult.data?.premium_until && new Date(String(premiumResult.data.premium_until)).getTime() > Date.now());
   const watchlistLimit = config.remoteConfig.maxWatchlistItems * (premiumActive ? 2 : 1);
 
@@ -56,7 +53,7 @@ async function GETHandler() {
     supabase.from("price_alerts").select("id,kind,coin_id,virtual_gift_id,gift_collection,direction,target_price,enabled,last_triggered_at,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }),
   ]);
   const firstError = coinsResult.error || collectionsResult.error || giftsResult.error || alertsResult.error;
-  if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить данные избранного");
 
   const coins = (coinsResult.data || []).map(mapCoin).sort((a, b) => coinIds.indexOf(a.id) - coinIds.indexOf(b.id));
   const collections = (collectionsResult.data || []).map((row) => mapCollection(row as Record<string, unknown>)).sort((a, b) => giftCollections.indexOf(a.baseName) - giftCollections.indexOf(b.baseName));
@@ -78,7 +75,8 @@ async function POSTHandler(request: Request) {
   const profileId = String(profile.id);
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "watchlist", String(profile.id), 90, 60))) return NextResponse.json({ error: "Слишком много запросов." }, { status: 429 });
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const kind = body.kind === "coin" ? "coin" : body.kind === "gift_collection" ? "gift_collection" : body.kind === "gift" ? "gift" : null;
   const enabled = body.enabled === true;
   if (!kind) return NextResponse.json({ error: "Некорректный тип избранного" }, { status: 400 });
@@ -86,10 +84,7 @@ async function POSTHandler(request: Request) {
   const config = await getRuntimeConfig();
   let watchlistLimit = config.remoteConfig.maxWatchlistItems;
   const premium = await supabase.from("profiles").select("premium_until").eq("id", profileId).maybeSingle();
-  if (premium.error) {
-    console.error("watchlist premium", premium.error);
-    return NextResponse.json({ error: "Не удалось проверить лимит избранного" }, { status: 500 });
-  }
+  if (premium.error) return apiFailure(premium.error, "Не удалось проверить лимит избранного");
   if (premium.data?.premium_until && new Date(String(premium.data.premium_until)).getTime() > Date.now()) watchlistLimit *= 2;
 
   const coinId = kind === "coin" && typeof body.coinId === "string" ? body.coinId : null;
@@ -110,10 +105,10 @@ async function POSTHandler(request: Request) {
   });
   if (error) {
     console.error("watchlist mutation", error);
-    const missing = error.code === "42883" || /set_watchlist_v200|schema cache|could not find the function/i.test(error.message || "");
     const limit = /watchlist limit reached/i.test(error.message || "");
     const notFound = /not found/i.test(error.message || "");
-    return NextResponse.json({ error: missing ? "Примените миграцию экономики Market 2.0" : limit ? `Лимит избранного: ${watchlistLimit}` : notFound ? "Актив не найден" : "Не удалось изменить избранное" }, { status: missing ? 503 : limit ? 409 : notFound ? 404 : 500 });
+    if (!limit && !notFound) return apiFailure(error, "Не удалось изменить избранное");
+    return NextResponse.json({ error: limit ? `Лимит избранного: ${watchlistLimit}` : "Актив не найден" }, { status: limit ? 409 : 404 });
   }
   return NextResponse.json(data || { enabled });
 }

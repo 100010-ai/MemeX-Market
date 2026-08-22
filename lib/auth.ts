@@ -1,11 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { readSession } from "@/lib/session";
 
-function requiredString(value: unknown, field: string) {
-  if (typeof value !== "string" || value.trim().length === 0) throw new Error(`Profile field ${field} is missing`);
-  return value.trim();
-}
-
 function safeString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -72,7 +67,7 @@ type FinanceSnapshot = {
 };
 
 function formatProfileSnapshot(profileRow: Record<string, unknown>, finance: FinanceSnapshot) {
-  const id = requiredString(profileRow.id, "id");
+  const id = safeString(profileRow.id);
   const balance = safeNumber(finance.balance);
   const reservedBalance = Math.max(0, safeNumber(finance.reservedBalance));
   const availableBalance = Math.max(0, balance - reservedBalance);
@@ -103,7 +98,7 @@ function formatProfileSnapshot(profileRow: Record<string, unknown>, finance: Fin
 }
 
 export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
-  const id = requiredString(profileRow.id, "id");
+  const id = safeString(profileRow.id);
   const supabase = getSupabaseAdmin();
 
   let finance: FinanceSnapshot = {
@@ -114,6 +109,8 @@ export async function getProfileSnapshot(profileRow: Record<string, unknown>) {
     netWorth: safeNumber(profileRow.balance),
     realizedPnl: 0,
   };
+
+  if (!id) return formatProfileSnapshot(profileRow, finance);
 
   const fastSnapshot = await supabase.rpc("profile_snapshot_v040", { p_profile_id: id });
   if (fastSnapshot.error) throw fastSnapshot.error;

@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -59,7 +59,7 @@ async function GETHandler(request: NextRequest) {
   } catch (error) {
     console.error("advanced offers", error);
     await recordAppError("/api/market/offers", error, String(profile.id), { method: "GET" });
-    return NextResponse.json({ error: "Не удалось загрузить расширенные офферы" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить расширенные офферы");
   }
 }
 
@@ -74,7 +74,7 @@ async function POSTHandler(request: Request) {
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const baseName = cleanText(body.baseName);
-    const scopeType = ["collection", "model", "backdrop", "symbol"].includes(body.scopeType) ? body.scopeType : null;
+    const scopeType = typeof body.scopeType === "string" && ["collection", "model", "backdrop", "symbol"].includes(body.scopeType) ? body.scopeType : null;
     const traitValue = cleanText(body.traitValue) || null;
     const amount = Number(body.amount);
     const maxFills = Number(body.maxFills ?? 1);
@@ -92,12 +92,12 @@ async function POSTHandler(request: Request) {
       p_max_fills: maxFills,
       p_duration_hours: durationHours,
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return apiFailure(error, "Не удалось создать оффер", 400);
     return NextResponse.json({ offer: data }, { status: 201 });
   } catch (error) {
     console.error("create advanced offer", error);
     await recordAppError("/api/market/offers", error, String(profile.id), { method: "POST" });
-    return NextResponse.json({ error: "Не удалось создать оффер" }, { status: 500 });
+    return apiFailure(error, "Не удалось создать оффер");
   }
 }
 export const GET = withApiErrors("app/api/market/offers/route.ts:GET", GETHandler);

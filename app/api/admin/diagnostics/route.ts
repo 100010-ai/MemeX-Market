@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -110,7 +110,7 @@ async function GETHandler() {
     });
   } catch (error) {
     console.error("admin diagnostics", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Diagnostics failed" }, { status: 500 });
+    return apiFailure(error, "Diagnostics failed");
   }
 }
 export const GET = withApiErrors("app/api/admin/diagnostics/route.ts:GET", GETHandler);

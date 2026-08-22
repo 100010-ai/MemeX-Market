@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -116,7 +116,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ nam
     }, { headers: { "server-timing": `collection;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {
     console.error("gift collection detail", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить коллекцию" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить коллекцию");
   }
 }
 export const GET = withApiErrors("app/api/collections/[name]/route.ts:GET", GETHandler);

@@ -6,9 +6,6 @@ let nextMaintenanceAt = 0;
 let nextCatalogExpandAt = 0;
 let maintenancePromise: Promise<void> | null = null;
 
-function isMissingFunction(error: { code?: string; message?: string } | null) {
-  return Boolean(error && (error.code === "42883" || /expire_market_orders|schema cache|could not find the function/i.test(error.message || "")));
-}
 
 /** Opportunistic housekeeping + gradual catalog expansion. */
 export async function maybeMaintainGiftMarket(intervalMs = 60_000) {
@@ -19,7 +16,7 @@ export async function maybeMaintainGiftMarket(intervalMs = 60_000) {
   maintenancePromise = (async () => {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.rpc("expire_market_orders");
-    if (error && !isMissingFunction(error)) console.warn("gift market maintenance", error);
+    if (error) throw error;
 
     if (Date.now() >= nextCatalogExpandAt) {
       nextCatalogExpandAt = Date.now() + 5 * 60_000;

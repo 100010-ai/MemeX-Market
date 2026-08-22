@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -18,7 +18,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
 
   const { name } = await params;
   const baseName = decodeURIComponent(name).trim();
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const count = Number(body.count);
   if (!baseName) return NextResponse.json({ error: "Коллекция не указана" }, { status: 400 });
   if (!Number.isInteger(count) || !allowedCounts.has(count)) return NextResponse.json({ error: "Можно купить 2, 5 или 10 самых дешёвых Gifts" }, { status: 400 });
@@ -41,7 +42,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ nam
     .order("virtual_gift_id", { ascending: true })
     .limit(count);
 
-  if (candidates.error) return NextResponse.json({ error: candidates.error.message }, { status: 500 });
+  if (candidates.error) return apiFailure(candidates.error, "Не удалось выполнить запрос");
   const rows = candidates.data || [];
   if (rows.length < count) return NextResponse.json({ error: `В коллекции сейчас доступно только ${rows.length} подходящих лотов` }, { status: 409 });
 

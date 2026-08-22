@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,7 +11,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   const { id } = await params;
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID оффера" }, { status: 400 });
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const action = body.action === "cancel" ? "cancel" : body.action === "accept" ? "accept" : null;
   if (!action) return NextResponse.json({ error: "Некорректное действие" }, { status: 400 });
   const supabase = getSupabaseAdmin();

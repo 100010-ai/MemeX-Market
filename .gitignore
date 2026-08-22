@@ -6,6 +6,7 @@ out/
 .env
 .env.*
 !.env.example
+!.env.production.example
 .mxm-control-secret
 .DS_Store
 npm-debug.log*

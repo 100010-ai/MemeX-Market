@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -10,7 +10,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   const { id } = await params;
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID ордера" }, { status: 400 });
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   if (body.action !== "cancel") return NextResponse.json({ error: "Некорректное действие" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("cancel_coin_conditional_order_v056", { p_profile_id: profile.id, p_order_id: id });

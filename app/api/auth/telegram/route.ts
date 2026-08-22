@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { validateTelegramInitData } from "@/lib/telegram";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,11 +11,9 @@ export const runtime = "nodejs";
 async function POSTHandler(request: Request) {
   try {
     if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-    }
-    const initData = typeof (body as { initData?: unknown }).initData === "string" ? (body as { initData: string }).initData : "";
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    const initData = typeof body.initData === "string" ? body.initData : "";
     if (!initData) return NextResponse.json({ error: "initData is required" }, { status: 400 });
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -41,10 +39,7 @@ async function POSTHandler(request: Request) {
       p_last_name: user.last_name ?? null,
       p_photo_url: user.photo_url ?? null,
     });
-    if (error) {
-      console.error("telegram profile sync", error);
-      return NextResponse.json({ error: "Не удалось синхронизировать профиль Telegram" }, { status: 503 });
-    }
+    if (error) return apiFailure(error, "Не удалось синхронизировать профиль Telegram", 503);
     if (!data || typeof data !== "object") {
       return NextResponse.json({ error: "Supabase вернул неполный профиль" }, { status: 503 });
     }
@@ -52,7 +47,7 @@ async function POSTHandler(request: Request) {
       const code = startParam.slice(4);
       if (/^[A-Za-z0-9_-]{6,32}$/.test(code)) {
         const referral = await supabase.rpc("attach_referrer_v046", { p_profile_id: data.id, p_referral_code: code });
-        if (referral.error && !/attach_referrer_v046|schema cache|could not find the function/i.test(referral.error.message || "")) console.warn("referral attach", referral.error);
+        if (referral.error) return apiFailure(referral.error, "Не удалось применить реферальный код");
       }
     }
     const bannedUntil = data.banned_until ? new Date(String(data.banned_until)).getTime() : null;
@@ -63,8 +58,7 @@ async function POSTHandler(request: Request) {
     await setSession(user.id);
     return NextResponse.json({ profile }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
-    console.error("telegram auth", error);
-    return NextResponse.json({ error: "Telegram authentication failed" }, { status: 500 });
+    return apiFailure(error, "Telegram authentication failed");
   }
 }
 export const POST = withApiErrors("app/api/auth/telegram/route.ts:POST", POSTHandler);

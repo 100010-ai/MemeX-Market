@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,7 +11,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   if (!(await enforceRateLimit(request, "gift-offer-resolve", String(profile.id), 50, 60))) return NextResponse.json({ error: "Слишком много операций. Попробуйте позже." }, { status: 429 });
   const { id } = await params;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const action = String(body.action || "");
   const supabase = getSupabaseAdmin();
   if (action === "cancel") {

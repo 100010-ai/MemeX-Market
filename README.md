@@ -14,7 +14,7 @@ Telegram Mini App: simulated secondary market for Telegram collectible Gifts plu
 - **Safety and operations:** atomic Premium watchlist limits, Energy enforcement, store eligibility checks, pre-checkout reservation expiry/grace, human payment support, mandatory refund-reconciliation queue, bounded admin aggregates and anti-abuse/rate-limit telemetry.
 - **Advertising removed:** AdsGram, rewarded-ad/sponsored-task routes, runtime flags, admin controls, documentation and live database objects are no longer part of the product.
 
-Apply every migration in numeric order through `supabase/migrations/029_market_scalability.sql` before deploying this build. Run `npm run release:check` after setting the required production environment variables.
+Apply **every** SQL migration in `supabase/migrations/` in filename order before deploying this build. Do not stop at `029`: the current runtime also requires `030_v060_production_auth_schema_hotfix.sql` and the `999x` production repair migrations, including `9993_production_runtime_reliability.sql` and the final Telegram auth repair. Run `pnpm run release:check` after setting the required production environment variables.
 
 
 
@@ -29,7 +29,7 @@ Apply every migration in numeric order through `supabase/migrations/029_market_s
 - **Admin Economy & Risk:** minted/burned/circulating TON, fees, Stars revenue, ARPU/ARPPU, rolling DAU/MAU/M1 retention, 24-hour trade turnover, bounded top Gift/coin/Store lists, suspicious Gift trading pairs and Error Inbox.
 - **Health Center:** Supabase, Telegram Bot/webhook, TonAPI, background workers, Gift sync, recent errors and active conditional orders with sanitized diagnostics.
 - **Runtime Config:** maintenance message, feature flags and operational limits can be changed from admin without a redeploy.
-- **Database:** apply every migration in numeric order through `supabase/migrations/029_market_scalability.sql` before deploying this application build.
+- **Database:** apply every SQL migration in `supabase/migrations/` in filename order. The current application depends on the post-029 auth/financial/runtime repair migrations as well.
 
 ## v0.49 — Sweep, bulk listing, activity and market fixes
 
@@ -105,7 +105,7 @@ This release consolidates the v0.14–v0.18 fixes into a stricter market archite
 - **Collections 2.0:** filters by model/backdrop/symbol, search, rarity/price/offers/newest sorting, exact database-side trait aggregation, paginated active listings, expanded market metrics, trait floors, recent sales and fullscreen price chart.
 - **Memecoin chart:** chart data no longer rebuilds the chart object for every data update; timeframes, crosshair, volume, pinch zoom and fullscreen mode are retained.
 - **Performance diagnostics:** `?perf=1` enables FPS, DOM, media budget, Lottie cache, API latency/errors, realtime state and JS heap counters. `?perf=0` disables it.
-- **Release gate:** `npm run release:check` checks critical files, secret hygiene, TypeScript and ESLint before deployment. See `docs/RELEASE_CHECKLIST.md`.
+- **Release gate:** `pnpm run release:check` checks critical files, secret hygiene, TypeScript and ESLint before deployment. See `docs/RELEASE_CHECKLIST.md`.
 
 ### Database upgrade
 
@@ -173,22 +173,17 @@ The v0.10 migration inserts no mock Gifts, coins, trades, leaderboard users or f
 
 ## Environment
 
-```env
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SECRET_KEY=sb_secret_...
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-TELEGRAM_BOT_TOKEN=123456789:AA...
-SESSION_SECRET=your-own-random-secret-at-least-32-characters
-ADMIN_TELEGRAM_IDS=123456789
-```
+Copy `.env.example` (or `.env.production.example` for deployment) and replace every placeholder used by your environment. The production-critical variables are Supabase server/browser credentials, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, and a real human `SUPPORT_TELEGRAM_USERNAME`.
+
+Do not commit `.env`, `.env.local`, service-role secrets, bot tokens, webhook secrets, or control secrets. `SUPPORT_TELEGRAM_USERNAME` must point to a human support account and must not be the bot username.
 
 No MTProto user session is required by the production app.
 
 ## Local God Mode
 
 ```bash
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
 Open:
@@ -218,11 +213,11 @@ players / cart / offers / secondary market
 ## Build
 
 ```bash
-npm install
-npm run typecheck
-npm run lint
-npm run build
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm run lint
+pnpm run build
+pnpm run dev
 ```
 
 ## v0.11 — Telegram Session Fix + Visible Games + Finite Genesis Gift Market

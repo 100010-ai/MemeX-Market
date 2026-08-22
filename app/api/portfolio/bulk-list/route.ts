@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -13,7 +13,8 @@ async function POSTHandler(request: Request) {
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля Gifts временно отключена" }, { status: 503 });
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const ids = Array.isArray(body.giftIds) ? body.giftIds.map(String) : [];
   const mode = body.mode === "floor" ? "floor" : body.mode === "fixed" ? "fixed" : null;
   const fixedPrice = body.fixedPrice == null || body.fixedPrice === "" ? null : Number(body.fixedPrice);

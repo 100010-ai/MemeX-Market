@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -43,13 +43,14 @@ async function POSTHandler(request: Request) {
       let message = error.message;
       if (message.includes("Insufficient token balance")) message = "Недостаточно токенов";
       if (message.includes("Price moved beyond slippage limit")) message = "Цена изменилась сильнее допустимого проскальзывания. Повтори сделку.";
+      if (/schema cache|does not exist|could not find the function/i.test(error.message || "")) return apiFailure(error, "Торговая схема требует актуальной миграции");
       return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("trade", error);
     await recordAppError("/api/trade", error, String(profile.id));
-    return NextResponse.json({ error: "Сделка не выполнена" }, { status: 500 });
+    return apiFailure(error, "Сделка не выполнена");
   }
 }
 export const POST = withApiErrors("app/api/trade/route.ts:POST", POSTHandler);

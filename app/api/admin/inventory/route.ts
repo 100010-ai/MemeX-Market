@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -47,7 +47,7 @@ async function GETHandler() {
     return NextResponse.json({ items, checkedAt: new Date().toISOString() });
   } catch (error) {
     console.error("admin inventory", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить каталог" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить каталог");
   }
 }
 export const GET = withApiErrors("app/api/admin/inventory/route.ts:GET", GETHandler);

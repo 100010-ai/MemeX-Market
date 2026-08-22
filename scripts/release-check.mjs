@@ -58,7 +58,6 @@ const migration027 = migration027Name ? read(`supabase/migrations/${migration027
 const migration028 = read("supabase/migrations/028_remove_advertising.sql");
 const migration029 = read("supabase/migrations/029_market_scalability.sql");
 const packageJson = read("package.json");
-const packageLock = read("package-lock.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
 const tasks = read("app/tasks/page.tsx");
@@ -96,7 +95,7 @@ check("Migration 027 present", Boolean(migration027), migration027Name || "missi
 check("Migration 028 advertising teardown present", Boolean(migration028));
 check("Migration 029 scalable market present", Boolean(migration029));
 check("v0.56 package version", packageJson.includes('"version": "0.56.0"'));
-check("package-lock version synced", packageLock.includes('"version": "0.56.0"'));
+check("pnpm package manager pinned", packageJson.includes('"packageManager": "pnpm@') && exists("pnpm-lock.yaml") && !exists("package-lock.json"));
 
 check("Runtime config schema", migration026.includes("create table if not exists public.runtime_config_v056") && exists("lib/runtime-config.ts") && exists("app/api/runtime-config/route.ts"));
 check("Maintenance mode + feature flags", read("components/app-shell.tsx").includes("maintenanceMode") && read("app/api/admin/runtime-config/route.ts").includes("validateRuntimeConfigInput"));

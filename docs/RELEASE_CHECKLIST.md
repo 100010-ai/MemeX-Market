@@ -3,13 +3,13 @@
 Run this before every production deploy:
 
 ```bash
-npm run release:check
+pnpm run release:check
 ```
 
 ## Database
 
-- Apply every migration through `029_market_scalability.sql` in numeric order.
-- Confirm `gift_market_overview`, `gift_collection_overview`, `gift_market_random_page`, `gift_market_filtered_page_v200`, `buy_virtual_gift_v2`, `list_virtual_gift_v2`, `create_gift_offer_v2`, and `resolve_gift_offer_v2` exist.
+- Apply every SQL migration in `supabase/migrations/` in filename order. Confirm that `030_v060_production_auth_schema_hotfix.sql`, `9992_profile_financial_overview_repair.sql`, `9993_production_runtime_reliability.sql`, and `999_fix_telegram_auth.sql` have all been applied.
+- Confirm `profile_financial_overview`, `leaderboard`, `gift_market_overview`, `gift_collection_overview`, `portfolio_snapshots`, `telegram_webhook_updates_v300`, `gift_market_random_page`, `gift_market_filtered_page_v200`, `buy_virtual_gift_v2`, `list_virtual_gift_v2`, `create_gift_offer_v2`, `resolve_gift_offer_v2`, `claim_pending_notifications_v300`, and `claim_telegram_webhook_update_v300` exist.
 - Confirm service-role-only execution on trading RPCs.
 - Check `/api/system/market-health` from an authenticated MXM session: database errors must be empty.
 

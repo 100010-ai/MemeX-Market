@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -39,18 +39,13 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       getProfileSnapshot(profile),
     ]);
 
-    // Analytics/history are secondary. The core resolved Gift stays usable when
-    // an optional v0.30 table is not migrated during a rolling deployment.
-    for (const [label, result] of [
-      ["trades", tradesResult], ["offers", offersResult], ["advanced offers", advancedOffersResult],
-      ["collection", collectionResult], ["item stats", itemStatsResult], ["listing events", listingEventsResult], ["cart", cartResult], ["watchlist", watchedResult],
-    ] as const) {
-      if (result.error) console.warn(`gift detail ${label}`, result.error);
-    }
+    const firstDetailError = tradesResult.error || offersResult.error || advancedOffersResult.error || collectionResult.error
+      || itemStatsResult.error || listingEventsResult.error || cartResult.error || watchedResult.error;
+    if (firstDetailError) throw firstDetailError;
 
-    const trades = tradesResult.error ? [] : tradesResult.data || [];
-    const offers = offersResult.error ? [] : (offersResult.data || []).filter((offer) => !offer.expires_at || String(offer.expires_at) > nowIso);
-    const advancedOffers = advancedOffersResult.error ? [] : (advancedOffersResult.data || []).filter((offer) => {
+    const trades = tradesResult.data || [];
+    const offers = (offersResult.data || []).filter((offer) => !offer.expires_at || String(offer.expires_at) > nowIso);
+    const advancedOffers = (advancedOffersResult.data || []).filter((offer) => {
       if (String(offer.buyer_profile_id) === String(profile.id)) return false;
       const scope = String(offer.scope_type);
       if (scope === "collection") return true;
@@ -59,7 +54,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       if (scope === "symbol") return String(offer.trait_value || "") === String(giftRow.symbol_name || "");
       return false;
     });
-    const listingEvents = listingEventsResult.error ? [] : listingEventsResult.data || [];
+    const listingEvents = listingEventsResult.data || [];
 
     const profileIds = new Set<string>();
     for (const trade of trades) {
@@ -73,13 +68,13 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     const peopleResult = profileIds.size
       ? await supabase.from("profiles").select("id,username,first_name").in("id", [...profileIds])
       : { data: [] as Array<{ id: string; username: string | null; first_name: string | null }>, error: null };
-    if (peopleResult.error) console.warn("gift detail people", peopleResult.error);
+    if (peopleResult.error) throw peopleResult.error;
     const names = new Map<string, string>((peopleResult.data || []).map((person) => [
       String(person.id), person.username ? `@${person.username}` : person.first_name || "Пользователь",
     ]));
 
-    const collection = collectionResult.error ? null : collectionResult.data as unknown as Record<string, unknown> | null;
-    const itemStats = itemStatsResult.error ? null : itemStatsResult.data as unknown as Record<string, unknown> | null;
+    const collection = collectionResult.data as unknown as Record<string, unknown> | null;
+    const itemStats = itemStatsResult.data as unknown as Record<string, unknown> | null;
     const gift = mapGift(giftRow);
 
     const collectionFloor = nullableNumber(collection?.floor_price) ?? gift.collectionFloor;
@@ -121,14 +116,8 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 60);
 
-    const warnings = [
-      ["trades", tradesResult.error], ["offers", offersResult.error], ["advancedOffers", advancedOffersResult.error],
-      ["collection", collectionResult.error], ["itemStats", itemStatsResult.error], ["listingEvents", listingEventsResult.error], ["cart", cartResult.error], ["watchlist", watchedResult.error],
-    ].flatMap(([section, error]) => error ? [{ section: String(section), code: String((error as { code?: unknown }).code || "QUERY_ERROR") }] : []);
-
     return NextResponse.json({
       gift,
-      warnings,
       resolvedVirtualGiftId: virtualGiftId,
       isOwner: gift.ownerId === String(profile.id),
       inCart: Boolean(cartResult.data),
@@ -183,7 +172,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `gift-detail;dur=${(performance.now() - startedAt).toFixed(1)}` } });
   } catch (error) {
     console.error("gift detail", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load Gift" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить Gift");
   }
 }
 export const GET = withApiErrors("app/api/gifts/[id]/route.ts:GET", GETHandler);

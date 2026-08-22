@@ -55,6 +55,14 @@ const categoryIcon: Record<StoreCategory, React.ReactNode> = {
   profile: <UserRound size={14} />,
 };
 
+function categoryDetails(category: StoreCategory) {
+  return categoryCopy[category];
+}
+
+function categoryGlyph(category: StoreCategory) {
+  return categoryIcon[category];
+}
+
 export function StoreFront({ initialCategory = "currency" }: { initialCategory?: StoreCategory }) {
   const { refreshProfile, haptic } = useTelegramProfile();
   const [data, setData] = useState<StorePayload | null>(null);
@@ -208,11 +216,11 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
       <label className="mb-4 flex cursor-pointer items-start gap-2 text-[9px] leading-4 text-[var(--muted)]"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="mt-0.5 accent-white" /><span>Я понимаю, что покупаю только цифровые предметы внутри MXM, и принимаю <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">условия покупок</Link>. Для вопросов доступна <Link href="/paysupport" className="text-white underline decoration-white/30 underline-offset-2">платёжная поддержка</Link>.</span></label>
 
       <div className="mxm-hscroll mb-4 gap-1.5 pb-1">
-        {categoryOrder.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`mxm-filter-chip ${category === value ? "is-active" : ""}`}>{categoryIcon[value]}{categoryCopy[value].title}</button>)}
+        {categoryOrder.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`mxm-filter-chip ${category === value ? "is-active" : ""}`}>{categoryGlyph(value)}{categoryDetails(value).title}</button>)}
       </div>
 
       <section>
-        <div className="mb-3"><h2 className="text-[13px] font-semibold">{categoryCopy[category].title}</h2><p className="mt-1 text-[9px] text-[var(--muted)]">{categoryCopy[category].note}</p></div>
+        <div className="mb-3"><h2 className="text-[13px] font-semibold">{categoryDetails(category).title}</h2><p className="mt-1 text-[9px] text-[var(--muted)]">{categoryDetails(category).note}</p></div>
         {category === "creator" && data?.creatorCoins.length ? <label className="mb-3 block max-w-sm text-[10px] text-[var(--muted)]">Коин для продвижения<select value={creatorCoinId} onChange={(event) => setCreatorCoinId(event.target.value)} className="mxm-input mt-1.5 w-full text-white">{data.creatorCoins.map((coin) => <option key={coin.id} value={coin.id}>{coin.name} · ${coin.symbol}</option>)}</select></label> : null}
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => {
@@ -220,7 +228,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
             const sink = mxmShop.get(product.sku);
             const unavailable = unavailableReason(product);
             return <article key={product.sku} className="mxm-card flex min-h-[164px] flex-col p-3.5">
-              <div className="flex items-start gap-2"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-white/[.045] text-[var(--accent)]">{categoryIcon[product.category]}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div></div>
+              <div className="flex items-start gap-2"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-[11px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div></div>
               <p className="mt-3 flex-1 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
               {product.metadata.entitlement === "season_pass" && data?.currentSeason ? <p className="mt-2 text-[9px] text-[#f3d789]">Действует до {new Date(data.currentSeason.endsAt).toLocaleString("ru-RU")} · осталось {data.currentSeason.daysLeft} дн.</p> : null}
               {product.category === "cases" ? <details className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[9px] text-[var(--muted)]"><summary className="cursor-pointer text-white">Вероятности наград до покупки</summary><div className="mt-2 grid gap-1">{(data?.caseOdds[product.sku] || []).map((odd) => <div key={`${product.sku}:${odd.label}`} className="flex justify-between gap-3"><span>{odd.label} · {odd.rarity}</span><span className="shrink-0 text-white">{odd.percent.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%</span></div>)}</div><Link href="/cases" className="mt-2 inline-block text-[var(--accent)] underline decoration-current/30 underline-offset-2">Все правила и история открытий</Link></details> : null}

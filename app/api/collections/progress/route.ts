@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -24,7 +24,7 @@ async function GETHandler() {
     .eq("owner_profile_id", profile.id)
     .eq("is_burned", false)
     .limit(5_000);
-  if (ownedResult.error) return NextResponse.json({ error: "Не удалось загрузить коллекцию" }, { status: 500 });
+  if (ownedResult.error) return apiFailure(ownedResult.error, "Не удалось загрузить коллекцию");
   const owned = (ownedResult.data || []) as OwnedGift[];
   const names = [...new Set(owned.map((row) => String(row.base_name)))];
   const [overviewResult, claimsResult] = await Promise.all([
@@ -33,10 +33,11 @@ async function GETHandler() {
       : Promise.resolve({ data: [] as Array<{ base_name: string; item_count: number; holder_count: number; floor_price: number | null }>, error: null }),
     supabase.from("collection_bonus_claims").select("base_name,claimed_at").eq("profile_id", profile.id),
   ]);
-  if (overviewResult.error) return NextResponse.json({ error: "Не удалось загрузить серии Gifts" }, { status: 500 });
-  if (claimsResult.error) return NextResponse.json({ error: "Не удалось загрузить бонусы коллекций" }, { status: 500 });
+  if (overviewResult.error) return apiFailure(overviewResult.error, "Не удалось загрузить серии Gifts");
+  if (claimsResult.error) return apiFailure(claimsResult.error, "Не удалось загрузить бонусы коллекций");
   const claimed = new Set((claimsResult.data || []).map((row) => String(row.base_name)));
-  const overview = new Map((overviewResult.data || []).map((row) => [String(row.base_name), row]));
+  const overviewRows = (overviewResult.data || []) as Array<{ base_name: string; item_count: number; holder_count: number; floor_price: number | null }>;
+  const overview = new Map<string, { base_name: string; item_count: number; holder_count: number; floor_price: number | null }>(overviewRows.map((row) => [String(row.base_name), row]));
   const groups = new Map<string, OwnedGift[]>();
   for (const row of owned) groups.set(row.base_name, [...(groups.get(row.base_name) || []), row]);
   const collections = [...groups.entries()].map(([baseName, rows]) => {
@@ -57,16 +58,17 @@ async function POSTHandler(request: Request) {
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "collection-bonus", String(profile.id), 12, 300))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const baseName = typeof body.baseName === "string" ? body.baseName.trim() : "";
   if (baseName.length < 2 || baseName.length > 80) return NextResponse.json({ error: "Некорректная коллекция" }, { status: 400 });
   const { data, error } = await getSupabaseAdmin().rpc("claim_collection_bonus_v200", { p_profile_id: profile.id, p_base_name: baseName });
   if (error) {
     console.error("collection bonus", error);
-    const migrationMissing = error.code === "42883" || /claim_collection_bonus_v200|schema cache|could not find the function/i.test(error.message || "");
     const incomplete = /not complete|required|unique/i.test(error.message || "");
     const claimed = /already|duplicate/i.test(error.message || "");
-    return NextResponse.json({ error: migrationMissing ? "Примените миграцию экономики Market 2.0" : incomplete ? "Серия ещё не собрана" : claimed ? "Бонус этой серии уже получен" : "Не удалось получить бонус коллекции" }, { status: migrationMissing ? 503 : incomplete || claimed ? 409 : 400 });
+    if (!incomplete && !claimed) return apiFailure(error, "Не удалось получить бонус коллекции", 400);
+    return NextResponse.json({ error: incomplete ? "Серия ещё не собрана" : "Бонус этой серии уже получен" }, { status: 409 });
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }

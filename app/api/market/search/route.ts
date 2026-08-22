@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -68,10 +68,7 @@ async function GETHandler(request: NextRequest) {
 
   const giftError = giftResults.find((result) => result.error)?.error;
   const error = giftError || coinsResult.error || collectionsResult.error || usersResult.error;
-  if (error) {
-    console.error("unified market search", error);
-    return NextResponse.json({ error: "Не удалось выполнить поиск" }, { status: 500 });
-  }
+  if (error) return apiFailure(error, "Не удалось выполнить поиск");
 
   const unique = new Map<string, Record<string, unknown>>();
   for (const result of giftResults) {

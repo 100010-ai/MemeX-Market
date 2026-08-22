@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -18,8 +18,9 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey)) return NextResponse.json({ error: "Некорректный ключ операции" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("buy_virtual_gift_v2", { p_buyer_id: profile.id, p_virtual_gift_id: id, p_request_key: requestKey });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
+  if (error) return apiFailure(error, "Не удалось купить Gift", 400);
+  const cartCleanup = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
+  if (cartCleanup.error) console.error("gift buy cart cleanup", cartCleanup.error);
   return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
 }
 export const POST = withApiErrors("app/api/gifts/[id]/buy/route.ts:POST", POSTHandler);

@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -118,7 +118,7 @@ async function GETHandler(request: Request) {
     });
   } catch (error) {
     console.error("local control bootstrap", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить локальную админку" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить локальную админку");
   }
 }
 export const GET = withApiErrors("app/api/control/bootstrap/route.ts:GET", GETHandler);

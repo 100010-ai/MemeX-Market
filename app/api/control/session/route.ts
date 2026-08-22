@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { clearLocalControlSession, consumeLocalControlLoginAttempt, createLocalControlSession, ensureLocalControlKey, hasLocalControlSession, localControlAvailable, verifyLocalToken } from "@/lib/local-admin";
 import { sameOriginMutation } from "@/lib/security";
@@ -20,7 +20,8 @@ async function POSTHandler(request: Request) {
   if (!localControlAvailable(request)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!consumeLocalControlLoginAttempt("localhost")) return NextResponse.json({ error: "Слишком много попыток входа." }, { status: 429 });
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const input = typeof body.token === "string" ? body.token : "";
   try {
     if (!verifyLocalToken(input)) return NextResponse.json({ error: "Неверный локальный ключ" }, { status: 401 });
@@ -28,7 +29,7 @@ async function POSTHandler(request: Request) {
     const supabase = getSupabaseAdminConfigStatus();
     return NextResponse.json({ ok: true, supabase });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Локальная админка не настроена" }, { status: 500 });
+    return apiFailure(error, "Локальная админка не настроена");
   }
 }
 

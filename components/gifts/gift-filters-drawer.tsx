@@ -16,6 +16,12 @@ export type GiftFilterValues = {
 type Choice = { value: string; label: string; hint?: string };
 type FilterKey = keyof GiftFilterValues;
 
+const filterKeys = new Set<FilterKey>(["collection", "model", "backdrop", "symbol", "priceBand", "giftSort"]);
+
+function normalizeFilterKey(value: unknown): FilterKey | null {
+  return typeof value === "string" && filterKeys.has(value as FilterKey) ? (value as FilterKey) : null;
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -78,7 +84,8 @@ export function GiftFiltersDrawer({ open, onClose, values, onChange, onReset, co
   }), [collections, models, backdrops, symbols]);
 
   if (!open || typeof document === "undefined") return null;
-  const activeSection = active ? sections[active] : null;
+  const activeKey: FilterKey | null = normalizeFilterKey(active);
+  const activeSection = activeKey ? sections[activeKey] : null;
   const q = query.trim().toLowerCase();
   const visible = activeSection ? activeSection.choices.filter((choice) => !q || `${choice.label} ${choice.hint || ""}`.toLowerCase().includes(q)) : [];
   const activeCount = Object.entries(values).filter(([key, value]) => value !== (key === "giftSort" ? "random" : "all")).length;
@@ -92,7 +99,7 @@ export function GiftFiltersDrawer({ open, onClose, values, onChange, onReset, co
           {active ? <button type="button" className="mxm-filter-icon-button" onClick={() => { setActive(null); setQuery(""); }} aria-label="Назад"><ArrowLeft size={18} /></button> : <span className="mxm-filter-title-icon"><SlidersHorizontal size={15} /></span>}
           <div className="min-w-0 flex-1">
             <h2>{activeSection?.label || "Фильтры"}</h2>
-            <p>{activeSection ? selectedLabel(active!) : activeCount ? `Выбрано: ${activeCount}` : "Настрой выдачу без лишних панелей"}</p>
+            <p>{activeKey ? selectedLabel(activeKey) : activeCount ? `Выбрано: ${activeCount}` : "Настрой выдачу без лишних панелей"}</p>
           </div>
           <button type="button" className="mxm-filter-icon-button" onClick={closeDrawer} aria-label="Закрыть"><X size={18} /></button>
         </header>
@@ -102,8 +109,8 @@ export function GiftFiltersDrawer({ open, onClose, values, onChange, onReset, co
             {activeSection.choices.length > 10 ? <label className="mxm-filter-drawer-search"><Search size={15} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Поиск: ${activeSection.label.toLowerCase()}`} /></label> : null}
             <div className="mxm-filter-choice-list">
               {visible.map((choice) => {
-                const selected = values[active!] === choice.value;
-                return <button key={choice.value} type="button" className={`mxm-filter-choice ${selected ? "is-selected" : ""}`} onClick={() => { onChange(active!, choice.value); setActive(null); setQuery(""); }}>
+                const selected = activeKey ? values[activeKey] === choice.value : false;
+                return <button key={choice.value} type="button" className={`mxm-filter-choice ${selected ? "is-selected" : ""}`} onClick={() => { if (!activeKey) return; onChange(activeKey, choice.value); setActive(null); setQuery(""); }}>
                   <div className="min-w-0 flex-1"><span>{choice.label}</span>{choice.hint ? <small>{choice.hint}</small> : null}</div>{selected ? <Check size={16} /> : null}
                 </button>;
               })}

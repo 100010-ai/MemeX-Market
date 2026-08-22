@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -70,7 +70,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     }, { headers: { "server-timing": `coin-detail;dur=${(performance.now() - startedAt).toFixed(1)}`, "cache-control": "private, max-age=0, must-revalidate" } });
   } catch (error) {
     console.error("coin detail", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load coin" }, { status: 500 });
+    return apiFailure(error, "Could not load coin");
   }
 }
 export const GET = withApiErrors("app/api/coins/[id]/route.ts:GET", GETHandler);

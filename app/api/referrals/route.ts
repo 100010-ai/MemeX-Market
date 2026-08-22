@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -17,12 +17,8 @@ async function GETHandler() {
     supabase.from("economy_settings").select("referral_bonus_bps").eq("singleton", true).single(),
     supabase.rpc("referral_partner_status_v200", { p_profile_id: profile.id }),
   ]);
-  const partnerMissing = partnerResult.error && (partnerResult.error.code === "42883" || /referral_partner_status_v200|schema cache|could not find the function/i.test(partnerResult.error.message || ""));
-  const firstError = meResult.error || referredResult.error || rewardsResult.error || settingsResult.error || (partnerMissing ? null : partnerResult.error);
-  if (firstError) {
-    const migrationMissing = /referral|schema cache|column .* does not exist|relation .* does not exist/i.test(firstError.message || "");
-    return NextResponse.json({ error: migrationMissing ? "Примените миграцию 021_v046_stars_referrals_market_polish.sql" : "Не удалось загрузить реферальную систему" }, { status: 500 });
-  }
+  const firstError = meResult.error || referredResult.error || rewardsResult.error || settingsResult.error || partnerResult.error;
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить реферальную систему");
   const referred = referredResult.data || [];
   const people = new Map(referred.map((row) => [String(row.id), row]));
   const rewards = (rewardsResult.data || []).map((row) => ({
@@ -36,24 +32,17 @@ async function GETHandler() {
   const totalEarned = rewards.reduce((sum, row) => sum + row.rewardAmount, 0);
   const code = String(meResult.data?.referral_code || "");
   const bot = String(process.env.NEXT_PUBLIC_BOT_USERNAME || "MemeXMarketBot").replace(/^@/, "");
-  const partner = partnerResult.data && typeof partnerResult.data === "object" && !Array.isArray(partnerResult.data)
-    ? partnerResult.data as Record<string, unknown>
-    : {
-        level: "Bronze",
-        bonusBps: Number(settingsResult.data?.referral_bonus_bps || 500),
-        invited: referred.length,
-        qualified: 0,
-        nextQualified: 5,
-        earnedVirtualTon: totalEarned,
-        earnedMxmCoins: 0,
-      };
+  if (!partnerResult.data || typeof partnerResult.data !== "object" || Array.isArray(partnerResult.data)) {
+    return NextResponse.json({ error: "Реферальный snapshot повреждён", code: "DATA_INTEGRITY" }, { status: 500 });
+  }
+  const partner = partnerResult.data as Record<string, unknown>;
   return NextResponse.json({
     code,
     inviteLink: code ? `https://t.me/${bot}?startapp=ref_${encodeURIComponent(code)}` : null,
-    percent: Number(partner.bonusBps || settingsResult.data?.referral_bonus_bps || 500) / 100,
+    percent: Number(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps ?? 0) / 100,
     partner: {
       level: String(partner.level || "Bronze"),
-      bonusBps: Number(partner.bonusBps || 500),
+      bonusBps: Number(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps ?? 0),
       invited: Number(partner.invited || referred.length),
       qualified: Number(partner.qualified || 0),
       nextQualified: partner.nextQualified == null ? null : Number(partner.nextQualified),

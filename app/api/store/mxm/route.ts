@@ -1,12 +1,9 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 
-function migrationMissing(error: { code?: string; message?: string } | null | undefined) {
-  return Boolean(error && (error.code === "42883" || /purchase_with_mxm_v200|schema cache|could not find the function/i.test(error.message || "")));
-}
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
@@ -16,7 +13,8 @@ async function POSTHandler(request: Request) {
     return NextResponse.json({ error: "Слишком много покупок. Подождите минуту." }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const sku = typeof body.sku === "string" ? body.sku.trim().toLowerCase() : "";
   const requestId = typeof body.requestId === "string" ? body.requestId : "";
   if (!/^[a-z0-9_]{3,48}$/.test(sku)) return NextResponse.json({ error: "Некорректный товар" }, { status: 400 });
@@ -32,7 +30,8 @@ async function POSTHandler(request: Request) {
     const insufficient = /insufficient mxm/i.test(error.message || "");
     const soldOut = /sold out/i.test(error.message || "");
     const unavailable = /not eligible|unavailable|already used/i.test(error.message || "");
-    return NextResponse.json({ error: migrationMissing(error) ? "Примените миграцию экономики Market 2.0" : insufficient ? "Недостаточно MXM Coins" : soldOut ? "Товар распродан" : unavailable ? "Покупка сейчас недоступна" : "Не удалось выполнить покупку" }, { status: migrationMissing(error) ? 503 : insufficient || soldOut || unavailable ? 409 : 400 });
+    if (!insufficient && !soldOut && !unavailable) return apiFailure(error, "Не удалось выполнить покупку", 400);
+    return NextResponse.json({ error: insufficient ? "Недостаточно MXM Coins" : soldOut ? "Товар распродан" : "Покупка сейчас недоступна" }, { status: 409 });
   }
   return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
 }

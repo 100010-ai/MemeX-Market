@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -11,14 +11,15 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-quote", String(profile.id), 180, 60))) return NextResponse.json({ error: "Слишком много запросов котировки" }, { status: 429 });
   const { id } = await params;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const side = body.side === "buy" ? "buy" : body.side === "sell" ? "sell" : null;
   const amount = Number(body.amount);
   if (!side || !Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: "Invalid quote request" }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
   const { data: coin, error } = await supabase.from("coins").select("id,status,token_reserve,quote_reserve,current_price").eq("id", id).maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiFailure(error, "Не удалось выполнить запрос");
   if (!coin || coin.status !== "active") return NextResponse.json({ error: "Coin is not tradeable" }, { status: 404 });
 
   const quote = calculateCoinQuote({

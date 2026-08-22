@@ -1,37 +1,11 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeStoreProduct } from "@/lib/store";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
-function schemaMissing(error: { code?: string; message?: string } | null | undefined) {
-  return Boolean(error && (
-    ["42P01", "42703", "42883", "PGRST202", "PGRST204"].includes(String(error.code || ""))
-    || /store_products|monetization_snapshot_v200|schema cache|could not find the function|does not exist/i.test(error.message || "")
-  ));
-}
 
-const emptySnapshot = {
-  wallet: {
-    mxmCoins: 0,
-    energy: 100,
-    maxEnergy: 100,
-    premiumUntil: null,
-    premiumActive: false,
-    dailyBonusAvailable: false,
-    vipTier: "Bronze",
-    vipProgress: 0,
-  },
-  inventory: [] as Array<{ sku: string; quantity: number }>,
-  entitlements: [] as Array<{ key: string; expiresAt: string | null }>,
-  profileItems: [] as Array<{ key: string; type: string; title: string; equipped: boolean }>,
-  mxmShop: [] as Array<{ sku: string; mxmPrice: number; title: string; rewardLabel: string; metadata: Record<string, unknown> }>,
-  creatorCoins: [] as Array<{ id: string; name: string; symbol: string }>,
-  caseOdds: {} as Record<string, Array<{ label: string; percent: number; rarity: string }>>,
-  caseAvailability: {} as Record<string, number | null>,
-  currentSeason: null as null | { id: string; title: string; startsAt: string; endsAt: string; daysLeft: number },
-};
 
 async function GETHandler() {
   const profile = await requireProfile();
@@ -49,7 +23,7 @@ async function GETHandler() {
   const cleanupResult = await supabase
     .rpc("release_expired_star_authorizations_v200", { p_limit: 25 })
     .abortSignal(AbortSignal.timeout(1_500));
-  if (cleanupResult.error) console.error("store reservation cleanup", cleanupResult.error);
+  if (cleanupResult.error) return apiFailure(cleanupResult.error, "Не удалось очистить просроченные резервы магазина");
   const [productsResult, snapshotResult, caseLootResult, caseDefinitionsResult, seasonResult] = await Promise.all([
     supabase
       .from("store_products")
@@ -68,34 +42,17 @@ async function GETHandler() {
     supabase.rpc("season_snapshot_v200", { p_profile_id: profile.id }),
   ]);
 
-  if (schemaMissing(productsResult.error) || schemaMissing(snapshotResult.error) || schemaMissing(caseLootResult.error) || schemaMissing(caseDefinitionsResult.error) || schemaMissing(seasonResult.error)) {
-    console.error("store schema is not production-ready", productsResult.error || snapshotResult.error || caseLootResult.error || caseDefinitionsResult.error || seasonResult.error);
-    return NextResponse.json({ error: "Схема MXM Store не соответствует production-миграциям" }, { status: 503, headers: { "cache-control": "private, no-store" } });
-  }
-  if (productsResult.error) {
-    console.error("store products", productsResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить MXM Store" }, { status: 500 });
-  }
-  if (snapshotResult.error) {
-    console.error("store snapshot", snapshotResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить статус экономики" }, { status: 500 });
-  }
-  if (caseLootResult.error) {
-    console.error("store case odds", caseLootResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить вероятности кейсов" }, { status: 500 });
-  }
-  if (caseDefinitionsResult.error || seasonResult.error) {
-    console.error("store availability", caseDefinitionsResult.error || seasonResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить доступность товаров" }, { status: 500 });
-  }
+  const firstError = productsResult.error || snapshotResult.error || caseLootResult.error || caseDefinitionsResult.error || seasonResult.error;
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить MXM Store");
 
   try {
     const snapshot = snapshotResult.data && typeof snapshotResult.data === "object" && !Array.isArray(snapshotResult.data)
       ? snapshotResult.data as Record<string, unknown>
       : {};
-    const wallet = snapshot.wallet && typeof snapshot.wallet === "object" && !Array.isArray(snapshot.wallet)
-      ? snapshot.wallet
-      : emptySnapshot.wallet;
+    if (!snapshot.wallet || typeof snapshot.wallet !== "object" || Array.isArray(snapshot.wallet)) {
+      return NextResponse.json({ error: "Wallet snapshot повреждён", code: "DATA_INTEGRITY" }, { status: 500 });
+    }
+    const wallet = snapshot.wallet;
     const lootRows = caseLootResult.data || [];
     const totals = new Map<string, number>();
     for (const row of lootRows) totals.set(row.case_sku, (totals.get(row.case_sku) || 0) + Number(row.weight || 0));

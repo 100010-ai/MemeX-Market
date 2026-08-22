@@ -11,6 +11,7 @@ import { CoinAvatar } from "@/components/ui";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
+import { telegramAvatarProxyUrl } from "@/lib/avatar";
 
 const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
@@ -208,7 +209,8 @@ export default function MarketPage() {
     setBootstrapLoading(true);
     setBootstrapError(null);
     try {
-      await apiFetch<{ ok: boolean; listed: number }>("/api/gifts/bootstrap", { method: "POST", timeoutMs: 55_000 });
+      const bootstrap = await apiFetch<{ ok: boolean; listed: number; pending?: boolean; retryAfterMs?: number }>("/api/gifts/bootstrap", { method: "POST", timeoutMs: 55_000 });
+      if (bootstrap.pending) await new Promise((resolve) => window.setTimeout(resolve, Math.max(1_500, Math.min(8_000, bootstrap.retryAfterMs || 5_000))));
       for (const key of marketCache.keys()) if (key.startsWith("gifts:")) marketCache.delete(key);
       for (const key of Object.keys(scopeDataRef.current)) if (key.startsWith("gifts:")) delete scopeDataRef.current[key];
       if (activeTabRef.current === "gifts") await load(false);
@@ -401,7 +403,7 @@ export default function MarketPage() {
       {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">
         <div className="mxm-hscroll gap-2">
           {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">floor {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
-          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{user.photoUrl ? <Image unoptimized src={user.photoUrl} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
+          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{telegramAvatarProxyUrl(user.photoUrl) ? <Image unoptimized src={telegramAvatarProxyUrl(user.photoUrl)!} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
           {tab === "gifts" ? remoteSearch.coins.slice(0, 4).map((coin) => <Link key={`coin:${coin.id}`} href={`/coin/${coin.id}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">${coin.symbol}</span><span className="ml-2 text-[var(--muted)]">{percent(coin.change24h)}</span></Link>) : null}
         </div>
       </div> : null}

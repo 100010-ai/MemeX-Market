@@ -11,6 +11,7 @@ import { PerfOverlay } from "@/components/dev/perf-overlay";
 import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
 import { CommandPalette } from "@/components/command-palette";
+import { telegramAvatarProxyUrl } from "@/lib/avatar";
 
 const nav = [
   { href: "/market", label: "Маркет", icon: Store },
@@ -47,7 +48,8 @@ function currentTitle(pathname: string) {
 
 function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
   const cls = size === "md" ? "h-10 w-10 rounded-full" : "h-8 w-8 rounded-full";
-  if (photoUrl) return <Image unoptimized src={photoUrl} alt="Профиль Telegram" width={size === "md" ? 40 : 32} height={size === "md" ? 40 : 32} className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
+  const avatarSrc = telegramAvatarProxyUrl(photoUrl);
+  if (avatarSrc) return <Image unoptimized src={avatarSrc} alt="Профиль Telegram" width={size === "md" ? 40 : 32} height={size === "md" ? 40 : 32} className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
   return <span className={`grid ${cls} place-items-center bg-white/[.045] text-[var(--muted)] ring-1 ring-white/[.06]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 

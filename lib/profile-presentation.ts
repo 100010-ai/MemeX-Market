@@ -4,13 +4,6 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-export function missingProfilePresentationSchema(error: { code?: string; message?: string } | null | undefined) {
-  if (!error) return false;
-  const message = String(error.message || "");
-  return ["42P01", "42703", "PGRST200", "PGRST204"].includes(String(error.code || ""))
-    || /equipped_profile_frame|profile_entitlements|profile_item_inventory|profile_items|schema cache/i.test(message);
-}
-
 export function mapProfileBadges(value: unknown): ProfileBadge[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((raw): ProfileBadge[] => {

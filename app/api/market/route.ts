@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -78,7 +78,7 @@ async function GETHandler(request: NextRequest) {
       const firstError = coinsResult.error || newCoinsResult.error || boostsResult.error || watchlistResult.error || cartResult.error;
       if (firstError) throw firstError;
       const boostRows = boostsResult.data || [];
-      const boostByCoin = new Map(boostRows.map((row) => [String(row.coin_id), String(row.boosted_until)]));
+      const boostByCoin = new Map<string, string>(boostRows.map((row) => [String(row.coin_id), String(row.boosted_until)] as [string, string]));
       const boostedCoinIds = [...boostByCoin.keys()];
       let boostedCoinRows: Record<string, unknown>[] = [];
       if (boostedCoinIds.length) {
@@ -93,7 +93,7 @@ async function GETHandler(request: NextRequest) {
       const newestCoins = (newCoinsResult.data || []).map((row) => mapMarketCoin(row as Record<string, unknown>));
       const promotedCoins = boostedCoinRows
         .map(mapMarketCoin)
-        .sort((a, b) => new Date(b.boostedUntil || 0).getTime() - new Date(a.boostedUntil || 0).getTime());
+        .sort((a, b) => (Date.parse(b.boostedUntil || "") || 0) - (Date.parse(a.boostedUntil || "") || 0));
       const seenNewest = new Set<string>();
       return NextResponse.json({
         scope,
@@ -159,8 +159,7 @@ async function GETHandler(request: NextRequest) {
       supabase.rpc("gift_genesis_public_state"),
       supabase.rpc("gift_market_filter_options_v046"),
     ]);
-    const filterMissing = filterOptionsResult.error && (filterOptionsResult.error.code === "42883" || /gift_market_filter_options_v046|schema cache|could not find the function/i.test(filterOptionsResult.error.message || ""));
-    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || (filterMissing ? null : filterOptionsResult.error);
+    const firstError = giftsResult.error || collectionsResult.error || watchlistResult.error || cartResult.error || genesisResult.error || filterOptionsResult.error;
     if (firstError) throw firstError;
 
     const page = parseGiftMarketPage(giftsResult.data);
@@ -175,7 +174,7 @@ async function GETHandler(request: NextRequest) {
       marketSeed,
       bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters,
       genesis: genesisResult.data || null,
-      filterOptions: filterOptionsResult.data || { collections: [], models: [], backdrops: [], symbols: [] },
+      filterOptions: filterOptionsResult.data,
       watchlist: {
         coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),
         giftCollections: (watchlistResult.data || []).filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)),
@@ -185,7 +184,7 @@ async function GETHandler(request: NextRequest) {
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market;dur=${Date.now() - startedAt}` } });
   } catch (error) {
     console.error("market", error);
-    return NextResponse.json({ error: "Не удалось загрузить рынок" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить рынок");
   }
 }
 export const GET = withApiErrors("app/api/market/route.ts:GET", GETHandler);

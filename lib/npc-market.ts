@@ -66,13 +66,8 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
   const supabase = getSupabaseAdmin();
 
   // Reconcile old v0.13 synthetic NPC prices before publishing anything. This
-  // RPC is provided by migration 015 and is intentionally tolerant on older
-  // databases so deploys can still surface the migration hint instead of dying
-  // before initialize_gift_genesis_pool() is called.
   const reconcile = await supabase.rpc("reconcile_npc_external_prices");
-  if (reconcile.error && !/Could not find the function|schema cache|reconcile_npc_external_prices/i.test(String(reconcile.error.message || ""))) {
-    throw reconcile.error;
-  }
+  if (reconcile.error) throw reconcile.error;
 
   const initialized = await supabase.rpc("initialize_gift_genesis_pool");
   if (initialized.error) throw initialized.error;
@@ -103,14 +98,15 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
         .select("id,telegram_resale_price_ton")
         .in("id", candidates.map((candidate) => candidate.asset_id));
       if (priceResult.error) throw priceResult.error;
-      const prices = new Map((priceResult.data || []).map((row) => [String(row.id), Number(row.telegram_resale_price_ton)]));
+      const prices = new Map<string, number>(((priceResult.data || []) as Array<{ id: unknown; telegram_resale_price_ton: unknown }>).map((row) => [String(row.id), Number(row.telegram_resale_price_ton)] as [string, number]));
       for (const candidate of candidates) candidate.observed_price_ton = prices.get(candidate.asset_id);
     }
     if (!candidates.length) {
       const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
       if (refreshed.error) throw refreshed.error;
       state = parseGenesisState(refreshed.data);
-      await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+      const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+      if (release.error) throw release.error;
       return { skipped: false, currentListings, created: 0, rareDeals: 0, ...state };
     }
 
@@ -143,10 +139,12 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
     const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
     if (refreshed.error) throw refreshed.error;
     state = parseGenesisState(refreshed.data);
-    await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+    const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+    if (release.error) throw release.error;
     return { skipped: false, currentListings: currentListings + created, created, rareDeals: 0, ...state };
   } catch (error) {
-    await supabase.rpc("release_npc_market_lock", { p_success: false, p_error: error instanceof Error ? error.message : "Genesis market failure" });
+    const release = await supabase.rpc("release_npc_market_lock", { p_success: false, p_error: error instanceof Error ? error.message : "Genesis market failure" });
+    if (release.error) console.error("npc market lock release", release.error);
     throw error;
   }
 }

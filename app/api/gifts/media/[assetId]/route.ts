@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
@@ -160,14 +160,7 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   const queryError = primary.error;
   const row = primary.data as unknown as GiftMediaRow | null;
 
-  if (queryError) {
-    console.error("gift media asset lookup", { code: queryError.code, message: queryError.message });
-    const schemaMismatch = queryError.code === "42P01" || queryError.code === "42703" || queryError.code === "PGRST204";
-    return NextResponse.json(
-      { error: schemaMismatch ? "Gift media schema is not production-ready" : "Gift media lookup failed" },
-      { status: schemaMismatch ? 503 : 500, headers: { "cache-control": "no-store" } },
-    );
-  }
+  if (queryError) return apiFailure(queryError, "Gift media lookup failed");
   if (!row || row.is_burned || row.catalog_source !== "tonapi") {
     return NextResponse.json({ error: "Gift media not found" }, { status: 404 });
   }

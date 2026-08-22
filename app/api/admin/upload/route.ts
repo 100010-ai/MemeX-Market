@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readFormData, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { uploadCoinImage } from "@/lib/coin-media";
@@ -14,7 +14,8 @@ async function POSTHandler(request: Request) {
     return NextResponse.json({ error: "Слишком много загрузок. Попробуйте позже." }, { status: 429 });
   }
   try {
-    const form = await request.formData();
+    const form = await readFormData(request);
+    if (!form) return NextResponse.json({ error: "Некорректные multipart-данные" }, { status: 400 });
     const file = form.get("image");
     if (!(file instanceof File) || file.size <= 0) return NextResponse.json({ error: "Выберите изображение" }, { status: 400 });
     const uploaded = await uploadCoinImage(file, `admin-${admin.id}`);

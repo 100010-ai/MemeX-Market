@@ -1,10 +1,9 @@
-import { readFormData, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readFormData, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { removeCoinImage, uploadCoinImage } from "@/lib/coin-media";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
-import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR } from "@/lib/economy";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
@@ -26,17 +25,16 @@ async function GETHandler() {
     supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost").eq("singleton", true).maybeSingle(),
     supabase.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
   ]);
-  if (coinsResult.error) {
-    console.error("coin rules list", coinsResult.error);
-    return NextResponse.json({ error: "Не удалось загрузить правила запуска" }, { status: 500 });
+  const firstError = coinsResult.error || settingsResult.error || monetizationResult.error;
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить правила запуска мемкоина");
+  if (!settingsResult.data || Number(settingsResult.data.schema_version || 0) < 200) {
+    return NextResponse.json({ error: "Схема экономики MXM устарела", code: "DB_SCHEMA_OUTDATED" }, { status: 503 });
   }
-  const settingsUnavailable = Boolean(settingsResult.error || monetizationResult.error || !settingsResult.data || Number(settingsResult.data.schema_version || 0) < 200);
-  if (settingsResult.error && !["42P01", "42703", "PGRST204"].includes(String(settingsResult.error.code || ""))) console.error("coin economy settings", settingsResult.error);
   const rows = (coinsResult.data || []) as Array<{ id: string; status: string; created_at: string }>;
   const active = rows.filter((coin) => coin.status === "active");
-  const launchFee = settingsResult.data ? Number(settingsResult.data.coin_launch_fee) : COIN_LAUNCH_FEE_TON;
-  const cooldownHours = settingsResult.data ? Number(settingsResult.data.coin_launch_cooldown_hours) : COIN_LAUNCH_COOLDOWN_HOURS;
-  const maxActiveCoins = settingsResult.data ? Number(settingsResult.data.coin_max_active) : COIN_MAX_ACTIVE_PER_CREATOR;
+  const launchFee = Number(settingsResult.data.coin_launch_fee);
+  const cooldownHours = Number(settingsResult.data.coin_launch_cooldown_hours);
+  const maxActiveCoins = Number(settingsResult.data.coin_max_active);
   const wallet = monetizationResult.data && typeof monetizationResult.data === "object" && !Array.isArray(monetizationResult.data)
     ? (monetizationResult.data as { wallet?: { energy?: unknown; maxEnergy?: unknown } }).wallet
     : null;
@@ -48,15 +46,15 @@ async function GETHandler() {
     maxActiveCoins,
     activeCoins: active.length,
     nextLaunchAt: nextLaunchAt?.toISOString() || null,
-    initialBuyMin: settingsResult.data ? Number(settingsResult.data.coin_initial_buy_min) : 1,
-    initialBuyMax: settingsResult.data ? Number(settingsResult.data.coin_initial_buy_max) : 1_000,
-    startPriceMin: settingsResult.data ? Number(settingsResult.data.coin_start_price_min) : 0.00000001,
-    startPriceMax: settingsResult.data ? Number(settingsResult.data.coin_start_price_max) : 0.000001,
-    floorMaxBps: settingsResult.data ? Number(settingsResult.data.coin_floor_max_bps) : 5_000,
-    energyCost: settingsResult.data ? Number(settingsResult.data.coin_launch_energy_cost) : 20,
+    initialBuyMin: Number(settingsResult.data.coin_initial_buy_min),
+    initialBuyMax: Number(settingsResult.data.coin_initial_buy_max),
+    startPriceMin: Number(settingsResult.data.coin_start_price_min),
+    startPriceMax: Number(settingsResult.data.coin_start_price_max),
+    floorMaxBps: Number(settingsResult.data.coin_floor_max_bps),
+    energyCost: Number(settingsResult.data.coin_launch_energy_cost),
     energy: Number(wallet?.energy ?? 0),
     maxEnergy: Number(wallet?.maxEnergy ?? 100),
-    economyReady: !settingsUnavailable,
+    economyReady: true,
   }, { headers: { "cache-control": "private, no-store" } });
 }
 
@@ -167,7 +165,7 @@ async function POSTHandler(request: Request) {
   } catch (error) {
     await removeCoinImage(uploadedPath);
     console.error("coin create", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось создать мемкоин" }, { status: 500 });
+    return apiFailure(error, "Не удалось создать мемкоин");
   }
 }
 export const GET = withApiErrors("app/api/coins/route.ts:GET", GETHandler);

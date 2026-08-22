@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -56,7 +56,7 @@ async function GETHandler() {
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("economy risk", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось собрать Economy & Risk" }, { status: 500 });
+    return apiFailure(error, "Не удалось собрать Economy & Risk");
   }
 }
 export const GET = withApiErrors("app/api/admin/economy-risk/route.ts:GET", GETHandler);

@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -24,7 +24,8 @@ async function POSTHandler(request: Request) {
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "admin-control", String(admin.id), 90, 60))) return NextResponse.json({ error: "Слишком много административных операций." }, { status: 429 });
   const actor = `admin:${admin.telegram_id}`;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const action = text(body.action, 80);
   const supabase = getSupabaseAdmin();
 
@@ -81,7 +82,7 @@ async function POSTHandler(request: Request) {
       const key = text(body.key, 80).toLowerCase().replace(/[^a-z0-9_-]/g, "_");
       const title = text(body.title, 120);
       const description = text(body.description, 500);
-      const period = ["onboarding", "daily", "weekly"].includes(body.period) ? body.period : "daily";
+      const period = typeof body.period === "string" && ["onboarding", "daily", "weekly"].includes(body.period) ? body.period : "daily";
       const reward = number(body.reward);
       const target = Math.floor(number(body.target) ?? 0);
       const sortOrder = Math.floor(number(body.sortOrder) ?? 100);
@@ -98,7 +99,7 @@ async function POSTHandler(request: Request) {
       const patch: Record<string, unknown> = {};
       if (body.title !== undefined) patch.title = text(body.title, 120);
       if (body.description !== undefined) patch.description = text(body.description, 500);
-      if (["onboarding", "daily", "weekly"].includes(body.period)) patch.period = body.period;
+      if (typeof body.period === "string" && ["onboarding", "daily", "weekly"].includes(body.period)) patch.period = body.period;
       if (number(body.reward) != null) patch.reward = number(body.reward);
       if (number(body.target) != null) patch.target = Math.max(1, Math.floor(number(body.target)!));
       if (body.actionType !== undefined) patch.action_type = text(body.actionType, 80);
@@ -134,7 +135,7 @@ async function POSTHandler(request: Request) {
     if (action === "coin.update") {
       const id = text(body.id, 80);
       const patch: Record<string, unknown> = {};
-      if (["active", "dead", "graduated"].includes(body.status)) patch.status = body.status;
+      if (typeof body.status === "string" && ["active", "dead", "graduated"].includes(body.status)) patch.status = body.status;
       if (typeof body.hiddenFromMarket === "boolean") patch.hidden_from_market = body.hiddenFromMarket;
       if (body.name !== undefined) patch.name = text(body.name, 32);
       if (body.description !== undefined) patch.description = text(body.description, 180);

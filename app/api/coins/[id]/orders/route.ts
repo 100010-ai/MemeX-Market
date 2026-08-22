@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -16,7 +16,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     .select("id,kind,trigger_price,input_amount,status,expires_at,result,failure_reason,created_at,executed_at")
     .eq("profile_id", profile.id).eq("coin_id", id)
     .order("created_at", { ascending: false }).limit(100);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiFailure(error, "Не удалось выполнить запрос");
   return NextResponse.json({ orders: (data || []).map((row) => ({
     id: String(row.id), kind: String(row.kind), triggerPrice: Number(row.trigger_price), inputAmount: Number(row.input_amount),
     status: String(row.status), expiresAt: String(row.expires_at), result: row.result || null, failureReason: row.failure_reason || null,
@@ -36,7 +36,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     if (!config.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-    const kind = ["limit_buy", "limit_sell", "take_profit", "stop_loss"].includes(body.kind) ? String(body.kind) : "";
+    const kind = typeof body.kind === "string" && ["limit_buy", "limit_sell", "take_profit", "stop_loss"].includes(body.kind) ? body.kind : "";
     const triggerPrice = Number(body.triggerPrice);
     const inputAmount = Number(body.inputAmount);
     const requestKey = typeof body.requestKey === "string" ? body.requestKey.trim() : "";
@@ -52,12 +52,12 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
       p_profile_id: profile.id, p_coin_id: id, p_kind: kind, p_trigger_price: triggerPrice, p_input_amount: inputAmount,
       p_request_key: requestKey, p_duration_days: durationDays,
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return apiFailure(error, "Не удалось создать ордер", 400);
     return NextResponse.json({ order: data }, { status: 201 });
   } catch (error) {
     console.error("create conditional order", error);
     await recordAppError(`/api/coins/${id}/orders`, error, String(profile.id));
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось создать ордер" }, { status: 500 });
+    return apiFailure(error, "Не удалось создать ордер");
   }
 }
 export const GET = withApiErrors("app/api/coins/[id]/orders/route.ts:GET", GETHandler);

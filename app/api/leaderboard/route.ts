@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -46,7 +46,7 @@ async function GETHandler(request: NextRequest) {
       meRank = Number(count || 0) + 1;
     }
 
-    const validPlayers = (data || []).flatMap((player: Record<string, unknown>) => {
+    const validPlayers: Array<{ id: string; player: Record<string, unknown>; name: string }> = ((data || []) as Record<string, unknown>[]).flatMap((player) => {
       const id = nonEmptyId(player.id);
       if (!id) return [];
       const username = text(player.username, "", 64);
@@ -75,7 +75,7 @@ async function GETHandler(request: NextRequest) {
     return NextResponse.json({ board, players, meRank });
   } catch (error) {
     console.error("leaderboard", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить рейтинг" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить рейтинг");
   }
 }
 export const GET = withApiErrors("app/api/leaderboard/route.ts:GET", GETHandler);

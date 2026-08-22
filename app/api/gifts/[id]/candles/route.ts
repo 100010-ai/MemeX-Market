@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -38,7 +38,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     } });
   } catch (error) {
     console.error("gift candles", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load chart" }, { status: 500 });
+    return apiFailure(error, "Could not load chart");
   }
 }
 export const GET = withApiErrors("app/api/gifts/[id]/candles/route.ts:GET", GETHandler);

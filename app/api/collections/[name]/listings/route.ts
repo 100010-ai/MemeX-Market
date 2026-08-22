@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { readSession } from "@/lib/session";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
@@ -31,7 +31,7 @@ async function GETHandler(request: NextRequest, { params }: { params: Promise<{ 
     .order("listing_price", { ascending: true })
     .range(offset, offset + limit);
 
-  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+  if (result.error) return apiFailure(result.error, "Не удалось выполнить запрос");
   const rows = result.data || [];
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;

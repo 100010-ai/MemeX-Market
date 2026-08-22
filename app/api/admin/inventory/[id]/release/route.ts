@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -16,7 +16,8 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!(await enforceRateLimit(request, "admin-gift-release", String(admin.id), 30, 60))) return NextResponse.json({ error: "Слишком много операций с лотами." }, { status: 429 });
   const { id } = await params;
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const price = Number(body?.price);
   if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ error: "Укажите цену лота больше нуля" }, { status: 400 });
 

@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, isDatabaseSchemaError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -29,12 +29,14 @@ async function POSTHandler(request: Request) {
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.stars) return NextResponse.json({ error: "Покупки за Stars временно отключены" }, { status: 503 });
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   const cleanupResult = await supabase
     .rpc("release_expired_star_authorizations_v200", { p_limit: 25 })
     .abortSignal(AbortSignal.timeout(1_500));
-  if (cleanupResult.error && !["42883", "PGRST202"].includes(String(cleanupResult.error.code || ""))) {
+  if (cleanupResult.error) {
+    if (isDatabaseSchemaError(cleanupResult.error)) return apiFailure(cleanupResult.error, "Схема Stars требует актуальной миграции");
     console.error("star reservation cleanup", cleanupResult.error);
   }
   const sku = typeof body.sku === "string" ? body.sku.trim().toLowerCase() : "";
@@ -56,10 +58,7 @@ async function POSTHandler(request: Request) {
       .eq("sku", sku)
       .eq("active", true)
       .maybeSingle();
-    if (productResult.error) {
-      const missing = /store_products|schema cache|relation .* does not exist/i.test(productResult.error.message || "");
-      return NextResponse.json({ error: missing ? "Примените миграцию экономики Market 2.0" : "Не удалось загрузить товар" }, { status: missing ? 503 : 500 });
-    }
+    if (productResult.error) return apiFailure(productResult.error, "Не удалось загрузить товар");
     if (!productResult.data) return NextResponse.json({ error: "Товар недоступен" }, { status: 404 });
     const product = productResult.data as Record<string, unknown>;
     const metadata = product.metadata && typeof product.metadata === "object" && !Array.isArray(product.metadata)
@@ -75,10 +74,11 @@ async function POSTHandler(request: Request) {
       if (metadata.creatorTool === "boost" && !runtimeConfig.featureFlags.memecoins) {
         return NextResponse.json({ error: eligibilityMessages.memecoins_disabled, reason: "memecoins_disabled" }, { status: 503 });
       }
-      const coinId = body.context && typeof body.context === "object" ? String(body.context.coinId || "") : "";
+      const context = body.context && typeof body.context === "object" && !Array.isArray(body.context) ? body.context as Record<string, unknown> : {};
+      const coinId = String(context.coinId || "");
       if (!validUuidLike(coinId)) return NextResponse.json({ error: "Выберите мемкоин для продвижения" }, { status: 400 });
       const coin = await supabase.from("coins").select("id").eq("id", coinId).eq("creator_profile_id", profile.id).eq("status", "active").eq("hidden_from_market", false).maybeSingle();
-      if (coin.error) return NextResponse.json({ error: "Не удалось проверить мемкоин" }, { status: 500 });
+      if (coin.error) return apiFailure(coin.error, "Не удалось проверить мемкоин");
       if (!coin.data) return NextResponse.json({ error: "Можно продвигать только свой активный мемкоин" }, { status: 403 });
       productContext.coinId = coinId;
     }
@@ -87,10 +87,7 @@ async function POSTHandler(request: Request) {
       p_product_sku: productSku,
       p_product_context: productContext,
     });
-    if (eligibility.error) {
-      const missing = eligibility.error.code === "42883" || /store_purchase_eligibility_v200|schema cache|could not find the function/i.test(eligibility.error.message || "");
-      return NextResponse.json({ error: missing ? "Примените миграцию экономики Market 2.0" : "Не удалось проверить доступность товара" }, { status: missing ? 503 : 500 });
-    }
+    if (eligibility.error) return apiFailure(eligibility.error, "Не удалось проверить доступность товара");
     const eligibilityData = eligibility.data && typeof eligibility.data === "object" && !Array.isArray(eligibility.data)
       ? eligibility.data as Record<string, unknown>
       : {};
@@ -117,10 +114,7 @@ async function POSTHandler(request: Request) {
     purchaseRow.product_context = productContext;
   }
   const insert = await supabase.from("star_purchases").insert(purchaseRow);
-  if (insert.error) {
-    const missing = /star_purchases|schema cache|relation .* does not exist/i.test(insert.error.message || "");
-    return NextResponse.json({ error: missing ? "Примените миграцию 021_v046_stars_referrals_market_polish.sql" : "Не удалось создать покупку" }, { status: 500 });
-  }
+  if (insert.error) return apiFailure(insert.error, "Не удалось создать покупку");
 
   try {
     const invoiceUrl = await telegramBotApi<string>("createInvoiceLink", {
@@ -132,7 +126,8 @@ async function POSTHandler(request: Request) {
     });
     return NextResponse.json({ purchaseId, invoiceUrl, stars, virtualTon, productSku, rewardLabel }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
-    await supabase.from("star_purchases").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", purchaseId);
+    const cancelResult = await supabase.from("star_purchases").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", purchaseId);
+    if (cancelResult.error) console.error("star purchase cancellation", cancelResult.error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось открыть оплату Stars" }, { status: 502 });
   }
 }

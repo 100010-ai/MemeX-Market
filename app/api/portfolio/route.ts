@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile, getProfileSnapshot } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -92,10 +92,11 @@ async function GETHandler() {
       net_worth: snapshot.netWorth,
       realized_pnl: snapshot.pnl,
     }, { onConflict: "profile_id,bucket_start" });
-    if (snapshotWrite.error && !/portfolio_snapshots|schema cache|does not exist/i.test(snapshotWrite.error.message || "")) throw snapshotWrite.error;
+    if (snapshotWrite.error) throw snapshotWrite.error;
     let portfolioSeries: Array<{ time: string; balance: number; coinValue: number; giftValue: number; netWorth: number; realizedPnl: number }> = [];
     const seriesResult = await supabase.from("portfolio_snapshots").select("bucket_start,balance,coin_value,gift_value,net_worth,realized_pnl").eq("profile_id", profile.id).order("bucket_start", { ascending: true }).limit(5000);
-    if (!seriesResult.error) portfolioSeries = (seriesResult.data || []).map((row) => ({ time: isoDate(row.bucket_start), balance: finiteNumber(row.balance), coinValue: finiteNumber(row.coin_value), giftValue: finiteNumber(row.gift_value), netWorth: finiteNumber(row.net_worth), realizedPnl: finiteNumber(row.realized_pnl) }));
+    if (seriesResult.error) throw seriesResult.error;
+    portfolioSeries = (seriesResult.data || []).map((row) => ({ time: isoDate(row.bucket_start), balance: finiteNumber(row.balance), coinValue: finiteNumber(row.coin_value), giftValue: finiteNumber(row.gift_value), netWorth: finiteNumber(row.net_worth), realizedPnl: finiteNumber(row.realized_pnl) }));
     return NextResponse.json({
       holdings,
       gifts: mappedGifts,
@@ -111,7 +112,7 @@ async function GETHandler() {
     });
   } catch (error) {
     console.error("portfolio", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить хранилище" }, { status: 500 });
+    return apiFailure(error, "Не удалось загрузить хранилище");
   }
 }
 export const GET = withApiErrors("app/api/portfolio/route.ts:GET", GETHandler);

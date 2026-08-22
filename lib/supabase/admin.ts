@@ -14,7 +14,7 @@ export function getSupabaseAdmin() {
       !url ? "SUPABASE_URL (или NEXT_PUBLIC_SUPABASE_URL)" : null,
       !serverKey ? "SUPABASE_SECRET_KEY (или SUPABASE_SERVICE_ROLE_KEY)" : null,
     ].filter(Boolean).join(", ");
-    throw new Error(`Supabase server config не найден: ${missing}. Добавь значения в .env/.env.local и перезапусти npm run dev.`);
+    throw new Error(`Supabase server config не найден: ${missing}. Добавь значения в .env/.env.local и перезапусти pnpm run dev.`);
   }
 
   return createClient(url, serverKey, {

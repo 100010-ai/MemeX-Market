@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { setSession } from "@/lib/session";
@@ -25,7 +25,7 @@ async function POSTHandler() {
     return NextResponse.json({ profile: await getProfileSnapshot(data) });
   } catch (error) {
     console.error("dev auth", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Dev auth failed" }, { status: 500 });
+    return apiFailure(error, "Dev auth failed");
   }
 }
 export const POST = withApiErrors("app/api/auth/dev/route.ts:POST", POSTHandler);

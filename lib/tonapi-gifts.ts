@@ -359,13 +359,14 @@ export async function discoverTonApiGiftCollections(options: { pages?: number; p
     if (!rows.length) break;
   }
 
-  await supabase.from("tonapi_catalog_state").upsert({
+  const stateUpdate = await supabase.from("tonapi_catalog_state").upsert({
     singleton: true,
     collection_offset: offset,
     last_discovery_at: new Date().toISOString(),
     last_error: null,
     updated_at: new Date().toISOString(),
   }, { onConflict: "singleton" });
+  if (stateUpdate.error) throw stateUpdate.error;
   return { scanned, discovered };
 }
 
@@ -497,8 +498,10 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
       .from("gift_assets")
       .select("id,chain_nft_address,base_name")
       .in("chain_nft_address", priced.map((item) => item.address));
-    if (!assetLookup.error) {
-      const byAddress = new Map((assetLookup.data || []).map((row) => [String(row.chain_nft_address), row]));
+    if (assetLookup.error) throw assetLookup.error;
+    {
+      const assetRows = (assetLookup.data || []) as Array<{ id: string; chain_nft_address: string | null; base_name: string | null }>;
+      const byAddress = new Map<string, { id: string; chain_nft_address: string | null; base_name: string | null }>(assetRows.map((row) => [String(row.chain_nft_address), row]));
       const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
       const assetIds = [...byAddress.values()].map((asset) => String(asset.id));
       const recentResult = assetIds.length
@@ -519,8 +522,8 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
           const value = Number(row.price_ton);
           if (Number.isFinite(value) && value > 0) recentPrice.set(assetId, value);
         }
-      } else if (recentResult.error.code !== "42P01") {
-        console.warn("TonAPI price observation lookup", recentResult.error);
+      } else {
+        throw recentResult.error;
       }
 
       const observations = priced.flatMap((item) => {
@@ -544,68 +547,28 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
       });
       if (observations.length) {
         const observationResult = await supabase.from("gift_price_observations").insert(observations);
-        // v0.30 migration may not be deployed yet during a rolling deploy;
-        // price history is auxiliary and must not break the catalog sync.
-        if (observationResult.error && observationResult.error.code !== "42P01") console.warn("TonAPI price observations", observationResult.error);
+        if (observationResult.error) throw observationResult.error;
       }
     }
   }
 
   offset += rawItems.length;
   const finished = rawItems.length < limit;
-  await supabase.from("tonapi_gift_collections").update({
+  const collectionState = await supabase.from("tonapi_gift_collections").update({
     next_offset: finished ? 0 : offset,
     last_synced_at: now,
     last_error: null,
     updated_at: now,
   }).eq("address", collection.address);
+  if (collectionState.error) throw collectionState.error;
 
   return { seen: rawItems.length, upserted, skipped: rawItems.length - parsed.length };
 }
 
 async function recalculateCollectionRarity(collectionAddress: string) {
   const supabase = getSupabaseAdmin();
-  const fast = await supabase.rpc("recalculate_tonapi_collection_rarity_v040", { p_collection_address: collectionAddress });
-  if (!fast.error) return;
-
-  const missingRpc = fast.error.code === "42883" || /recalculate_tonapi_collection_rarity_v040|schema cache|could not find the function/i.test(fast.error.message || "");
-  if (!missingRpc) throw fast.error;
-
-  // Rolling-deploy fallback for databases that have not applied migration 018
-  // yet. Bounded on purpose; v0.40 migration moves the full aggregation into SQL.
-  const result = await supabase
-    .from("gift_assets")
-    .select("id,model_name,symbol_name,backdrop_name")
-    .eq("chain_collection_address", collectionAddress)
-    .eq("catalog_source", "tonapi")
-    .limit(1000);
+  const result = await supabase.rpc("recalculate_tonapi_collection_rarity_v040", { p_collection_address: collectionAddress });
   if (result.error) throw result.error;
-  const rows = (result.data || []) as Array<{ id: string; model_name: string | null; symbol_name: string | null; backdrop_name: string | null }>;
-  if (!rows.length) return;
-
-  const count = (key: "model_name" | "symbol_name" | "backdrop_name") => {
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      const value = String(row[key] || "");
-      if (value) map.set(value, (map.get(value) || 0) + 1);
-    }
-    return map;
-  };
-  const models = count("model_name");
-  const symbols = count("symbol_name");
-  const backdrops = count("backdrop_name");
-  const rarity = (map: Map<string, number>, value: unknown) => Math.max(1, Math.min(1000, Math.round(((map.get(String(value || "")) || 1) / rows.length) * 1000)));
-
-  for (let start = 0; start < rows.length; start += 24) {
-    await Promise.all(rows.slice(start, start + 24).map(async (row) => {
-      const update = await supabase.from("gift_assets").update({
-        model_rarity_per_mille: rarity(models, row.model_name),
-        symbol_rarity_per_mille: rarity(symbols, row.symbol_name),
-        backdrop_rarity_per_mille: rarity(backdrops, row.backdrop_name),
-      }).eq("id", row.id);
-      if (update.error) throw update.error;
-    }));
-  }
 }
 
 export async function syncTonApiGiftCatalog(options: { discoverPages?: number; maxCollections?: number; itemsPerCollection?: number; bootstrapOnly?: boolean } = {}): Promise<TonApiGiftSyncResult> {
@@ -653,7 +616,8 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
         const message = error instanceof Error ? error.message : "TonAPI collection import failed";
         collectionsFailed += 1;
         if (errors.length < 5) errors.push(`${String(row.address).slice(0, 12)}…: ${message}`);
-        await supabase.from("tonapi_gift_collections").update({ last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }).eq("address", row.address);
+        const failureState = await supabase.from("tonapi_gift_collections").update({ last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }).eq("address", row.address);
+        if (failureState.error) throw failureState.error;
       }
     }
 
@@ -663,13 +627,17 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
       throw new Error(errors[0] || "TonAPI collection import failed");
     }
     const partialError = collectionsFailed > 0 ? `${collectionsFailed} collection(s) failed: ${errors.join(" | ")}`.slice(0, 1000) : null;
-    await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: partialError, updated_at: new Date().toISOString() }, { onConflict: "singleton" });
-    await supabase.rpc("release_tonapi_catalog_lock");
+    const syncState = await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: partialError, updated_at: new Date().toISOString() }, { onConflict: "singleton" });
+    if (syncState.error) throw syncState.error;
+    const release = await supabase.rpc("release_tonapi_catalog_lock");
+    if (release.error) throw release.error;
     return { scannedCollections, discoveredCollections, collectionsProcessed, collectionsFailed, itemsSeen, assetsUpserted, skippedInvalid, source: "tonapi", ...(errors.length ? { errors } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "TonAPI sync failed";
-    await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }, { onConflict: "singleton" });
-    try { await supabase.rpc("release_tonapi_catalog_lock"); } catch { /* lock expires automatically */ }
+    const failureState = await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: message.slice(0, 1000), updated_at: new Date().toISOString() }, { onConflict: "singleton" });
+    if (failureState.error) console.error("tonapi sync failure state", failureState.error);
+    const release = await supabase.rpc("release_tonapi_catalog_lock");
+    if (release.error) console.error("tonapi catalog lock release", release.error);
     throw error;
   }
 }

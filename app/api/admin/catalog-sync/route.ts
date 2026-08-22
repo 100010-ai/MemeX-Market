@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
@@ -21,7 +21,7 @@ async function POSTHandler(request: Request) {
     return NextResponse.json({ results: catalog.bot.results, catalog, liquidity });
   } catch (error) {
     console.error("Telegram hybrid catalog sync", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось обновить каталог" }, { status: 500 });
+    return apiFailure(error, "Не удалось обновить каталог");
   }
 }
 export const POST = withApiErrors("app/api/admin/catalog-sync/route.ts:POST", POSTHandler);
