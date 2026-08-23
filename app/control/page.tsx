@@ -35,6 +35,35 @@ async function request<T>(url:string, init?:RequestInit):Promise<T>{
   return body as T;
 }
 
+function controlPayloadError(action:string,payload:Record<string,unknown>){
+  const finite=(value:unknown)=>typeof value==="number"&&Number.isFinite(value);
+  const nonEmpty=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
+  if(action==="balance.adjust") return nonEmpty(payload.profileId)&&finite(payload.delta)?null:"Укажите игрока и корректное изменение баланса";
+  if(action==="balance.set") return nonEmpty(payload.profileId)&&finite(payload.balance)&&Number(payload.balance)>=0?null:"Укажите корректный неотрицательный баланс";
+  if(action==="profile.set_xp") return nonEmpty(payload.profileId)&&finite(payload.xp)&&Number(payload.xp)>=0?null:"Укажите корректный XP";
+  if(action==="mission.create") {
+    if(!nonEmpty(payload.key)||!nonEmpty(payload.title)||!nonEmpty(payload.description)||!nonEmpty(payload.actionType)) return "Заполните key, название, описание и action_type";
+    if(!finite(payload.reward)||Number(payload.reward)<0||!finite(payload.target)||Number(payload.target)<1) return "Проверьте награду и цель задания";
+  }
+  if(action==="coin.create") {
+    const name=String(payload.name||"").trim();
+    const symbol=String(payload.symbol||"").trim().toUpperCase();
+    if(name.length<2||name.length>32) return "Название мемкоина: от 2 до 32 символов";
+    if(!/^[A-Z0-9]{2,8}$/.test(symbol)) return "Тикер: 2–8 латинских букв или цифр";
+  }
+  if(action==="gift.list") {
+    if(!nonEmpty(payload.id)) return "Подарок не выбран";
+    if(payload.price!==null&&(!finite(payload.price)||Number(payload.price)<=0)) return "Цена должна быть положительным числом";
+  }
+  if(action==="gift.transfer"&&(!nonEmpty(payload.id)||!nonEmpty(payload.ownerProfileId))) return "Выберите подарок и нового владельца";
+  if(action==="catalog.source.add"&&(!finite(payload.telegramId)||!Number.isSafeInteger(Number(payload.telegramId))||Number(payload.telegramId)<=0)) return "Укажите корректный Telegram ID источника";
+  if(action==="npc.policy") {
+    const values=[payload.playerOwnedThreshold,payload.playerListedThreshold,payload.activeSellersThreshold];
+    if(values.some((value)=>!finite(value)||!Number.isInteger(Number(value))||Number(value)<=0)) return "Пороги должны быть положительными целыми числами";
+  }
+  return null;
+}
+
 export default function ControlPage(){
   const [available,setAvailable]=useState<boolean|null>(null);
   const [authenticated,setAuthenticated]=useState(false);
@@ -58,6 +87,8 @@ export default function ControlPage(){
   async function login(e:FormEvent){e.preventDefault();setBusy("login");setError(null);try{await request("/api/control/session",{method:"POST",body:JSON.stringify({token})});setAuthenticated(true);setToken("");await load();}catch(e){setError(e instanceof Error?e.message:"Вход не выполнен");}finally{setBusy(null);}}
   async function act(action:string,payload:Record<string,unknown>={}){
     if(busy)return;
+    const validationError=controlPayloadError(action,payload);
+    if(validationError){setError(validationError);setNotice(null);return;}
     setBusy(action+JSON.stringify(payload).slice(0,30));setError(null);setNotice(null);
     try{await request("/api/control/action",{method:"POST",body:JSON.stringify({action,...payload})});setNotice(CONTROL_ACTION_LABELS[action]||"Изменение применено");await load();}
     catch(e){setError(e instanceof Error?e.message:"Операция не выполнена");}
@@ -138,7 +169,7 @@ function GiftsPanel({rows,profiles,query,act,busy,sources,npcState,npcLog,tonapi
   <div className="control-panel overflow-hidden"><div className="control-section-title">Виртуальные Telegram Gifts <span>{filtered.length}</span></div><div className="divide-y divide-[var(--border-soft)]">{filtered.map(g=><GiftControlRow key={g.virtual_gift_id} row={g} profiles={profiles} act={act} disabled={Boolean(busy)}/>)}</div></div>
  </div>
 }
-function GiftControlRow({row,profiles,act,disabled}:{row:GiftRow;profiles:ProfileRow[];act:(a:string,p?:Record<string,unknown>)=>Promise<void>;disabled:boolean}){const [price,setPrice]=useState(row.listing_price==null?"":String(row.listing_price));const [owner,setOwner]=useState(row.owner_profile_id);return <div className="grid gap-2 p-3 lg:grid-cols-[minmax(220px,1fr)_220px_240px] lg:items-center"><div><p className="truncate text-xs font-medium">{row.base_name} #{row.gift_number}</p><p className="mt-1 truncate text-[10px] text-[var(--muted)]">{row.telegram_name} · владелец {row.owner_name}</p><p className="mt-1 text-[9px] text-[var(--muted-2)]">{row.catalog_source==="tonapi"?"TonAPI · on-chain":row.catalog_source==="bot_catalog"?"Bot API каталог":"Профильный импорт"}{row.source_reference?` · ${row.source_reference}`:""}</p></div><div className="flex gap-1.5"><input value={price} onChange={e=>setPrice(e.target.value)} placeholder="Цена TON" className="control-input h-9 min-w-0"/><button disabled={disabled} onClick={()=>void act("gift.list",{id:row.virtual_gift_id,price:price?Number(price):null})} className="control-small">{price?"Листинг":"Снять"}</button></div><div className="flex gap-1.5"><select value={owner} onChange={e=>setOwner(e.target.value)} className="control-input h-9 min-w-0 flex-1"><option value={row.owner_profile_id}>Текущий: {row.owner_name}</option>{profiles.filter(p=>!p.is_system&&p.id!==row.owner_profile_id).map(p=><option key={p.id} value={p.id}>{p.username?`@${p.username}`:p.first_name}</option>)}</select><button disabled={disabled||owner===row.owner_profile_id} onClick={()=>void act("gift.transfer",{id:row.virtual_gift_id,ownerProfileId:owner})} className="control-small">Выдать</button></div></div>}
+function GiftControlRow({row,profiles,act,disabled}:{row:GiftRow;profiles:ProfileRow[];act:(a:string,p?:Record<string,unknown>)=>Promise<void>;disabled:boolean}){const [price,setPrice]=useState(row.listing_price==null?"":String(row.listing_price));const [owner,setOwner]=useState(row.owner_profile_id);const normalizedPrice=price.trim().replace(",",".");const parsedPrice=normalizedPrice===""?null:Number(normalizedPrice);const validPrice=parsedPrice===null||(Number.isFinite(parsedPrice)&&parsedPrice>0);return <div className="grid gap-2 p-3 lg:grid-cols-[minmax(220px,1fr)_220px_240px] lg:items-center"><div><p className="truncate text-xs font-medium">{row.base_name} #{row.gift_number}</p><p className="mt-1 truncate text-[10px] text-[var(--muted)]">{row.telegram_name} · владелец {row.owner_name}</p><p className="mt-1 text-[9px] text-[var(--muted-2)]">{row.catalog_source==="tonapi"?"TonAPI · on-chain":row.catalog_source==="bot_catalog"?"Bot API каталог":"Профильный импорт"}{row.source_reference?` · ${row.source_reference}`:""}</p></div><div className="flex gap-1.5"><input value={price} onChange={e=>setPrice(e.target.value)} aria-invalid={!validPrice} placeholder="Цена TON" className="control-input h-9 min-w-0"/><button disabled={disabled||!validPrice} onClick={()=>void act("gift.list",{id:row.virtual_gift_id,price:parsedPrice})} className="control-small">{parsedPrice!==null?"Листинг":"Снять"}</button></div><div className="flex gap-1.5"><select value={owner} onChange={e=>setOwner(e.target.value)} className="control-input h-9 min-w-0 flex-1"><option value={row.owner_profile_id}>Текущий: {row.owner_name}</option>{profiles.filter(p=>!p.is_system&&p.id!==row.owner_profile_id).map(p=><option key={p.id} value={p.id}>{p.username?`@${p.username}`:p.first_name}</option>)}</select><button disabled={disabled||owner===row.owner_profile_id} onClick={()=>void act("gift.transfer",{id:row.virtual_gift_id,ownerProfileId:owner})} className="control-small">Выдать</button></div></div>}
 
 function CatalogMetric({label,value}:{label:string;value:number}){return <div className="min-w-[112px] rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2"><p className="text-[9px] text-[var(--muted)]">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>}
 

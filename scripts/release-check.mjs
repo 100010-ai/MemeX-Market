@@ -130,7 +130,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.5 package version", packageJson.includes('"version": "0.64.5"'));
+check("v0.64.6 package version", packageJson.includes('"version": "0.64.6"'));
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -183,6 +183,12 @@ check("v0.64.5 dashboard coin query uses compact payload", read("app/hub/page.ts
 check("v0.64.5 portfolio has compact market handoff", read("app/vault/page.tsx").includes("mxm-portfolio-quick") && read("app/vault/page.tsx").includes('href="/market"'));
 check("v0.64.5 control audit records before/after", read("app/api/control/action/route.ts").includes('before: { balance:') && read("app/api/control/action/route.ts").includes('after: { ...before.data, ...patch }'));
 check("v0.64.5 one-command verifier present", exists("scripts/verify.mjs") && packageJson.includes('"verify": "node scripts/verify.mjs"') && packageJson.includes('"verify:static"'));
+
+// v0.64.6 Telegram 6.0 compatibility + Control request hardening.
+check("v0.64.6 Telegram protocol methods are version-gated", read("components/telegram-provider.tsx").includes('telegramVersionAtLeast(webApp, "6.1")') && read("components/telegram-provider.tsx").includes('telegramVersionAtLeast(webApp, "8.0")') && exists("lib/telegram-webapp.ts"));
+check("v0.64.6 Stars invoice is version-gated", read("components/store-front.tsx").includes('telegramVersionAtLeast(webApp, "6.1")') && read("components/store-front.tsx").includes("Обнови Telegram"));
+check("v0.64.6 Control validates payload before POST", read("app/control/page.tsx").includes("controlPayloadError") && read("app/control/page.tsx").includes("validPrice"));
+check("v0.64.6 Control server separates validation from runtime failures", read("app/api/control/action/route.ts").includes("isDatabaseSchemaError") && read("app/api/control/action/route.ts").includes("CONTROL_FAILED") && read("app/api/control/action/route.ts").includes("CONTROL_CONFLICT"));
 
 // v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));

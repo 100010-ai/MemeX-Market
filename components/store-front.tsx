@@ -24,6 +24,7 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { getProfileFrameDefinition } from "@/lib/profile-frames";
 import { rarityLabel } from "@/lib/ui-copy";
+import { telegramVersionAtLeast } from "@/lib/telegram-webapp";
 
 type Wallet = {
   mxmCoins: number;
@@ -197,7 +198,9 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         body: JSON.stringify({ sku: product.sku, termsAccepted: true, context: requiresCoin ? { coinId: creatorCoinId } : {} }),
       });
       const webApp = window.Telegram?.WebApp;
-      if (!webApp?.openInvoice) throw new Error("Оплата Stars открывается только внутри актуального Telegram");
+      if (!telegramVersionAtLeast(webApp, "6.1") || !webApp?.openInvoice) {
+        throw new Error("Обнови Telegram, чтобы оплачивать покупки Stars внутри приложения");
+      }
       webApp.openInvoice(invoice.invoiceUrl, (status) => {
         if (!mountedRef.current) return;
         if (status !== "paid" && status !== "pending") {

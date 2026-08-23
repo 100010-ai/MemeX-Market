@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types";
 import { apiFetch, prefetchApi, setApiCacheNamespace } from "@/lib/api";
+import { telegramVersionAtLeast } from "@/lib/telegram-webapp";
 
 type TelegramContextValue = {
   profile: Profile | null;
@@ -85,8 +86,14 @@ function prepareWebApp() {
   if (!webApp) return;
   webApp.ready();
   webApp.expand();
-  webApp.setHeaderColor?.("#07090c");
-  webApp.setBackgroundColor?.("#07090c");
+  // Telegram's injected SDK exposes these methods even when the active
+  // WebApp protocol is 6.0, but calling them then logs noisy unsupported API
+  // warnings. Gate protocol-versioned methods explicitly instead of relying
+  // on optional chaining alone.
+  if (telegramVersionAtLeast(webApp, "6.1")) {
+    webApp.setHeaderColor?.("#07090c");
+    webApp.setBackgroundColor?.("#07090c");
+  }
 }
 
 function warmCurrentRoute(pathname: string) {
@@ -147,7 +154,9 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const haptic = useCallback((style: "light" | "medium" | "heavy" = "light") => {
-    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred(style);
+    const webApp = window.Telegram?.WebApp;
+    if (!telegramVersionAtLeast(webApp, "6.1")) return;
+    webApp?.HapticFeedback?.impactOccurred(style);
   }, []);
 
   useEffect(() => {
@@ -299,22 +308,24 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     const webApp = window.Telegram?.WebApp;
     document.addEventListener("visibilitychange", checkIdentity);
     window.addEventListener("focus", checkIdentity);
-    webApp?.onEvent?.("activated", checkIdentity);
+    const supportsActivationEvent = telegramVersionAtLeast(webApp, "8.0");
+    if (supportsActivationEvent) webApp?.onEvent?.("activated", checkIdentity);
     return () => {
       document.removeEventListener("visibilitychange", checkIdentity);
       window.removeEventListener("focus", checkIdentity);
-      webApp?.offEvent?.("activated", checkIdentity);
+      if (supportsActivationEvent) webApp?.offEvent?.("activated", checkIdentity);
     };
   }, [isControl, isPublic, profile?.telegramId]);
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
     const root = document.documentElement;
+    const supportsSafeArea = telegramVersionAtLeast(webApp, "8.0");
     const syncViewport = () => {
       const viewportHeight = Number(webApp?.viewportHeight || window.visualViewport?.height || window.innerHeight);
       const stableHeight = Number(webApp?.viewportStableHeight || viewportHeight);
-      const safeTop = Math.max(Number(webApp?.safeAreaInset?.top || 0), Number(webApp?.contentSafeAreaInset?.top || 0));
-      const safeBottom = Math.max(Number(webApp?.safeAreaInset?.bottom || 0), Number(webApp?.contentSafeAreaInset?.bottom || 0));
+      const safeTop = supportsSafeArea ? Math.max(Number(webApp?.safeAreaInset?.top || 0), Number(webApp?.contentSafeAreaInset?.top || 0)) : 0;
+      const safeBottom = supportsSafeArea ? Math.max(Number(webApp?.safeAreaInset?.bottom || 0), Number(webApp?.contentSafeAreaInset?.bottom || 0)) : 0;
       const keyboardHeight = Math.max(0, stableHeight - viewportHeight);
       if (Number.isFinite(viewportHeight) && viewportHeight > 0) root.style.setProperty("--mxm-viewport-height", `${Math.round(viewportHeight)}px`);
       if (Number.isFinite(stableHeight) && stableHeight > 0) root.style.setProperty("--mxm-viewport-stable-height", `${Math.round(stableHeight)}px`);
@@ -325,14 +336,19 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     };
     syncViewport();
     webApp?.onEvent?.("viewportChanged", syncViewport);
-    webApp?.onEvent?.("safeAreaChanged", syncViewport);
-    webApp?.onEvent?.("contentSafeAreaChanged", syncViewport);
+    const supportsSafeAreaEvents = supportsSafeArea;
+    if (supportsSafeAreaEvents) {
+      webApp?.onEvent?.("safeAreaChanged", syncViewport);
+      webApp?.onEvent?.("contentSafeAreaChanged", syncViewport);
+    }
     window.visualViewport?.addEventListener("resize", syncViewport);
     window.addEventListener("orientationchange", syncViewport);
     return () => {
       webApp?.offEvent?.("viewportChanged", syncViewport);
-      webApp?.offEvent?.("safeAreaChanged", syncViewport);
-      webApp?.offEvent?.("contentSafeAreaChanged", syncViewport);
+      if (supportsSafeAreaEvents) {
+        webApp?.offEvent?.("safeAreaChanged", syncViewport);
+        webApp?.offEvent?.("contentSafeAreaChanged", syncViewport);
+      }
       window.visualViewport?.removeEventListener("resize", syncViewport);
       window.removeEventListener("orientationchange", syncViewport);
       root.classList.remove("mxm-keyboard-open");
@@ -340,7 +356,9 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const backButton = window.Telegram?.WebApp?.BackButton;
+    const webApp = window.Telegram?.WebApp;
+    if (!telegramVersionAtLeast(webApp, "6.1")) return;
+    const backButton = webApp?.BackButton;
     if (!backButton) return;
     const rootRoutes = new Set(["/", "/market", "/orders", "/hub", "/tasks", "/vault", "/profile"]);
     const onBack = () => {
@@ -450,6 +468,8 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData: string;
+        version?: string;
+        isVersionAtLeast?: (version: string) => boolean;
         ready: () => void;
         expand: () => void;
         close?: () => void;

@@ -1,0 +1,44 @@
+MemeX Market v0.64.6 — Telegram Compatibility Hotfix
+=====================================================
+
+Scope
+-----
+- Telegram WebApp 6.0 compatibility warnings.
+- /api/control/action request/error hardening.
+- Gift listing price input safety.
+
+Checks completed
+----------------
+- TS/TSX parser: 184 files, 0 syntax errors.
+- Local import scan: 184 source files, 0 broken local imports.
+- CSS brace regression: 960 open / 960 close.
+- Release product/security gate: PASS, including all v0.64.6 regression checks.
+- Direct unsupported Telegram API scan: versioned calls are guarded.
+
+Telegram compatibility
+----------------------
+Bot API/WebApp 6.1 introduced version, isVersionAtLeast, setHeaderColor,
+setBackgroundColor, BackButton, HapticFeedback, openTelegramLink and openInvoice.
+The SDK can expose these methods while reporting protocol 6.0; optional chaining is
+therefore insufficient. v0.64.6 gates 6.1+ calls with telegramVersionAtLeast.
+Modern safe-area/activation event setup is separately gated.
+
+Control API
+-----------
+- Validation failures remain HTTP 400.
+- Business/database conflicts use HTTP 409.
+- DB schema mismatch uses HTTP 503.
+- Unexpected runtime/database failures use HTTP 500.
+- Common invalid payloads are rejected client-side before POST.
+- Gift listing price refuses NaN/non-positive values and accepts decimal comma.
+
+Database
+--------
+No new SQL migration is required for v0.64.6.
+Existing v0.64.4 migration 100002_memecoin_market_polish_v0644.sql must already
+be applied if the memecoin launch-state update is deployed.
+
+Dependency-backed build
+-----------------------
+This container does not contain project node_modules. Static verification is green,
+but pnpm run build remains the final dependency-backed gate on Vercel/CI.

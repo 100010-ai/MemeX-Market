@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, errorCode, errorMessage, isDatabaseSchemaError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -282,8 +282,21 @@ async function POSTHandler(request: Request) {
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
   } catch (error) {
-    console.error("local control action", action, error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Операция не выполнена" }, { status: 400 });
+    const code = errorCode(error);
+    const message = errorMessage(error);
+    console.error(`[control:action:${action || "unknown"}]`, { code, message, error });
+    if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема базы не соответствует этой версии MXM", 503);
+
+    // Validation returns 400 above. Database/business conflicts must not be
+    // disguised as malformed HTTP requests: it made Control failures look like
+    // a broken fetch in DevTools and hid the actual cause from the operator.
+    const conflict = ["23503", "23505", "P0001"].includes(code)
+      || /already exists|already used|duplicate|ticker.*exists|negative balance|not found/i.test(message);
+    const status = conflict ? 409 : code === "22P02" ? 400 : 500;
+    return NextResponse.json(
+      { error: message || "Операция не выполнена", code: code || (status === 409 ? "CONTROL_CONFLICT" : "CONTROL_FAILED"), action },
+      { status, headers: { "cache-control": "no-store" } },
+    );
   }
 }
 export const POST = withApiErrors("app/api/control/action/route.ts:POST", POSTHandler);
