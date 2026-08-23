@@ -2919,3 +2919,160 @@ button:disabled { -webkit-text-fill-color: currentColor; }
   .mxm-coin-trade-slot { grid-area: trade; }
   .mxm-coin-trade-panel { position: sticky; top: 68px; }
 }
+
+/* v0.64.5 — release polish. Quiet hierarchy, stronger states, cheaper mobile rendering. */
+.mxm-home-hero {
+  display:flex;
+  min-height:54px;
+  align-items:center;
+  gap:12px;
+  border-bottom:1px solid var(--border-soft);
+  padding:2px 1px 10px;
+}
+.mxm-home-status {
+  display:inline-flex;
+  min-height:28px;
+  align-items:center;
+  gap:4px;
+  border:1px solid rgba(139,164,255,.10);
+  border-radius:999px;
+  background:rgba(139,164,255,.03);
+  color:#d7def7;
+  padding:0 8px;
+  font-size:8px;
+  font-weight:650;
+}
+.mxm-home-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+.mxm-home-tile {
+  display:flex;
+  min-width:0;
+  min-height:58px;
+  align-items:center;
+  gap:8px;
+  border:1px solid rgba(255,255,255,.055);
+  border-radius:15px;
+  background:linear-gradient(180deg,rgba(255,255,255,.022),rgba(255,255,255,.01));
+  padding:9px;
+  color:var(--muted);
+  transition:border-color .14s ease,background-color .14s ease,transform .14s ease;
+}
+.mxm-home-tile:active { transform:scale(.985); }
+.mxm-home-tile.is-market { border-color:rgba(139,164,255,.12); background:linear-gradient(145deg,rgba(139,164,255,.055),rgba(255,255,255,.01)); }
+.mxm-home-tile-icon { display:grid; width:31px; height:31px; flex:none; place-items:center; border-radius:11px; background:rgba(255,255,255,.035); color:var(--accent); }
+.mxm-home-tile small { display:block; color:var(--muted-2); font-size:7px; }
+.mxm-home-tile p { margin-top:2px; overflow:hidden; color:#e3e8ee; font-size:9px; font-weight:620; text-overflow:ellipsis; white-space:nowrap; }
+.mxm-home-tile > svg { margin-left:auto; flex:none; opacity:.42; }
+.mxm-home-coin-row,.mxm-home-activity-row { display:flex; min-height:48px; align-items:center; gap:9px; padding-block:7px; }
+.mxm-home-coin-row,.mxm-home-activity-row,.mxm-task-card { content-visibility:auto; contain-intrinsic-size:52px; }
+
+.mxm-gift-market-details {
+  border-top:1px solid var(--border-soft);
+  color:var(--muted);
+}
+.mxm-gift-market-details > summary {
+  display:flex;
+  min-height:30px;
+  cursor:pointer;
+  list-style:none;
+  align-items:center;
+  justify-content:space-between;
+  color:var(--muted);
+  font-size:8px;
+  user-select:none;
+}
+.mxm-gift-market-details > summary::-webkit-details-marker { display:none; }
+.mxm-gift-market-details > summary::after { content:"+"; color:var(--muted-2); font-size:11px; }
+.mxm-gift-market-details[open] > summary::after { content:"−"; }
+.mxm-gift-market-details[open] > summary { color:#dce2e9; }
+
+.mxm-case-reward-compact { position:relative; overflow:hidden; }
+.mxm-case-reward-compact::before {
+  position:absolute;
+  inset:12% 20%;
+  z-index:-1;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(139,164,255,.09),transparent 68%);
+  content:"";
+  filter:blur(4px);
+}
+.mxm-case-reward-compact.is-rare::before { background:radial-gradient(circle,rgba(84,170,235,.13),transparent 68%); }
+.mxm-case-reward-compact.is-epic::before { background:radial-gradient(circle,rgba(154,114,232,.14),transparent 68%); }
+.mxm-case-reward-compact.is-legendary::before { background:radial-gradient(circle,rgba(226,188,88,.16),transparent 68%); }
+
+.mxm-season-level-card.is-milestone { border-color:rgba(139,164,255,.20); }
+.mxm-season-level-card.is-milestone > header { background:linear-gradient(90deg,rgba(139,164,255,.07),transparent); }
+.mxm-season-level-card.is-milestone .mxm-season-level-number { width:24px; height:24px; font-size:9px; }
+.mxm-season-level-card.is-current { border-color:rgba(139,164,255,.45); box-shadow:inset 0 0 0 1px rgba(139,164,255,.09),0 8px 24px rgba(0,0,0,.12); }
+
+/* All avatar cosmetics remain a continuous shell at every rendered size. */
+.mxm-profile-frame { background-clip:padding-box; }
+.mxm-profile-frame > span:first-child { box-shadow:0 0 0 1px rgba(0,0,0,.32); }
+.mxm-leader-podium-item .mxm-profile-frame-mark,
+.mxm-leader-podium-item .mxm-profile-frame-orbit-dot { display:none; }
+.mxm-leader-podium-item .mxm-profile-frame { padding:2px!important; }
+[data-profile-frame="carbon_frame"] .mxm-profile-frame-orbit-dot,
+[data-profile-frame="chrome_frame"] .mxm-profile-frame-orbit-dot,
+[data-profile-frame="founder_frame"] .mxm-profile-frame-orbit-dot { display:none; }
+
+.control-nav-count {
+  display:grid;
+  min-width:22px;
+  height:18px;
+  place-items:center;
+  border-radius:999px;
+  background:rgba(255,255,255,.035);
+  color:var(--muted-2);
+  padding-inline:5px;
+  font-size:8px;
+  font-variant-numeric:tabular-nums;
+}
+.control-nav-active .control-nav-count { background:rgba(139,164,255,.09); color:#dbe2ff; }
+
+/* Avoid painting long off-screen rows until Telegram actually scrolls them into view. */
+.mxm-home-coin-row,
+.mxm-home-activity-row,
+.mxm-coin-list-row,
+.mxm-task-card,
+.control-panel .divide-y > * { content-visibility:auto; }
+
+@media (max-width:640px) {
+  .mxm-home-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  .mxm-home-tile { min-height:53px; gap:6px; border-radius:13px; padding:7px; }
+  .mxm-home-tile-icon { width:28px; height:28px; border-radius:10px; }
+  .mxm-home-tile > svg { display:none; }
+  .mxm-home-status { min-height:26px; padding-inline:7px; }
+  .mxm-season-level-card.is-current { box-shadow:inset 0 0 0 1px rgba(139,164,255,.08); }
+}
+
+@media (max-width:370px) {
+  .mxm-home-tile-icon { display:none; }
+  .mxm-home-tile { min-height:48px; padding-inline:7px; }
+  .mxm-home-tile p { font-size:8px; }
+}
+
+@media (pointer:coarse) {
+  .mxm-home-tile,.mxm-season-level-card { box-shadow:none; }
+}
+
+/* Telegram keyboard: fixed navigation must not sit above the native keyboard. */
+.mxm-keyboard-open .mxm-bottom-nav {
+  opacity:0;
+  pointer-events:none;
+  transform:translate3d(0,14px,0);
+}
+.mxm-keyboard-open .mxm-shell-content { padding-bottom:12px!important; }
+.mxm-portfolio-quick {
+  display:inline-flex;
+  min-height:27px;
+  align-items:center;
+  border-radius:9px;
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  padding:0 7px;
+  font-size:7.5px;
+}
+.mxm-portfolio-quick:active { background:rgba(139,164,255,.07); color:white; }
+[data-profile-frame-size="small"].mxm-profile-frame { padding:2px; border-radius:12px; }
+[data-profile-frame-size="small"].mxm-profile-frame > span:first-child { border-radius:9px; }
+[data-profile-frame-size="small"] .mxm-profile-frame-mark,
+[data-profile-frame-size="small"] .mxm-profile-frame-orbit-dot { display:none; }

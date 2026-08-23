@@ -80,6 +80,7 @@ export default function CoinPage() {
   const [sellAll, setSellAll] = useState(false);
   const [slippage, setSlippage] = useState(2);
   const [tradeNotice, setTradeNotice] = useState<string | null>(null);
+  const [impactArmed, setImpactArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,11 +131,13 @@ export default function CoinPage() {
     tradeRequestId.current = null;
     setError(null);
     setTradeNotice(null);
+    setImpactArmed(false);
   }
 
   function applyFraction(fraction: number) {
     if (!data) return;
     tradeRequestId.current = null;
+    setImpactArmed(false);
     if (side === "sell" && fraction === 1) {
       setSellAll(true);
       setAmount(amountText(data.holding.availableQuantity));
@@ -146,6 +149,13 @@ export default function CoinPage() {
 
   async function trade() {
     if (!data || busy || !quote || !validAmount) return;
+    if (quote.priceImpact >= 10 && !impactArmed) {
+      setImpactArmed(true);
+      setTradeNotice(`Влияние ${quote.priceImpact.toFixed(1)}% · нажми ещё раз`);
+      haptic("light");
+      return;
+    }
+    setImpactArmed(false);
     const previous = data;
     const inputAmount = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
     const oldQuantity = data.holding.quantity;
@@ -245,12 +255,12 @@ export default function CoinPage() {
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
       <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
-        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setAmount(event.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
+        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
         <span className="text-[10px] text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span>
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <div className="flex gap-3">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)} className="py-1 text-[9px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
-        <div className="flex items-center gap-2 text-[8px] text-[var(--muted)]"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => setSlippage(value)} className={slippage === value ? "text-white" : "hover:text-white"}>{value}%</button>)}</div>
+        <div className="flex items-center gap-2 text-[8px] text-[var(--muted)]"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => { setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "text-white" : "hover:text-white"}>{value}%</button>)}</div>
       </div>
 
       {quote ? <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-[var(--border-soft)] pt-2">
@@ -262,9 +272,9 @@ export default function CoinPage() {
 
       {Number.isFinite(numericAmount) && numericAmount > max && !sellAll ? <p className="mt-1.5 text-[9px] text-[var(--negative)]">Недостаточно доступного баланса.</p> : null}
       {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1.5 truncate text-[8px] text-[#d9c27a]">Заблокировано: {compact(data.economy.lock.remaining)} {coin.symbol}</p> : null}
-      {tradeNotice ? <div aria-live="polite" className="mt-1.5 text-[9px] font-medium text-[var(--positive)]">Готово · {tradeNotice}</div> : null}
+      {tradeNotice ? <div aria-live="polite" className={`mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
       {error ? <div className="mt-1.5 line-clamp-2 text-[9px] text-[#ff9aa4]">{error}</div> : null}
-      <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-2.5 w-full !min-h-9 !py-2 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
+      <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-2.5 w-full !min-h-9 !py-2 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : impactArmed ? "Подтвердить сделку" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
       {data.holding.quantity > 0 ? <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[var(--border-soft)] pt-2"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Результат" value={money(holdingPnl)} tone={holdingPnl} /></div> : null}
     </section>
   );

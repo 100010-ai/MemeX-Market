@@ -14,25 +14,26 @@ export function ProfileAvatar({
   photoUrl: string | null;
   name: string;
   equippedFrame: string | null;
-  size?: "regular" | "large";
+  size?: "small" | "regular" | "large";
 }) {
   const frame = getProfileFrameDefinition(equippedFrame);
   const framed = Boolean(equippedFrame);
   const frameTitle = frame?.title || (equippedFrame ? equippedFrame.replaceAll("_", " ") : null);
-  const sizeClass = size === "large" ? "h-14 w-14" : "h-13 w-13";
-  const radiusClass = size === "large" ? "rounded-[19px]" : "rounded-[18px]";
+  const sizeClass = size === "large" ? "h-14 w-14" : size === "small" ? "h-8 w-8" : "h-13 w-13";
+  const radiusClass = size === "large" ? "rounded-[19px]" : size === "small" ? "rounded-[10px]" : "rounded-[18px]";
   const frameClass = framed ? getProfileFrameClass(equippedFrame) : "border border-[var(--border)] bg-[var(--panel-2)] p-[1px]";
   const avatarSrc = telegramAvatarProxyUrl(photoUrl);
 
   return <span
     data-profile-frame={equippedFrame || undefined}
+    data-profile-frame-size={size}
     title={frameTitle ? `Рамка профиля: ${frameTitle}` : undefined}
     className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass}`}
   >
     <span className={`relative z-[1] block h-full w-full overflow-hidden ${radiusClass} bg-[var(--panel-2)]`}>
       {avatarSrc
-        ? <Image unoptimized fill sizes={size === "large" ? "56px" : "52px"} src={avatarSrc} alt={`Профиль ${name}`} className="object-cover" />
-        : <span className="grid h-full w-full place-items-center bg-[var(--panel-2)] text-[var(--muted)]">{name ? <span className="text-base font-semibold">{name.slice(0, 1).toUpperCase()}</span> : <UserRound size={21} />}</span>}
+        ? <Image unoptimized fill sizes={size === "large" ? "56px" : size === "small" ? "32px" : "52px"} src={avatarSrc} alt={`Профиль ${name}`} className="object-cover" />
+        : <span className="grid h-full w-full place-items-center bg-[var(--panel-2)] text-[var(--muted)]">{name ? <span className={size === "small" ? "text-[11px] font-semibold" : "text-base font-semibold"}>{name.slice(0, 1).toUpperCase()}</span> : <UserRound size={size === "small" ? 14 : 21} />}</span>}
     </span>
     {framed ? <><span aria-hidden="true" className="mxm-profile-frame-orbit-dot" /><span aria-label={frameTitle || "Рамка профиля"} className="mxm-profile-frame-mark"><Sparkles size={8} /></span></> : null}
   </span>;

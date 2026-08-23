@@ -67,7 +67,17 @@ export default function NotificationsPage() {
       setBusy(null);
     }
   }
-  const visible = useMemo(() => data?.notifications.filter((item) => filter === "all" || !item.readAt) || [], [data?.notifications, filter]);
+  const visible = useMemo(() => {
+    const source = data?.notifications.filter((item) => filter === "all" || !item.readAt) || [];
+    const seen = new Map<string, number>();
+    return source.filter((item) => {
+      const signature = `${item.kind}:${item.title.trim().toLowerCase()}:${item.body.trim().toLowerCase()}:${item.href || ""}`;
+      const createdAt = Date.parse(item.createdAt);
+      const previous = seen.get(signature);
+      seen.set(signature, Number.isFinite(createdAt) ? createdAt : 0);
+      return previous == null || !Number.isFinite(createdAt) || Math.abs(previous - createdAt) > 5 * 60_000;
+    });
+  }, [data?.notifications, filter]);
 
   if (!data) return <div className="mx-auto max-w-3xl"><div className="mxm-skeleton h-24 rounded-[22px]" /><div className="mxm-skeleton mt-3 h-80 rounded-[22px]" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
   return <div className="mx-auto max-w-3xl">

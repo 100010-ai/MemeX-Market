@@ -65,18 +65,15 @@ export default function TasksPage() {
     setError(null);
     setNotice(null);
     haptic("medium");
-    let claimed = 0;
     try {
-      for (const mission of ready) {
-        await apiFetch("/api/tasks/claim", { method: "POST", body: JSON.stringify({ missionId: mission.id }) });
-        claimed += 1;
-      }
+      const result = await apiFetch<{ claimedCount: number; failedCount: number }>("/api/tasks/claim", { method: "POST", body: JSON.stringify({ action: "claim_all" }) });
       await Promise.all([load(), refreshProfile()]);
-      setNotice(`Получено наград: ${claimed}`);
-      haptic("heavy");
+      if (result.claimedCount > 0) setNotice(`Получено: ${result.claimedCount}`);
+      if (result.failedCount > 0) setError(`${result.failedCount} наград пока недоступно`);
+      haptic(result.claimedCount > 0 ? "heavy" : "light");
     } catch (cause) {
       await Promise.allSettled([load(), refreshProfile()]);
-      setError(cause instanceof Error ? cause.message : `Получено ${claimed} из ${ready.length}. Остальные можно забрать повторно.`);
+      setError(cause instanceof Error ? cause.message : "Не удалось забрать награды");
     } finally {
       setBusy(null);
     }

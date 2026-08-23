@@ -103,14 +103,31 @@ async function GETHandler(request: NextRequest) {
 
   try {
     if (scope === "coins") {
+      const coinLimit = intParam(request.nextUrl.searchParams.get("limit"), 72, 6, 72);
+      const compact = request.nextUrl.searchParams.get("compact") === "1";
+      if (compact) {
+        const coinsResult = await supabase.from("market_overview")
+          .select(coinMarketSelect)
+          .eq("status", "active")
+          .order("volume_24h", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(coinLimit);
+        if (coinsResult.error) throw coinsResult.error;
+        return NextResponse.json({
+          scope,
+          coins: (coinsResult.data || []).map((row) => mapCoin(row as Record<string, unknown>)),
+        }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-coins-compact;dur=${Date.now() - startedAt}` } });
+      }
+
       const profile = await requireProfile();
       if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+      const newCoinLimit = Math.min(48, Math.max(12, coinLimit));
       const [coinsResult, newCoinsResult, boostsResult, watchlistResult] = await Promise.all([
-        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(72),
+        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(coinLimit),
         // Discovery must not be derived from the volume leaderboard: a freshly
         // launched coin can legitimately have no trades yet.
-        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("created_at", { ascending: false }).limit(48),
-        supabase.from("active_coin_boosts_v200").select("coin_id,boosted_until").order("boosted_until", { ascending: false }).limit(48),
+        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("created_at", { ascending: false }).limit(newCoinLimit),
+        supabase.from("active_coin_boosts_v200").select("coin_id,boosted_until").order("boosted_until", { ascending: false }).limit(newCoinLimit),
         supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id).limit(500),
       ]);
       const firstError = coinsResult.error || newCoinsResult.error || boostsResult.error || watchlistResult.error;
@@ -140,7 +157,7 @@ async function GETHandler(request: NextRequest) {
           if (seenNewest.has(coin.id)) return false;
           seenNewest.add(coin.id);
           return true;
-        }).slice(0, 48),
+        }).slice(0, newCoinLimit),
         gifts: [], collections: [], totalGifts: 0, nextOffset: null, marketSeed: null, bootstrapRecommended: false, genesis: null,
         watchlist: {
           coinIds: (watchlistResult.data || []).filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)),

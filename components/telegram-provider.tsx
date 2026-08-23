@@ -315,10 +315,13 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       const stableHeight = Number(webApp?.viewportStableHeight || viewportHeight);
       const safeTop = Math.max(Number(webApp?.safeAreaInset?.top || 0), Number(webApp?.contentSafeAreaInset?.top || 0));
       const safeBottom = Math.max(Number(webApp?.safeAreaInset?.bottom || 0), Number(webApp?.contentSafeAreaInset?.bottom || 0));
+      const keyboardHeight = Math.max(0, stableHeight - viewportHeight);
       if (Number.isFinite(viewportHeight) && viewportHeight > 0) root.style.setProperty("--mxm-viewport-height", `${Math.round(viewportHeight)}px`);
       if (Number.isFinite(stableHeight) && stableHeight > 0) root.style.setProperty("--mxm-viewport-stable-height", `${Math.round(stableHeight)}px`);
       if (Number.isFinite(safeTop) && safeTop >= 0) root.style.setProperty("--mxm-safe-area-top", `${Math.round(safeTop)}px`);
       if (Number.isFinite(safeBottom) && safeBottom >= 0) root.style.setProperty("--mxm-safe-area-bottom", `${Math.round(safeBottom)}px`);
+      if (Number.isFinite(keyboardHeight)) root.style.setProperty("--mxm-keyboard-height", `${Math.round(keyboardHeight)}px`);
+      root.classList.toggle("mxm-keyboard-open", keyboardHeight > 120);
     };
     syncViewport();
     webApp?.onEvent?.("viewportChanged", syncViewport);
@@ -332,6 +335,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       webApp?.offEvent?.("contentSafeAreaChanged", syncViewport);
       window.visualViewport?.removeEventListener("resize", syncViewport);
       window.removeEventListener("orientationchange", syncViewport);
+      root.classList.remove("mxm-keyboard-open");
     };
   }, []);
 
@@ -368,19 +372,32 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     const startedAt = performance.now();
     setAppReady(false);
 
-    const primaryRoutes = ["/market", "/orders", "/hub", "/tasks", "/vault"];
+    const primaryRoutes = ["/hub", "/market", "/orders", "/tasks", "/vault"];
     const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/progression", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
+    const device = navigator as Navigator & {
+      deviceMemory?: number;
+      connection?: { saveData?: boolean; effectiveType?: string };
+    };
+    const effectiveType = device.connection?.effectiveType || "";
+    const constrainedDevice = Boolean(
+      device.connection?.saveData
+      || effectiveType.includes("2g")
+      || (device.deviceMemory != null && device.deviceMemory <= 4)
+      || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)
+    );
     for (const href of primaryRoutes) router.prefetch(href);
 
     const criticalRequests = [
       prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 30_000, timeoutMs: 14_000 }),
-      prefetchApi("/api/market/collections?limit=40", { cacheMs: 30_000, timeoutMs: 14_000 }),
-      prefetchApi("/api/feed?limit=20", { cacheMs: 20_000, timeoutMs: 12_000 }),
       prefetchApi("/api/orders", { cacheMs: 20_000, timeoutMs: 12_000 }),
       prefetchApi("/api/portfolio", { cacheMs: 20_000, timeoutMs: 14_000 }),
       prefetchApi("/api/tasks", { cacheMs: 20_000, timeoutMs: 12_000 }),
-      prefetchApi("/api/leaderboard?board=overall", { cacheMs: 20_000, timeoutMs: 12_000 }),
       prefetchApi("/api/runtime-config", { cacheMs: 30_000, timeoutMs: 10_000 }),
+      ...(!constrainedDevice ? [
+        prefetchApi("/api/market/collections?limit=40", { cacheMs: 30_000, timeoutMs: 14_000 }),
+        prefetchApi("/api/feed?limit=12", { cacheMs: 20_000, timeoutMs: 12_000 }),
+        prefetchApi("/api/leaderboard?board=overall&limit=8", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      ] : []),
     ];
 
     const preload = Promise.allSettled(criticalRequests);
@@ -392,9 +409,10 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       setAppReady(true);
 
       const warmSecondary = () => {
-        for (const href of secondaryRoutes) router.prefetch(href);
+        const routes = constrainedDevice ? secondaryRoutes.slice(0, 6) : secondaryRoutes;
+        for (const href of routes) router.prefetch(href);
+        if (constrainedDevice) return;
         void Promise.allSettled([
-          prefetchApi("/api/leaderboard?board=overall&limit=8", { cacheMs: 20_000, timeoutMs: 12_000 }),
           prefetchApi("/api/watchlist", { cacheMs: 20_000, timeoutMs: 12_000 }),
           prefetchApi("/api/notifications", { cacheMs: 15_000, timeoutMs: 12_000 }),
           prefetchApi("/api/profile/meta", { cacheMs: 25_000, timeoutMs: 12_000 }),
@@ -407,7 +425,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           prefetchApi("/api/coins", { cacheMs: 15_000, timeoutMs: 12_000 }),
           prefetchApi("/api/creator", { cacheMs: 15_000, timeoutMs: 12_000 }),
           prefetchApi("/api/profile/customize", { cacheMs: 15_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/market?scope=coins&limit=72&t=0", { cacheMs: 25_000, timeoutMs: 14_000 }),
+          prefetchApi("/api/market?scope=coins&limit=48&t=0", { cacheMs: 25_000, timeoutMs: 14_000 }),
         ]);
       };
       if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(warmSecondary, { timeout: 1_200 });

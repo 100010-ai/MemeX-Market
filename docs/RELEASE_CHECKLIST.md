@@ -3,8 +3,11 @@
 Run this before every production deploy:
 
 ```bash
-pnpm run release:check
+pnpm install --frozen-lockfile
+pnpm run verify
 ```
+
+`pnpm run verify` includes the release/security checks and the real Next production build. `pnpm run verify:static` is only an offline/source-only fallback and is not sufficient for production approval.
 
 ## Database
 
@@ -64,12 +67,16 @@ pnpm run release:check
 
 ## Memecoins
 
-- Create a coin and confirm it appears immediately.
+- Create a coin and confirm it appears immediately with a neutral launch state: 0 public trades, 0 public volume and no synthetic launch candle.
 - Buy, sell, and MAX-sell.
-- Check slippage validation and duplicate request protection.
+- Check slippage validation, duplicate request protection and the two-step confirmation for high price impact.
+- Verify a zero-trade coin, a one-trade coin and a tiny-price coin render without broken axes or misleading percentages.
 - Test chart pinch zoom, crosshair, timeframes and fullscreen mode.
+- Confirm the main coin screen stays compact in Telegram; secondary metrics belong in the Metrics sheet rather than forcing page scroll.
 
 ## Performance
+
+Test at least one average Android device inside Telegram, not only desktop Chrome. The startup warmup should reduce work on data-saver/2G/low-memory/low-core devices, and the dashboard must use the compact memecoin market payload.
 
 Append `?perf=1` once to enable the hidden performance overlay. Check:
 
@@ -90,4 +97,6 @@ Disable with `?perf=0`.
 
 ## Deploy smoke test
 
-After Vercel/Railway deployment, test inside Telegram WebView, not only desktop Chrome. Verify Market, Gift detail, Collections, Cart, coin trading and profile once before announcing the release.
+After Vercel/Railway deployment, test inside Telegram WebView, not only desktop Chrome. Verify Home, Market, Gift detail, Collections, Cart, coin trading, Tasks/Claim All, Cases, Battle Pass, Notifications, Portfolio, profile/frame rendering and `/control` once before announcing the release.
+
+On mobile, explicitly test the native keyboard, Telegram back gesture/button, viewport resize, fixed header, bottom navigation and a Stars invoice so no fixed UI overlaps the keyboard or safe areas.

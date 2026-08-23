@@ -32,8 +32,11 @@ async function POSTHandler(request: Request) {
       const profileId = text(body.profileId, 80);
       const delta = number(body.delta);
       if (!profileId || delta == null) return NextResponse.json({ error: "Укажите игрока и изменение баланса" }, { status: 400 });
+      const before = await supabase.from("profiles").select("balance").eq("id", profileId).single();
+      if (before.error || !before.data) throw before.error || new Error("Игрок не найден");
       const { data, error } = await supabase.rpc("admin_adjust_balance", { p_profile_id: profileId, p_delta: delta, p_actor: ACTOR, p_reason: text(body.reason, 300) });
       if (error) throw error;
+      await audit("balance.adjust", "profile", profileId, { before: { balance: Number(before.data.balance) }, after: { balance: Number(data) }, delta });
       return NextResponse.json({ ok: true, balance: Number(data) });
     }
 
@@ -46,6 +49,7 @@ async function POSTHandler(request: Request) {
       const delta = target - Number(current.data.balance);
       const result = await supabase.rpc("admin_adjust_balance", { p_profile_id: profileId, p_delta: delta, p_actor: ACTOR, p_reason: text(body.reason, 300) || "Установлен точный баланс" });
       if (result.error) throw result.error;
+      await audit("balance.set", "profile", profileId, { before: { balance: Number(current.data.balance) }, after: { balance: Number(result.data) }, delta });
       return NextResponse.json({ ok: true, balance: Number(result.data) });
     }
 
@@ -56,9 +60,11 @@ async function POSTHandler(request: Request) {
         return NextResponse.json({ error: "Некорректное значение XP" }, { status: 400 });
       }
       const xp = Math.floor(xpValue);
+      const before = await supabase.from("profiles").select("xp").eq("id", profileId).single();
+      if (before.error || !before.data) throw before.error || new Error("Игрок не найден");
       const { error } = await supabase.from("profiles").update({ xp, updated_at: new Date().toISOString() }).eq("id", profileId);
       if (error) throw error;
-      await audit("profile.set_xp", "profile", profileId, { xp });
+      await audit("profile.set_xp", "profile", profileId, { before: { xp: Number(before.data.xp || 0) }, after: { xp } });
       return NextResponse.json({ ok: true, xp });
     }
 
@@ -74,9 +80,11 @@ async function POSTHandler(request: Request) {
         patch.banned_until = bannedUntil;
       }
       if (!profileId || !Object.keys(patch).length) return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
+      const before = await supabase.from("profiles").select("is_banned,hidden_from_leaderboard,ban_reason,banned_until").eq("id", profileId).single();
+      if (before.error || !before.data) throw before.error || new Error("Игрок не найден");
       const { error } = await supabase.from("profiles").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", profileId);
       if (error) throw error;
-      await audit("profile.moderate", "profile", profileId, patch);
+      await audit("profile.moderate", "profile", profileId, { before: before.data, after: { ...before.data, ...patch } });
       return NextResponse.json({ ok: true });
     }
 
@@ -116,9 +124,11 @@ async function POSTHandler(request: Request) {
       if (number(body.sortOrder) != null) patch.sort_order = Math.floor(number(body.sortOrder)!);
       if (typeof body.active === "boolean") patch.active = body.active;
       if (!id || !Object.keys(patch).length) return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
+      const before = await supabase.from("missions").select("title,description,period,reward,target,action_type,sort_order,active").eq("id", id).single();
+      if (before.error || !before.data) throw before.error || new Error("Задание не найдено");
       const { error } = await supabase.from("missions").update(patch).eq("id", id);
       if (error) throw error;
-      await audit("mission.update", "mission", id, patch);
+      await audit("mission.update", "mission", id, { before: before.data, after: { ...before.data, ...patch } });
       return NextResponse.json({ ok: true });
     }
 
@@ -150,9 +160,11 @@ async function POSTHandler(request: Request) {
       if (body.name !== undefined) patch.name = text(body.name, 32);
       if (body.description !== undefined) patch.description = text(body.description, 180);
       if (!id || !Object.keys(patch).length) return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
+      const before = await supabase.from("coins").select("name,description,status,hidden_from_market").eq("id", id).single();
+      if (before.error || !before.data) throw before.error || new Error("Мемкоин не найден");
       const { error } = await supabase.from("coins").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
-      await audit("coin.update", "coin", id, patch);
+      await audit("coin.update", "coin", id, { before: before.data, after: { ...before.data, ...patch } });
       return NextResponse.json({ ok: true });
     }
 
@@ -168,7 +180,7 @@ async function POSTHandler(request: Request) {
     if (action === "gift.list") {
       const id = text(body.id, 80);
       const price = body.price == null || body.price === "" ? null : number(body.price);
-      const gift = await supabase.from("virtual_gifts").select("owner_profile_id").eq("id", id).single();
+      const gift = await supabase.from("virtual_gifts").select("owner_profile_id,status,listing_price").eq("id", id).single();
       if (gift.error || !gift.data) throw gift.error || new Error("Подарок не найден");
       if (price !== null && (price == null || price <= 0)) return NextResponse.json({ error: "Некорректная цена" }, { status: 400 });
       if (price !== null) {
@@ -183,7 +195,7 @@ async function POSTHandler(request: Request) {
       }
       const result = await supabase.rpc("list_virtual_gift", { p_profile_id: gift.data.owner_profile_id, p_virtual_gift_id: id, p_price: price });
       if (result.error) throw result.error;
-      await audit(price == null ? "gift.unlist" : "gift.list", "virtual_gift", id, { price });
+      await audit(price == null ? "gift.unlist" : "gift.list", "virtual_gift", id, { before: { status: gift.data.status, listingPrice: gift.data.listing_price }, after: { status: price == null ? "owned" : "listed", listingPrice: price } });
       return NextResponse.json({ ok: true });
     }
 
@@ -191,8 +203,11 @@ async function POSTHandler(request: Request) {
       const id = text(body.id, 80);
       const ownerProfileId = text(body.ownerProfileId, 80);
       if (!id || !ownerProfileId) return NextResponse.json({ error: "Выберите подарок и нового владельца" }, { status: 400 });
+      const before = await supabase.from("virtual_gifts").select("owner_profile_id,status,listing_price").eq("id", id).single();
+      if (before.error || !before.data) throw before.error || new Error("Подарок не найден");
       const { error } = await supabase.rpc("admin_transfer_virtual_gift", { p_virtual_gift_id: id, p_owner_profile_id: ownerProfileId, p_actor: ACTOR });
       if (error) throw error;
+      await audit("gift.transfer", "virtual_gift", id, { before: before.data, after: { owner_profile_id: ownerProfileId, status: "owned", listing_price: null } });
       return NextResponse.json({ ok: true });
     }
 

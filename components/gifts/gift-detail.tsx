@@ -285,38 +285,33 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
 
         <section className="min-w-0 space-y-3">
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
-            <div className="mxm-gift-metrics grid grid-cols-2 gap-1.5 sm:grid-cols-5">
-              <Metric label="Цена продажи" value={gift.listingPrice == null ? "—" : money(gift.listingPrice)} />
-              <Metric label="Мин. цена" value={data.traitStats.collectionFloor == null ? "—" : money(data.traitStats.collectionFloor)} />
-              <Metric label="Ориентир" value={gift.referencePrice == null ? "—" : money(gift.referencePrice)} />
-              <Metric label="Предложение" value={gift.bestOffer == null ? "—" : money(gift.bestOffer)} />
+            <div className="mxm-gift-metrics grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <Metric label="Цена" value={gift.listingPrice == null ? "—" : money(gift.listingPrice)} />
+              <Metric label="Floor" value={data.traitStats.collectionFloor == null ? "—" : money(data.traitStats.collectionFloor)} />
+              <Metric label="Оффер" value={gift.bestOffer == null ? "—" : money(gift.bestOffer)} />
               <Metric label="24h" value={percent(data.collection.change24h)} tone={data.collection.change24h} />
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
-              <SmallMetric label="Объём предмета" value={money(data.itemStats.volume)} />
+            <div className="mt-2 grid grid-cols-3 gap-2">
               <SmallMetric label="Сделки" value={String(data.itemStats.tradeCount)} />
-              <SmallMetric label="Макс. продажа" value={data.itemStats.highSale == null ? "—" : money(data.itemStats.highSale)} />
-              <SmallMetric label="Объём за 7 дн." value={money(data.collection.volume7d)} />
-              <SmallMetric label="Продажи за 7 дн." value={String(data.collection.tradeCount7d)} />
+              <SmallMetric label="Объём" value={money(data.itemStats.volume)} />
               <SmallMetric label="В продаже" value={`${data.collection.listedPct.toFixed(1)}%`} />
-              {rarity.percentile != null ? <SmallMetric label="Редкость" value={`≈ топ ${rarity.percentile.toFixed(rarity.percentile < 1 ? 2 : 1)}%`} /> : null}
             </div>
-          </div>
-
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Источник цены</p>
-                <p className="mt-1 text-[11px] font-medium">{priceBasisLabel(gift)}</p>
+            <details className="mxm-gift-market-details mt-2">
+              <summary>Детали рынка</summary>
+              <div className="grid grid-cols-2 gap-2 border-t border-[var(--border-soft)] pt-2 sm:grid-cols-4">
+                <SmallMetric label="Макс. продажа" value={data.itemStats.highSale == null ? "—" : money(data.itemStats.highSale)} />
+                <SmallMetric label="Продажи 7д" value={String(data.collection.tradeCount7d)} />
+                <SmallMetric label="Ориентир" value={gift.referencePrice == null ? "—" : money(gift.referencePrice)} />
+                <SmallMetric label="Источник" value={priceBasisLabel(gift)} />
+                {rarity.percentile != null ? <SmallMetric label="Редкость" value={`топ ${rarity.percentile.toFixed(rarity.percentile < 1 ? 2 : 1)}%`} /> : <SmallMetric label="Редкость" value="—" />}
               </div>
-              {gift.referencePrice != null ? <p className="flex items-center gap-1 text-sm font-semibold"><Gem size={12} fill="currentColor" />{money(gift.referencePrice)}</p> : null}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--muted)]">
-              {gift.externalPriceSource ? <span>Источник: {gift.externalPriceSource}</span> : null}
-              {gift.externalPriceSeenAt ? <span>Обновлено {ago(gift.externalPriceSeenAt)}</span> : null}
-              {premiumToFloor != null ? <span className={premiumToFloor <= 0 ? "text-[var(--positive)]" : ""}>{premiumToFloor >= 0 ? "+" : ""}{premiumToFloor.toFixed(1)}% к мин. цене</span> : null}
-              {gift.status === "listed" && expiry ? <span className="inline-flex items-center gap-1"><Clock3 size={10} />{expiry}</span> : null}
-            </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-[var(--muted-2)]">
+                {gift.externalPriceSource ? <span>{gift.externalPriceSource}</span> : null}
+                {gift.externalPriceSeenAt ? <span>{ago(gift.externalPriceSeenAt)}</span> : null}
+                {premiumToFloor != null ? <span className={premiumToFloor <= 0 ? "text-[var(--positive)]" : ""}>{premiumToFloor >= 0 ? "+" : ""}{premiumToFloor.toFixed(1)}% к floor</span> : null}
+                {gift.status === "listed" && expiry ? <span className="inline-flex items-center gap-1"><Clock3 size={9} />{expiry}</span> : null}
+              </div>
+            </details>
           </div>
 
           <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
@@ -368,7 +363,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined}
               />
             )}
-            <p className="mt-2 text-[10px] text-[var(--muted-2)]">Только MXM: Telegram Gift не переводится.</p>
+            <p className="mt-2 text-[9px] text-[var(--muted-2)]">Виртуальная сделка внутри MXM.</p>
           </div>
 
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
@@ -425,10 +420,18 @@ function advancedScopeLabel(offer: AdvancedOffer) {
 
 function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offerAmount, setOfferAmount, offerHours, setOfferHours, myOffer, busy, onBuy, onCart, onOffer, onCancelOffer }: { gift: GiftAsset; inCart: boolean; availableBalance: number; reservedBalance: number; offerAmount: string; setOfferAmount: (value: string) => void; offerHours: number; setOfferHours: (value: number) => void; myOffer?: DetailOffer; busy: string | null; onBuy: () => void; onCart: () => void; onOffer: (amount: number) => void; onCancelOffer?: () => void }) {
   const parsed = Number(offerAmount);
+  const [buyArmed, setBuyArmed] = useState(false);
+  useEffect(() => {
+    if (!buyArmed) return;
+    const timer = window.setTimeout(() => setBuyArmed(false), 3_500);
+    return () => window.clearTimeout(timer);
+  }, [buyArmed]);
+  useEffect(() => { if (busy === "buy") setBuyArmed(false); }, [busy]);
+  useEffect(() => { setBuyArmed(false); }, [gift.listingPrice]);
   return <>
     <div className="mb-2 flex items-center justify-between text-[10px] text-[var(--muted)]"><span>Доступно {money(availableBalance)}</span>{reservedBalance > 0 ? <span>{money(reservedBalance)} в резерве</span> : null}</div>
     {gift.status === "listed" && gift.listingPrice != null ? <>
-      <PrimaryButton className="flex w-full items-center justify-center gap-2 py-3" disabled={busy !== null || availableBalance + (myOffer?.amount || 0) < gift.listingPrice} onClick={onBuy}><ShoppingCart size={16} />{busy === "buy" ? "Покупка…" : <span className="flex items-center gap-1">Купить <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span>}</PrimaryButton>
+      <PrimaryButton className="flex w-full items-center justify-center gap-2 py-3" disabled={busy !== null || availableBalance + (myOffer?.amount || 0) < gift.listingPrice} onClick={() => { if (buyArmed) onBuy(); else setBuyArmed(true); }}><ShoppingCart size={16} />{busy === "buy" ? "Покупка…" : buyArmed ? <span className="flex items-center gap-1">Подтвердить <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span> : <span className="flex items-center gap-1">Купить <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span>}</PrimaryButton>
       <SecondaryButton className="mt-2 flex w-full items-center justify-center gap-2" disabled={busy !== null} onClick={onCart}><ShoppingCart size={14} />{busy === "cart" ? "…" : inCart ? "Убрать из корзины" : "Добавить в корзину"}</SecondaryButton>
     </> : <div className="rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5 text-center text-xs text-[var(--muted)]">Не выставлен</div>}
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_84px] gap-2">

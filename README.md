@@ -1,4 +1,4 @@
-# MXM Market v0.56.0
+# MXM Market v0.64.5
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
@@ -14,7 +14,7 @@ Telegram Mini App: simulated secondary market for Telegram collectible Gifts plu
 - **Safety and operations:** atomic Premium watchlist limits, Energy enforcement, store eligibility checks, pre-checkout reservation expiry/grace, human payment support, mandatory refund-reconciliation queue, bounded admin aggregates and anti-abuse/rate-limit telemetry.
 - **Advertising removed:** AdsGram, rewarded-ad/sponsored-task routes, runtime flags, admin controls, documentation and live database objects are no longer part of the product.
 
-Apply **every** SQL migration in `supabase/migrations/` in filename order before deploying this build. Do not stop at `029`: the current runtime also requires `030_v060_production_auth_schema_hotfix.sql` and the `999x` production repair migrations, including `9993_production_runtime_reliability.sql` and the final Telegram auth repair. Run `pnpm run release:check` after setting the required production environment variables.
+Apply **every** SQL migration in `supabase/migrations/` in filename order before deploying this build. Do not stop at `029`: the current runtime also requires `030_v060_production_auth_schema_hotfix.sql` and the `999x` production repair migrations, including `9993_production_runtime_reliability.sql` and the final Telegram auth repair. Run `pnpm run verify` after installing dependencies and setting the required production environment variables. For source-only/offline validation, `pnpm run verify:static` runs the dependency-independent gates but does not replace the production build.
 
 
 
@@ -105,7 +105,7 @@ This release consolidates the v0.14–v0.18 fixes into a stricter market archite
 - **Collections 2.0:** filters by model/backdrop/symbol, search, rarity/price/offers/newest sorting, exact database-side trait aggregation, paginated active listings, expanded market metrics, trait floors, recent sales and fullscreen price chart.
 - **Memecoin chart:** chart data no longer rebuilds the chart object for every data update; timeframes, crosshair, volume, pinch zoom and fullscreen mode are retained.
 - **Performance diagnostics:** `?perf=1` enables FPS, DOM, media budget, Lottie cache, API latency/errors, realtime state and JS heap counters. `?perf=0` disables it.
-- **Release gate:** `pnpm run release:check` checks critical files, secret hygiene, TypeScript and ESLint before deployment. See `docs/RELEASE_CHECKLIST.md`.
+- **Release gate:** `pnpm run verify` is the single pre-deploy command: source cleanup, TS/TSX parse, local-import scan, release/security checks and the real Next production build. `pnpm run verify:static` is an offline source-only gate and intentionally does not claim a production build. See `docs/RELEASE_CHECKLIST.md`.
 
 ### Database upgrade
 
@@ -210,15 +210,15 @@ virtual TON listings
 players / cart / offers / secondary market
 ```
 
-## Build
+## Build and release verification
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run typecheck
-pnpm run lint
-pnpm run build
+pnpm run verify
 pnpm run dev
 ```
+
+`pnpm run verify` runs the release/security gate and the production Next build. `pnpm run verify:static` is available for source-only/offline checks when dependencies cannot be installed; it must not be treated as a green production build.
 
 ## v0.11 — Telegram Session Fix + Visible Games + Finite Genesis Gift Market
 

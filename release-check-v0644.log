@@ -1,0 +1,190 @@
+MXM release gate
+
+OK   Migration 017 present
+OK   Migration 018 present
+OK   Migration 019 present
+OK   Migration 020 v0.45 present
+OK   Migration 021 v0.46 present
+OK   Migration 022 v0.47 present
+OK   Migration 023 v0.48 present
+OK   Migration 024 v0.49 present
+OK   Migration 025 v0.50 present
+OK   Migration 026 v0.56 present
+OK   Migration 027 present — 027_market_economy_2.sql
+OK   Migration 028 advertising teardown present
+OK   Migration 029 scalable market present
+OK   Migration 9994 player market handoff present
+OK   Migration 9995 player-only consistency present
+OK   Migration 9996 resilient Gift sync present
+OK   Migration 9997 Telegram channel task present
+OK   Migration 9998 player UI copy cleanup present
+OK   Migration 99999 store/battle-pass/cases v0.63 present
+OK   Migration 100000 case runtime hotfix v0.63.1 present
+OK   v0.64.4 package version
+OK   v0.63.1 case RPC is self-healing
+OK   v0.63.1 case errors are observable
+OK   v0.63.1 keeps retired games disabled
+OK   Migration 100001 progression v0.64 present
+OK   v0.64 progression primitives present
+OK   v0.64.2 cases roulette can skip safely
+OK   v0.64.2 battle pass uses compact horizontal track
+OK   v0.64.2 store explains unavailable actions
+OK   v0.64.2 profile frames use shaped silhouettes
+OK   v0.64.2 profile has achievement showcase
+OK   v0.64.2 achievements are filterable
+OK   v0.64.2 daily streak remains server-backed
+OK   v0.64.2 collection book links missing items to market
+OK   v0.64.2 market restores UI state
+OK   v0.64.2 memecoin trade has confirmed-state notice
+OK   v0.64.2 tasks support claim-all + live refresh
+OK   v0.64.2 leaderboard renders frames + own rank
+OK   v0.64.2 portfolio persists tabs and sorting
+OK   v0.64.2 notifications prevent duplicate interaction
+OK   v0.64.2 creator tools expose active entitlements
+OK   v0.64.2 control mutations are guarded
+OK   v0.64.2 fixed header + stable native controls
+OK   Migration 100002 memecoin polish v0.64.4 present
+OK   v0.64.4 launch seed is excluded from public market stats
+OK   v0.64.4 coin page is one-screen on mobile
+OK   v0.64.4 memecoin metrics moved out of main flow
+OK   v0.64.4 launch bootstrap is hidden from feed/history
+OK   v0.64.4 chart has compact small-price formatting
+OK   v0.64.3 market has removable active filters
+OK   v0.64.3 gift and coin trade panels are visually unified
+OK   v0.64.3 cases keep authoritative roulette with quieter stage
+OK   v0.64.3 battle pass XP sources are compact chips
+OK   v0.64.3 tasks keep copy compact
+OK   v0.64.3 notifications clamp long bodies
+OK   v0.64.3 creator dashboard is compact
+OK   v0.64.3 control audit payloads are collapsed
+OK   v0.64.3 production error UI hides raw backend details
+OK   v0.64.3 long grids use content visibility
+OK   v0.64.3 frames keep shaped silhouettes
+OK   v0.64.3 gift listing after-task resolves void
+OK   pnpm package manager pinned
+OK   v0.63 expanded store catalogue
+OK   v0.63 real profile-frame renderer
+OK   v0.63 battle pass has claim-all
+OK   v0.63 Stars CTA is not consent-disabled
+OK   v0.63 abandoned pending Stars invoices expire
+OK   v0.63 route titles cover commerce screens
+OK   v0.63 case stock is live
+OK   Runtime config schema
+OK   Maintenance mode + feature flags
+OK   Advanced Gift offers
+OK   Conditional memecoin orders
+OK   Command palette
+OK   Player market collection cards use Russian product copy
+OK   Task cards use responsive SVG-only actions
+OK   Public UI debug overlay is disabled in production
+OK   Admin Economy & Risk
+OK   Admin Health Center
+OK   Error Inbox infrastructure
+OK   Environment template present
+OK   Human support username documented
+OK   Payment support never falls back to the bot
+OK   No local .env.local tracked
+OK   No local control secret tracked
+OK   Games removed from public API
+OK   Games removed from navigation
+OK   Games disabled in DB
+OK   Old market side dashboard removed
+OK   One robust Gift filter drawer
+OK   Misleading 25M launch copy removed
+OK   Current launch economics
+OK   Coin launch waits for economy migration
+OK   Coin create has no post-RPC visibility mutation
+OK   Advertising routes, helpers, pages and setup docs removed
+OK   No live advertising code or configuration references
+OK   Tasks contain missions only
+OK   Runtime advertising flags removed
+OK   Advertising environment variables removed
+OK   Advertising notification preference removed
+OK   Advertising package script removed
+OK   Migration 028 drops advertising data paths
+OK   Virtual TON disclosure is visible
+OK   Telegram Stars invoice endpoint
+OK   Telegram channel subscription task is server-verified
+OK   Telegram Stars webhook verifier
+OK   Stars reservation cleanup has a visible-store entry point
+OK   Referral graph + idempotent rewards
+OK   Full-market filter dictionary
+OK   Catalogue-wide indexed market paging
+OK   NPC liquidity has irreversible player-only handoff
+OK   Player-only market filters stale system listings
+OK   MRKT-style collections + activity feed are real-data backed
+OK   Collection preview basket uses validated bulk cart
+OK   Admin can tune thresholds or force irreversible handoff
+OK   Paid Coin Boost is visible in New Coins
+OK   Referral link auth binding
+OK   Promo codes
+OK   PnL uses realized trading PnL
+OK   Economy audit ledger
+OK   AMM trade fee sink is audited
+OK   Admin economy update excludes retired settings
+OK   Admin overview uses bounded lists + DB aggregates
+OK   Admin growth, turnover and top-list metrics are bounded and surfaced
+OK   Admin expensive actions have dedicated limits
+OK   Admin Stars refund is paid-only and marks after Bot API success
+OK   Refund reconciliation queue is surfaced and audited
+OK   Gift market fee treasury
+OK   Telegram Gift download timeout
+OK   Telegram Gift file-size bound
+OK   TGS decompression bound
+OK   Binary media response bodies use exact ArrayBuffer bodies
+OK   Remote Gift media bodies are bounded before buffering
+OK   Supabase TS2589 guard on large dynamic market queries
+OK   Gift resolver present
+OK   TonAPI resilient client present
+OK   Market health endpoint present
+OK   Atomic single-Gift purchase RPC present
+OK   Atomic cart purchase RPC present
+OK   Fast session snapshot RPC
+OK   Public env does not expose service role
+OK   No probable literal secrets in artifact
+node:internal/modules/cjs/loader:1404
+  throw err;
+  ^
+
+Error: Cannot find module '/mnt/data/memex_v0644/node_modules/typescript/bin/tsc'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+    at Function._load (node:internal/modules/cjs/loader:1211:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.16.0
+FAIL TypeScript — exit 1
+node:internal/modules/cjs/loader:1404
+  throw err;
+  ^
+
+Error: Cannot find module '/mnt/data/memex_v0644/node_modules/eslint/bin/eslint.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+    at Function._load (node:internal/modules/cjs/loader:1211:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.16.0
+FAIL ESLint — exit 1
+
+NOTES
+- TONAPI_KEY не задан в shell: каталог перейдёт на публичный rate limit TonAPI.
+- Supabase env не загружен в этой shell-сессии; проверьте production env перед deploy.
+- TELEGRAM_BOT_TOKEN не загружен в этой shell-сессии.
+- npm audit требует доступ к registry.npmjs.org; если CI имеет сеть, запустите npm audit --omit=dev отдельно.
+
+RELEASE BLOCKED

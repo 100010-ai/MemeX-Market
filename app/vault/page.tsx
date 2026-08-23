@@ -26,8 +26,16 @@ export default function VaultPage() {
     const saved = window.sessionStorage.getItem("mxm-vault-tab");
     return saved === "coins" || saved === "listed" || saved === "history" ? saved : "gifts";
   });
-  const [giftSort, setGiftSort] = useState<"new" | "value" | "name">("new");
-  const [coinSort, setCoinSort] = useState<"value" | "pnl" | "name">("value");
+  const [giftSort, setGiftSort] = useState<"new" | "value" | "name">(() => {
+    if (typeof window === "undefined") return "new";
+    const saved = window.sessionStorage.getItem("mxm-vault-gift-sort");
+    return saved === "value" || saved === "name" ? saved : "new";
+  });
+  const [coinSort, setCoinSort] = useState<"value" | "pnl" | "name">(() => {
+    if (typeof window === "undefined") return "value";
+    const saved = window.sessionStorage.getItem("mxm-vault-coin-sort");
+    return saved === "pnl" || saved === "name" ? saved : "value";
+  });
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -52,6 +60,8 @@ export default function VaultPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
   useEffect(() => { window.sessionStorage.setItem("mxm-vault-tab", tab); }, [tab]);
+  useEffect(() => { window.sessionStorage.setItem("mxm-vault-gift-sort", giftSort); }, [giftSort]);
+  useEffect(() => { window.sessionStorage.setItem("mxm-vault-coin-sort", coinSort); }, [coinSort]);
   const realtimeReload = useCallback(() => { void load().catch((cause) => setLoadError(cause instanceof Error ? cause.message : "Не удалось обновить хранилище")); }, [load]);
 
   function toggleSelected(id: string) {
@@ -139,10 +149,13 @@ export default function VaultPage() {
       {data.profile.id ? <RealtimeRefresh channelName="mxm-vault-gift-sales" tables={realtimeGiftTradeTables} filters={{ gift_trades: `seller_profile_id=eq.${data.profile.id}` }} onChange={realtimeReload} debounceMs={700} /> : null}
 
       <section className="mxm-summary-card mb-4 p-4">
-        <div>
-          <p className="text-[10px] text-[var(--muted)]">Капитал</p>
-          <h1 className="mt-1 text-base font-semibold tracking-[-.02em]">{money(data.profile.netWorth)}</h1>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px]"><span className={data.analytics.realizedPnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>Зафиксировано {data.analytics.realizedPnl >= 0 ? "+" : ""}{money(data.analytics.realizedPnl)}</span><span className={data.analytics.unrealizedPnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>На бумаге {data.analytics.unrealizedPnl >= 0 ? "+" : ""}{money(data.analytics.unrealizedPnl)}</span></div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] text-[var(--muted)]">Капитал</p>
+            <h1 className="mt-1 text-base font-semibold tracking-[-.02em]">{money(data.profile.netWorth)}</h1>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px]"><span className={data.analytics.realizedPnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>Зафиксировано {data.analytics.realizedPnl >= 0 ? "+" : ""}{money(data.analytics.realizedPnl)}</span><span className={data.analytics.unrealizedPnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>На бумаге {data.analytics.unrealizedPnl >= 0 ? "+" : ""}{money(data.analytics.unrealizedPnl)}</span></div>
+          </div>
+          <div className="flex shrink-0 gap-1"><Link href="/market" className="mxm-portfolio-quick">Рынок</Link><Link href="/orders" className="mxm-portfolio-quick">Заявки</Link></div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-4"><Allocation label="Баланс" value={data.profile.balance} pct={cashPct} /><Allocation label="Подарки" value={data.profile.giftValue} pct={giftPct} /><Allocation label="Мемкоины" value={data.profile.coinValue} pct={coinPct} /></div>
         {data.profile.reservedBalance > 0 ? <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[10px]"><span className="flex items-center gap-1.5 text-[var(--muted)]"><LockKeyhole size={12} />В предложениях</span><span>{money(data.profile.reservedBalance)} · {money(data.profile.availableBalance)} доступно</span></div> : null}

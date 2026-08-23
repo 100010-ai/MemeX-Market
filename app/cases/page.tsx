@@ -140,7 +140,8 @@ export default function CasesPage() {
     setReward(result.reward);
     setReelPhase("revealed");
     setOpening(false);
-    haptic("heavy");
+    const rarity = result.reward.rarity;
+    haptic(rarity === "legendary" || rarity === "epic" ? "heavy" : rarity === "rare" ? "medium" : "light");
     void load().catch((cause) => {
       setError(cause instanceof Error ? cause.message : "Награда получена, но список кейсов не обновился");
     });
@@ -233,12 +234,12 @@ export default function CasesPage() {
               </div>
             </div>
             <div className="mt-3 flex justify-center"><button type="button" onClick={skipReveal} className="mxm-case-skip">Пропустить</button></div>
-          </div> : reward ? <div className="mxm-case-reward-compact">
+          </div> : reward ? <div aria-live="polite" className={`mxm-case-reward-compact is-${reward.rarity}`}>
             <span className={`mxm-reward-orb is-${reward.rarity}`}><Sparkles size={23} /></span>
             {reward.pityTriggered ? <span className="mxm-pity-trigger"><ShieldCheck size={9} />Гарантия {rarityLabel(reward.pityRarity || reward.rarity)}</span> : null}
             <p className="mt-2 text-[8px] uppercase tracking-[.15em] text-[var(--muted)]">{rarityLabel(reward.rarity)}</p>
             <p className="mt-1 text-[16px] font-semibold tracking-[-.02em]">{reward.label}</p>
-            
+            <p className="mt-1 text-[7px] uppercase tracking-[.09em] text-[var(--muted-2)]">Награда зачислена</p>
             {Number(reward.overflowMxmCoins || 0) > 0 ? <p className="mt-1.5 text-[8px] text-[var(--accent)]">Излишек энергии: +{Number(reward.overflowMxmCoins).toLocaleString("ru-RU")} MXM</p> : null}
           </div> : <div className="mxm-case-idle-compact">
             <div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}><Box size={38} /></div>

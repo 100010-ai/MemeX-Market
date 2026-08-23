@@ -139,9 +139,14 @@ export default function MarketPage() {
     const params = new URLSearchParams(window.location.search);
     const explicitCollection = params.get("collection")?.trim() || "";
     const explicitQuery = params.get("q")?.trim() || "";
-    if (explicitCollection || explicitQuery) {
-      setTab("gifts");
-      setGiftMode("items");
+    const explicitTab = params.get("tab");
+    const explicitMode = params.get("mode");
+    const hasExplicitMarketState = Boolean(explicitCollection || explicitQuery || explicitTab || explicitMode);
+    if (hasExplicitMarketState) {
+      if (explicitTab === "coins") setTab("coins");
+      else setTab("gifts");
+      if (explicitMode === "feed" || explicitMode === "collections" || explicitMode === "items") setGiftMode(explicitMode);
+      else setGiftMode("items");
       if (explicitCollection) setCollection(explicitCollection);
       setQuery(explicitQuery);
     } else {
@@ -159,7 +164,7 @@ export default function MarketPage() {
       if (["all","under50","50to250","250to1000","over1000"].includes(String(saved.priceBand))) setPriceBand(saved.priceBand as PriceBand);
     }
     const savedScroll = Number(saved.scrollY || 0);
-    if (!explicitCollection && !explicitQuery && savedScroll > 0) window.setTimeout(() => window.scrollTo({ top: savedScroll, behavior: "auto" }), 120);
+    if (!hasExplicitMarketState && savedScroll > 0) window.setTimeout(() => window.scrollTo({ top: savedScroll, behavior: "auto" }), 120);
   }, []);
 
   useEffect(() => {
@@ -222,19 +227,21 @@ export default function MarketPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
-    let cancelled = false;
+    if (q.length < 2) {
+      setRemoteSearchState(null);
+      return;
+    }
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void apiFetch<UnifiedSearch>(`/api/market/search?q=${encodeURIComponent(q)}`)
-        .then((result) => { if (!cancelled) setRemoteSearchState({ query: q, result }); })
+      void apiFetch<UnifiedSearch>(`/api/market/search?q=${encodeURIComponent(q)}`, { signal: controller.signal, cacheMs: 4_000 })
+        .then((result) => setRemoteSearchState({ query: q, result }))
         .catch((cause) => {
-          if (!cancelled) {
-            console.error("market search", cause);
-            setRemoteSearchState({ query: q, result: { gifts: [], coins: [], collections: [], users: [] } });
-          }
+          if (controller.signal.aborted) return;
+          console.error("market search", cause);
+          setRemoteSearchState({ query: q, result: { gifts: [], coins: [], collections: [], users: [] } });
         });
-    }, 240);
-    return () => { cancelled = true; window.clearTimeout(timer); };
+    }, 220);
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [query]);
 
   const loadMoreGifts = useCallback(async () => {

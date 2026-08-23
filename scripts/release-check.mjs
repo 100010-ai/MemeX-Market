@@ -130,7 +130,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.4 package version", packageJson.includes('"version": "0.64.4"'));
+check("v0.64.5 package version", packageJson.includes('"version": "0.64.5"'));
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -166,6 +166,23 @@ check("v0.64.4 coin page is one-screen on mobile", read("app/coin/[id]/page.tsx"
 check("v0.64.4 memecoin metrics moved out of main flow", read("app/coin/[id]/page.tsx").includes("MetricsSheet") && read("app/coin/[id]/page.tsx").includes("setMetricsOpen(true)"));
 check("v0.64.4 launch bootstrap is hidden from feed/history", read("lib/feed.ts").includes('eq("is_launch_seed", false)') && read("app/api/portfolio/route.ts").includes('eq("is_launch_seed", false)') && read("app/api/coins/[id]/route.ts").includes('eq("is_launch_seed", false)'));
 check("v0.64.4 chart has compact small-price formatting", read("components/coin-chart.tsx").includes("axisPrice") && read("components/coin-chart.tsx").includes("emptyLabel") && read("components/coin-chart.tsx").includes("compact = false"));
+
+// v0.64.5 Release Polish: existing surfaces + build/Telegram hardening.
+check("v0.64.5 dashboard is actionable", read("app/hub/page.tsx").includes("/api/season") && read("app/hub/page.tsx").includes("/api/tasks") && read("app/page.tsx").includes('redirect("/hub")'));
+check("v0.64.5 gift details keep secondary market data collapsible", read("components/gifts/gift-detail.tsx").includes("mxm-gift-market-details") && read("components/gifts/gift-detail.tsx").includes("Подтвердить"));
+check("v0.64.5 market restores explicit deep links safely", read("app/market/page.tsx").includes("hasExplicitMarketState") && read("app/market/page.tsx").includes("AbortController"));
+check("v0.64.5 portfolio sorting persists", read("app/vault/page.tsx").includes("mxm-vault-gift-sort") && read("app/vault/page.tsx").includes("mxm-vault-coin-sort"));
+check("v0.64.5 case result has rarity-aware feedback", read("app/cases/page.tsx").includes("Награда зачислена") && read("app/cases/page.tsx").includes('rarity === "legendary"'));
+check("v0.64.5 memecoin high-impact trade needs confirmation", read("app/coin/[id]/page.tsx").includes("impactArmed") && read("app/coin/[id]/page.tsx").includes("Подтвердить сделку"));
+check("v0.64.5 task claim-all is server batched", read("app/api/tasks/claim/route.ts").includes('action === "claim_all"') && read("app/tasks/page.tsx").includes('action: "claim_all"'));
+check("v0.64.5 notifications de-duplicate exact rows", read("app/notifications/page.tsx").includes("new Map<string, number>()"));
+check("v0.64.5 Telegram warmup adapts to weak devices", read("components/telegram-provider.tsx").includes("constrainedDevice") && read("components/telegram-provider.tsx").includes("deviceMemory"));
+check("v0.64.5 Telegram keyboard avoids bottom-nav overlap", read("components/telegram-provider.tsx").includes("mxm-keyboard-open") && read("app/globals.css").includes(".mxm-keyboard-open .mxm-bottom-nav"));
+check("v0.64.5 shell renders equipped frames consistently", read("components/app-shell.tsx").includes("<ProfileAvatar") && read("components/app-shell.tsx").includes("equippedFrame"));
+check("v0.64.5 dashboard coin query uses compact payload", read("app/hub/page.tsx").includes("compact=1") && read("app/api/market/route.ts").includes('const compact = request.nextUrl.searchParams.get("compact") === "1"'));
+check("v0.64.5 portfolio has compact market handoff", read("app/vault/page.tsx").includes("mxm-portfolio-quick") && read("app/vault/page.tsx").includes('href="/market"'));
+check("v0.64.5 control audit records before/after", read("app/api/control/action/route.ts").includes('before: { balance:') && read("app/api/control/action/route.ts").includes('after: { ...before.data, ...patch }'));
+check("v0.64.5 one-command verifier present", exists("scripts/verify.mjs") && packageJson.includes('"verify": "node scripts/verify.mjs"') && packageJson.includes('"verify:static"'));
 
 // v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));
@@ -445,8 +462,12 @@ check("Public env does not expose service role", !/NEXT_PUBLIC_(?:SUPABASE_)?(?:
 const leaks = secretLeaks();
 check("No probable literal secrets in artifact", leaks.length === 0, leaks.length ? leaks.slice(0, 5).join(", ") : "");
 
-run("TypeScript", process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--incremental", "false"]);
-run("ESLint", process.execPath, [path.join(root, "node_modules/eslint/bin/eslint.js"), "."]);
+if (process.env.MXM_RELEASE_STATIC === "1") {
+  notes.push("Dependency-backed TypeScript/ESLint intentionally skipped by static verification.");
+} else {
+  run("TypeScript", process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--incremental", "false"]);
+  run("ESLint", process.execPath, [path.join(root, "node_modules/eslint/bin/eslint.js"), "."]);
+}
 
 if (!process.env.TONAPI_KEY) notes.push("TONAPI_KEY не задан в shell: каталог перейдёт на публичный rate limit TonAPI.");
 if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) notes.push("Supabase env не загружен в этой shell-сессии; проверьте production env перед deploy.");

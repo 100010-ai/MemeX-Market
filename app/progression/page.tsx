@@ -91,6 +91,16 @@ export default function ProgressionPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || busy) return;
+      void load().catch(() => undefined);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [busy, load]);
+
   const categories = useMemo(() => {
     const result = new Map<string, Achievement[]>();
     for (const achievement of data?.achievements || []) {

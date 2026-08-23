@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy, UserRound } from "lucide-react";
+import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
-import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { AppLaunchScreen } from "@/components/app-launch-screen";
+import { ProfileAvatar } from "@/components/profile-avatar";
 
 
 const DeferredCommandPalette = dynamic(() => import("@/components/command-palette").then((module) => module.CommandPalette), { ssr: false });
@@ -20,7 +19,7 @@ const DeferredPerfOverlay = dynamic(() => import("@/components/dev/perf-overlay"
 const nav = [
   { href: "/market", label: "Рынок", icon: Store },
   { href: "/orders", label: "Заявки", icon: ReceiptText },
-  { href: "/hub", label: "Лента", icon: Activity },
+  { href: "/hub", label: "Главная", icon: Activity },
   { href: "/tasks", label: "Задания", icon: ListChecks },
   { href: "/vault", label: "Портфель", icon: Boxes },
 ];
@@ -28,7 +27,7 @@ const nav = [
 const routeTitles: Array<[string, string]> = [
   ["/market", "Рынок"],
   ["/orders", "Заявки"],
-  ["/hub", "Лента"],
+  ["/hub", "Обзор"],
   ["/tasks", "Задания"],
   ["/vault", "Портфель"],
   ["/portfolio", "Портфель"],
@@ -52,13 +51,6 @@ const routeTitles: Array<[string, string]> = [
 
 function currentTitle(pathname: string) {
   return routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || "Рынок MXM";
-}
-
-function ProfileAvatar({ photoUrl, size = "sm" }: { photoUrl: string | null; size?: "sm" | "md" }) {
-  const cls = size === "md" ? "h-10 w-10 rounded-full" : "h-8 w-8 rounded-full";
-  const avatarSrc = telegramAvatarProxyUrl(photoUrl);
-  if (avatarSrc) return <Image unoptimized src={avatarSrc} alt="Профиль Telegram" width={size === "md" ? 40 : 32} height={size === "md" ? 40 : 32} className={`${cls} object-cover ring-1 ring-white/[.10]`} />;
-  return <span className={`grid ${cls} place-items-center bg-white/[.045] text-[var(--muted)] ring-1 ring-white/[.06]`}><UserRound size={size === "md" ? 18 : 15} /></span>;
 }
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
@@ -127,7 +119,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         </nav>
 
         <Link href="/profile" className="mt-auto border-t border-[var(--border-soft)] px-1 pt-4">
-          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} опыта</span></div>
+          <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} опыта</span></div>
           <div className="mt-3 h-px overflow-hidden bg-white/[.05]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div>
         </Link>
       </aside>
@@ -135,7 +127,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       <div className="mxm-shell-content min-w-0 lg:pb-0">
         <header className="mxm-topbar mxm-topbar-fixed safe-top z-40">
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-5">
-            <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} /></Link>
+            <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></Link>
             <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
             <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
