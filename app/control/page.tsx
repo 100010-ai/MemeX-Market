@@ -35,11 +35,12 @@ async function request<T>(url:string, init?:RequestInit):Promise<T>{
   return body as T;
 }
 
+const CONTROL_MAX_BALANCE = 1_000_000_000_000;
 function controlPayloadError(action:string,payload:Record<string,unknown>){
   const finite=(value:unknown)=>typeof value==="number"&&Number.isFinite(value);
   const nonEmpty=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
-  if(action==="balance.adjust") return nonEmpty(payload.profileId)&&finite(payload.delta)?null:"Укажите игрока и корректное изменение баланса";
-  if(action==="balance.set") return nonEmpty(payload.profileId)&&finite(payload.balance)&&Number(payload.balance)>=0?null:"Укажите корректный неотрицательный баланс";
+  if(action==="balance.adjust") return nonEmpty(payload.profileId)&&finite(payload.delta)&&Math.abs(Number(payload.delta))<=CONTROL_MAX_BALANCE?null:"Укажите игрока и корректное изменение баланса";
+  if(action==="balance.set") return nonEmpty(payload.profileId)&&finite(payload.balance)&&Number(payload.balance)>=0&&Number(payload.balance)<=CONTROL_MAX_BALANCE?null:"Укажите корректный баланс";
   if(action==="profile.set_xp") return nonEmpty(payload.profileId)&&finite(payload.xp)&&Number(payload.xp)>=0?null:"Укажите корректный XP";
   if(action==="mission.create") {
     if(!nonEmpty(payload.key)||!nonEmpty(payload.title)||!nonEmpty(payload.description)||!nonEmpty(payload.actionType)) return "Заполните key, название, описание и action_type";
@@ -107,7 +108,7 @@ export default function ControlPage(){
     <aside className="control-sidebar"><div className="px-3 py-2"><div className="text-sm font-semibold">MXM Control</div><div className="mt-0.5 text-[10px] text-[var(--muted)]">LOCAL GOD MODE</div></div><nav className="mt-3 space-y-1">{tabs.map(([key,label,Icon])=><button key={key} onClick={()=>{setTab(key);setQuery("");}} className={`control-nav ${tab===key?"control-nav-active":""}`}><Icon size={15}/><span className="min-w-0 flex-1 text-left">{label}</span><small className="control-nav-count">{tabCounts[key]}</small></button>)}</nav><div className="mt-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-[10px] leading-4 text-[var(--muted)]"><LockKeyhole size={12} className="mb-1"/>Только localhost · HttpOnly session · аудит действий</div></aside>
     <main className="control-main">
       <header className="control-topbar"><div><h1 className="text-base font-semibold">{tabs.find(v=>v[0]===tab)?.[1]}</h1><p className="text-[10px] text-[var(--muted)]">{data?`Обновлено ${new Date(data.checkedAt).toLocaleTimeString("ru-RU")}`:"Загрузка"}</p></div><div className="ml-auto flex items-center gap-2"><label className="control-search"><Search size={13}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={searchPlaceholder[String(tab) as Tab]}/></label>{tab==="gifts"?<><button disabled={Boolean(busy)} onClick={()=>void act("catalog.sync")} className="control-small"><RefreshCw size={12}/> Загрузить реальные Gifts</button>{!data?.liquidity?.playerOnly?<button disabled={Boolean(busy)} onClick={()=>void act("npc.tick",{targetListings:1000})} className="control-small"><Gift size={12}/> Выпустить Genesis</button>:null}</>:null}<button disabled={loading||Boolean(busy)} onClick={()=>void load()} className="control-icon" title="Обновить"><RefreshCw size={14} className={loading?"animate-spin":""}/></button><button disabled={busy==="logout"} onClick={()=>void logout()} className="control-icon" title="Выйти"><LogOut size={14}/></button></div></header>
-      {error?<div className="control-alert control-alert-error">{error}</div>:null}{notice?<div className="control-alert control-alert-ok">{notice}</div>:null}
+      {error?<div className="control-alert control-alert-error" role="alert">{error}</div>:null}{notice?<div className="control-alert control-alert-ok" role="status" aria-live="polite">{notice}</div>:null}
       {!data?<ControlLoading/>:<>
         <MetricStrip data={data}/>
         {tab==="players"?<PlayersPanel rows={data.profiles} query={query} act={act} busy={busy}/>:null}
@@ -130,8 +131,8 @@ function PlayerRow({row,act,disabled}:{row:ProfileRow;act:(a:string,p?:Record<st
  const [amount,setAmount]=useState("");
  const [xp,setXp]=useState(String(row.xp));
  const name=row.username?`@${row.username}`:row.first_name;
- const numericAmount=Number(amount);
- const numericXp=Number(xp);
+ const numericAmount=Number(amount.trim().replace(",","."));
+ const numericXp=Number(xp.trim().replace(",","."));
  const validAmount=amount.trim()!==""&&Number.isFinite(numericAmount);
  const validXp=xp.trim()!==""&&Number.isFinite(numericXp)&&numericXp>=0;
  const confirmFor=(message:string,run:()=>void)=>{if(window.confirm(message))run();};

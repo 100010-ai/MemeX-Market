@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { recordAppError } from "@/lib/error-inbox";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { parseEconomyAmount } from "@/lib/economy";
 
 function cleanText(value: unknown, max = 120) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -77,10 +78,10 @@ async function POSTHandler(request: Request) {
     const baseName = cleanText(body.baseName);
     const scopeType = typeof body.scopeType === "string" && ["collection", "model", "backdrop", "symbol"].includes(body.scopeType) ? body.scopeType : null;
     const traitValue = cleanText(body.traitValue) || null;
-    const amount = Number(body.amount);
-    const maxFills = Number(body.maxFills ?? 1);
-    const durationHours = Number(body.durationHours ?? 72);
-    if (!baseName || !scopeType || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000 || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
+    const amount = parseEconomyAmount(body.amount);
+    const maxFills = parseEconomyAmount(body.maxFills ?? 1);
+    const durationHours = parseEconomyAmount(body.durationHours ?? 72);
+    if (!baseName || !scopeType || amount == null || amount <= 0 || amount > 1_000_000_000 || maxFills == null || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || durationHours == null || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
       return NextResponse.json({ error: "Некорректные параметры предложения" }, { status: 400 });
     }
     const supabase = getSupabaseAdmin();

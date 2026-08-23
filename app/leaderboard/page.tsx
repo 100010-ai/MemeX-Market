@@ -77,7 +77,8 @@ export default function LeaderboardPage() {
     };
   }, [board, retryKey]);
 
-  const podium = useMemo(() => players.slice(0, 3), [players]);
+  const podium = useMemo(() => players.filter((player) => player.rank <= 3).slice(0, 5), [players]);
+  const tablePlayers = useMemo(() => players.filter((player) => player.rank > 3), [players]);
   const meInList = players.some((player) => player.isMe);
 
   return (
@@ -101,13 +102,13 @@ export default function LeaderboardPage() {
       <div>
         {loading ? <div className="p-3"><div className="mxm-skeleton h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /><div className="mxm-skeleton mt-2 h-14 rounded-2xl" /></div> : players.length ? (
           <div className="divide-y divide-[var(--border-soft)]">
-            {players.map((player) => {
+            {tablePlayers.map((player) => {
               const value = boardValue(player, board);
               const pnlBoard = board === "pnl" || board === "giftPnl" || board === "coinPnl";
               return <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 py-3 ${player.isMe ? "border-l-2 border-[var(--accent)] pl-2" : ""}`}>
                 <div className={`text-center text-xs font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>{player.rank}</div>
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <ProfileAvatar photoUrl={player.photoUrl} name={player.name} equippedFrame={player.equippedFrame} />
+                  <ProfileAvatar photoUrl={player.photoUrl} name={player.name} equippedFrame={player.equippedFrame} size="small" />
                   <div className="min-w-0"><p className="truncate text-xs font-medium">{player.name}{player.isMe ? <span className="ml-1.5 text-[9px] text-[var(--accent)]">ВЫ</span> : null}</p><p className="mt-0.5 text-[10px] text-[var(--muted)]">{player.giftCount} подарков · {player.coinTrades + player.giftTrades} сделок</p></div>
                 </div>
                 <div className="text-right"><p className={`text-xs font-semibold ${pnlBoard ? value >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]" : ""}`}>{value > 0 && pnlBoard ? "+" : ""}{money(value)}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{boardCaption(board)}</p></div>

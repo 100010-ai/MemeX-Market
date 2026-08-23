@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { recordAppError } from "@/lib/error-inbox";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { MAX_COIN_TRADE_INPUT, MIN_COIN_BUY_TON, parseEconomyAmount } from "@/lib/economy";
 
 async function POSTHandler(request: Request) {
   const profile = await requireProfile();
@@ -20,11 +21,14 @@ async function POSTHandler(request: Request) {
     const requestId = String(body.requestId || "");
     const coinId = String(body.coinId || "");
     const side = body.side === "sell" ? "sell" : body.side === "buy" ? "buy" : null;
-    const amount = Number(body.amount);
-    const minOutput = Number(body.minOutput ?? 0);
+    const amount = parseEconomyAmount(body.amount);
+    const minOutput = parseEconomyAmount(body.minOutput ?? 0);
     const sellAll = side === "sell" && body.sellAll === true;
-    if (!validUuidLike(requestId) || !validUuidLike(coinId) || !side || (!sellAll && (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000_000)) || !Number.isFinite(minOutput) || minOutput < 0 || minOutput > 1_000_000_000_000_000_000) {
+    if (!validUuidLike(requestId) || !validUuidLike(coinId) || !side || (!sellAll && (amount == null || amount <= 0 || amount > MAX_COIN_TRADE_INPUT)) || minOutput == null || minOutput < 0 || minOutput > 1_000_000_000_000_000_000) {
       return NextResponse.json({ error: "Некорректная сделка" }, { status: 400 });
+    }
+    if (side === "buy" && !sellAll && amount != null && amount < MIN_COIN_BUY_TON) {
+      return NextResponse.json({ error: `Минимальная покупка — ${MIN_COIN_BUY_TON} TON` }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();
@@ -33,7 +37,7 @@ async function POSTHandler(request: Request) {
       p_profile_id: profile.id,
       p_coin_id: coinId,
       p_side: side,
-      p_amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+      p_amount: amount != null && amount > 0 ? amount : 0,
       p_sell_all: sellAll,
       p_min_output: minOutput,
     };

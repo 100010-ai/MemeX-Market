@@ -130,7 +130,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.6 package version", packageJson.includes('"version": "0.64.6"'));
+check("v0.64.7 package version", packageJson.includes('"version": "0.64.7"'));
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -175,7 +175,7 @@ check("v0.64.5 portfolio sorting persists", read("app/vault/page.tsx").includes(
 check("v0.64.5 case result has rarity-aware feedback", read("app/cases/page.tsx").includes("Награда зачислена") && read("app/cases/page.tsx").includes('rarity === "legendary"'));
 check("v0.64.5 memecoin high-impact trade needs confirmation", read("app/coin/[id]/page.tsx").includes("impactArmed") && read("app/coin/[id]/page.tsx").includes("Подтвердить сделку"));
 check("v0.64.5 task claim-all is server batched", read("app/api/tasks/claim/route.ts").includes('action === "claim_all"') && read("app/tasks/page.tsx").includes('action: "claim_all"'));
-check("v0.64.5 notifications de-duplicate exact rows", read("app/notifications/page.tsx").includes("new Map<string, number>()"));
+check("v0.64.5 notifications de-duplicate exact rows", read("app/api/notifications/route.ts").includes("const seen = new Map<string, number>()"));
 check("v0.64.5 Telegram warmup adapts to weak devices", read("components/telegram-provider.tsx").includes("constrainedDevice") && read("components/telegram-provider.tsx").includes("deviceMemory"));
 check("v0.64.5 Telegram keyboard avoids bottom-nav overlap", read("components/telegram-provider.tsx").includes("mxm-keyboard-open") && read("app/globals.css").includes(".mxm-keyboard-open .mxm-bottom-nav"));
 check("v0.64.5 shell renders equipped frames consistently", read("components/app-shell.tsx").includes("<ProfileAvatar") && read("components/app-shell.tsx").includes("equippedFrame"));
@@ -189,6 +189,26 @@ check("v0.64.6 Telegram protocol methods are version-gated", read("components/te
 check("v0.64.6 Stars invoice is version-gated", read("components/store-front.tsx").includes('telegramVersionAtLeast(webApp, "6.1")') && read("components/store-front.tsx").includes("Обнови Telegram"));
 check("v0.64.6 Control validates payload before POST", read("app/control/page.tsx").includes("controlPayloadError") && read("app/control/page.tsx").includes("validPrice"));
 check("v0.64.6 Control server separates validation from runtime failures", read("app/api/control/action/route.ts").includes("isDatabaseSchemaError") && read("app/api/control/action/route.ts").includes("CONTROL_FAILED") && read("app/api/control/action/route.ts").includes("CONTROL_CONFLICT"));
+
+// v0.64.7 Economy & Performance Polish: all 16 requested existing-system passes.
+check("v0.64.7 economy input is normalized centrally", economy.includes("parseEconomyAmount") && economy.includes("MAX_COIN_TRADE_INPUT") && read("app/api/trade/route.ts").includes("MIN_COIN_BUY_TON"));
+check("v0.64.7 AMM preview uses configured fee", read("lib/amm.ts").includes("feeRate?: number") && read("app/coin/[id]/page.tsx").includes("data.economy.totalFeeBps") && read("app/api/coins/[id]/quote/route.ts").includes("coin_total_fee_bps"));
+check("v0.64.7 memecoin trade boundaries are hardened", read("app/api/coins/[id]/quote/route.ts").includes("MAX_COIN_TRADE_INPUT") && read("app/api/coins/[id]/orders/route.ts").includes("MIN_COIN_BUY_TON") && read("app/coin/[id]/page.tsx").includes("nextTokenReserve <= 0"));
+check("v0.64.7 gift market paging adapts to constrained networks", marketPage.includes("constrainedNetwork") && marketPage.includes('"72px 0px"'));
+check("v0.64.7 stale gift purchase conflicts refresh authoritatively", read("components/gifts/gift-detail.tsx").includes('key === "buy"') && read("app/api/gifts/[id]/buy/route.ts").includes("GIFT_CONFLICT"));
+check("v0.64.7 gift details expose compact market handoff", read("components/gifts/gift-detail.tsx").includes("Похожие лоты") && read("components/gifts/gift-detail.tsx").includes('replace(",", ".")'));
+check("v0.64.7 portfolio first payload is bounded and searchable", read("app/api/portfolio/route.ts").includes("DEFAULT_GIFT_PAGE_SIZE = 96") && read("app/vault/page.tsx").includes("assetQuery") && read("app/globals.css").includes(".mxm-vault-search"));
+check("v0.64.7 case reel is rarity paced and series-aware", read("app/cases/page.tsx").includes("revealMs") && read("app/cases/page.tsx").includes("data-case-series") && read("app/globals.css").includes('data-case-series="case_vault"'));
+check("v0.64.7 battle pass refreshes global wallet after claims", read("app/season/page.tsx").includes("refreshProfile") && read("app/season/page.tsx").includes("Promise.all([load(), refreshProfile()])"));
+check("v0.64.7 profile hierarchy keeps identity private and dense", read("app/profile/page.tsx").includes('size="large"') && read("app/profile/page.tsx").includes("Профиль Telegram") && read("app/profile/page.tsx").includes("LVL {profile.level}"));
+check("v0.64.7 frames degrade cleanly on constrained devices", read("components/telegram-provider.tsx").includes("mxm-device-constrained") && read("app/globals.css").includes(".mxm-device-constrained .mxm-profile-frame-orbit-dot"));
+check("v0.64.7 progression refresh is de-bounced and notices self-clear", tasks.includes("lastRefreshAt") && tasks.includes("setTimeout(() => setNotice(null), 3600") && read("app/progression/page.tsx").includes("lastRefreshAt"));
+check("v0.64.7 leaderboard handles tied podium ranks without duplicate rows", read("app/leaderboard/page.tsx").includes("player.rank <= 3") && read("app/leaderboard/page.tsx").includes("player.rank > 3"));
+check("v0.64.7 notifications de-duplicate before badge count", notificationsApi.includes("const seen = new Map<string, number>()") && notificationsApi.includes("normalized.reduce"));
+check("v0.64.7 store CTA surfaces owned/unavailable state", read("components/store-front.tsx").includes("unavailable ? unavailable") && read("components/store-front.tsx").includes("highlights.slice(0, 2)"));
+check("v0.64.7 creator analytics stays quiet for pristine markets", read("app/creator/page.tsx").includes("hasMarketActivity") && read("app/creator/page.tsx").includes("Новый рынок"));
+check("v0.64.7 control caps economy mutations on client and server", read("app/control/page.tsx").includes("CONTROL_MAX_BALANCE") && read("app/api/control/action/route.ts").includes("CONTROL_MAX_BALANCE") && read("app/control/page.tsx").includes('aria-live="polite"'));
+check("v0.64.7 Telegram/mobile performance mode is surfaced to CSS", read("components/telegram-provider.tsx").includes('classList.toggle("mxm-device-constrained"') && read("app/globals.css").includes("overscroll-behavior-y:contain"));
 
 // v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));

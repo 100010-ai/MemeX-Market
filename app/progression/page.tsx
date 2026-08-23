@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Award, Check, Flame, Gift, LockKeyhole, PackageOpen, Sparkles, Trophy, Zap } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -78,6 +78,7 @@ export default function ProgressionPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [achievementFilter, setAchievementFilter] = useState("all");
+  const lastRefreshAt = useRef(0);
 
   const load = useCallback(async () => {
     const payload = await apiFetch<Payload>("/api/progression", { cacheMs: 0, dedupe: false });
@@ -94,12 +95,21 @@ export default function ProgressionPage() {
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== "visible" || busy) return;
+      const now = Date.now();
+      if (now - lastRefreshAt.current < 900) return;
+      lastRefreshAt.current = now;
       void load().catch(() => undefined);
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [busy, load]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const categories = useMemo(() => {
     const result = new Map<string, Achievement[]>();
@@ -145,7 +155,7 @@ export default function ProgressionPage() {
     </header>
 
     {error ? <div className="mxm-alert mxm-alert-error mb-2.5">{error}</div> : null}
-    {notice ? <div className="mxm-alert mb-2.5">{notice}</div> : null}
+    {notice ? <div className="mxm-alert mb-2.5" role="status" aria-live="polite">{notice}</div> : null}
     {data?.newlyUnlocked ? <div className="mxm-alert mb-2.5">Открыто новых достижений: {data.newlyUnlocked}. XP уже начислен.</div> : null}
 
     <section className="mxm-summary-card p-3">

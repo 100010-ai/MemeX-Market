@@ -1,0 +1,55 @@
+MemeX Market v0.64.7 — Economy & Performance Polish
+=====================================================
+
+Scope
+-----
+Release-quality polish across all 16 requested existing systems:
+1) economy, 2) memecoins, 3) Gift Market, 4) Gift detail, 5) portfolio,
+6) cases, 7) Battle Pass, 8) profile, 9) frames,
+10) tasks/achievements/streak, 11) leaderboard, 12) notifications,
+13) store, 14) Creator Tools, 15) /control, 16) Telegram/mobile + API/performance.
+
+Checks completed
+----------------
+- node scripts/verify.mjs --static: PASS.
+- TS/TSX parser: 184 files, 0 syntax errors.
+- Local import scan: 184 source files, 0 broken local imports.
+- CSS brace regression: 983 open / 983 close.
+- Release/security invariants: 179 OK / 0 FAIL.
+- All dedicated v0.64.7 regression checks: PASS.
+- Supplemental strict semantic smoke over the v0.64.7 modified source set:
+  0 relevant diagnostics. Temporary permissive declarations were used only for
+  unavailable external packages and were stored outside the project; they are not shipped.
+
+Key regressions specifically covered
+------------------------------------
+- Economy parsing handles decimal comma and rejects non-finite/oversized inputs.
+- Memecoin quote/trade/order paths share bounded inputs and configured fee previews.
+- Gift purchase race/conflict refreshes authoritative state and uses HTTP 409.
+- Invalid Gift listing price cannot be misinterpreted as an explicit unlist request.
+- Gift detail/portfolio payloads are bounded for mobile use.
+- Case result remains server-authoritative and idempotent; reveal pacing is cosmetic only.
+- Battle Pass claims refresh shared profile/balance state.
+- Tied leaderboard podium rows are not duplicated in the normal list.
+- Notification dedupe is server-side and limited to exact repeats inside five minutes.
+- Control balance mutations are capped on both client and server.
+- Constrained Telegram/mobile devices receive cheaper frame/effect rendering.
+
+Database
+--------
+No new SQL migration is introduced by v0.64.7.
+The existing memecoin launch-state migration
+supabase/migrations/100002_memecoin_market_polish_v0644.sql
+must already be applied when deploying the clean memecoin launch model.
+
+Dependency-backed build
+-----------------------
+This source container does not contain the project's node_modules, and the prior
+Corepack/pnpm attempt could not reach registry.npmjs.org. Therefore this report does
+NOT claim a successful Next production build or dependency-backed ESLint/typecheck.
+After installing the locked dependencies, the final release gate is:
+
+  pnpm install --frozen-lockfile
+  pnpm run verify
+
+The Vercel/CI production build remains the final dependency-backed approval gate.

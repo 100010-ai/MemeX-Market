@@ -1,4 +1,4 @@
-import { apiFailure, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, withApiErrors } from "@/lib/api-route";
 import crypto from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
@@ -30,7 +30,11 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     }
   }
   const { data, error } = await supabase.rpc("buy_virtual_gift_v2", { p_buyer_id: profile.id, p_virtual_gift_id: id, p_request_key: requestKey });
-  if (error) return apiFailure(error, "Не удалось купить подарок", 400);
+  if (error) {
+    const message = publicBusinessError(error, "Не удалось купить подарок");
+    const conflict = /снят с продажи|уже принадлежит|уже была выполнена|истёк/i.test(message);
+    return NextResponse.json({ error: message, code: conflict ? "GIFT_CONFLICT" : "GIFT_PURCHASE_FAILED" }, { status: conflict ? 409 : 400, headers: { "cache-control": "no-store" } });
+  }
   const profileId = String(profile.id);
   after(async () => {
     try {

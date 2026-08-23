@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CircleCheckBig, Clock3, ExternalLink, Flame, Gem, Gift, RadioTower, RefreshCw, Sparkles, TicketCheck, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
@@ -21,6 +21,7 @@ export default function TasksPage() {
   const [channelBusy, setChannelBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const lastRefreshAt = useRef(0);
   const { profile, refreshProfile, haptic } = useTelegramProfile();
 
   const load = useCallback(async () => {
@@ -37,11 +38,23 @@ export default function TasksPage() {
   }, []);
 
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState === "visible") void load().catch(() => undefined); };
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastRefreshAt.current < 900) return;
+      lastRefreshAt.current = now;
+      void load().catch(() => undefined);
+    };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [load]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   async function claim(id: string) {
     setBusy(id);
@@ -140,7 +153,7 @@ export default function TasksPage() {
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
-      {notice ? <div className="mxm-alert mb-4">{notice}</div> : null}
+      {notice ? <div className="mxm-alert mb-4" role="status" aria-live="polite">{notice}</div> : null}
 
       <section className="mb-7 flex items-center gap-2 border-y border-[var(--border-soft)] py-3">
         <TicketCheck size={14} className="shrink-0 text-[var(--muted)]" />

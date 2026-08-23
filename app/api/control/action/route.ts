@@ -9,6 +9,7 @@ import { safeIsoDate } from "@/lib/safe-data";
 
 export const runtime = "nodejs";
 const ACTOR = "local-god-mode";
+const CONTROL_MAX_BALANCE = 1_000_000_000_000;
 
 function text(value: unknown, max = 500) { return String(value ?? "").trim().slice(0, max); }
 function number(value: unknown) { const result = Number(value); return Number.isFinite(result) ? result : null; }
@@ -31,7 +32,7 @@ async function POSTHandler(request: Request) {
     if (action === "balance.adjust") {
       const profileId = text(body.profileId, 80);
       const delta = number(body.delta);
-      if (!profileId || delta == null) return NextResponse.json({ error: "Укажите игрока и изменение баланса" }, { status: 400 });
+      if (!profileId || delta == null || Math.abs(delta) > CONTROL_MAX_BALANCE) return NextResponse.json({ error: "Укажите игрока и корректное изменение баланса" }, { status: 400 });
       const before = await supabase.from("profiles").select("balance").eq("id", profileId).single();
       if (before.error || !before.data) throw before.error || new Error("Игрок не найден");
       const { data, error } = await supabase.rpc("admin_adjust_balance", { p_profile_id: profileId, p_delta: delta, p_actor: ACTOR, p_reason: text(body.reason, 300) });
@@ -43,7 +44,7 @@ async function POSTHandler(request: Request) {
     if (action === "balance.set") {
       const profileId = text(body.profileId, 80);
       const target = number(body.balance);
-      if (!profileId || target == null || target < 0) return NextResponse.json({ error: "Некорректный баланс" }, { status: 400 });
+      if (!profileId || target == null || target < 0 || target > CONTROL_MAX_BALANCE) return NextResponse.json({ error: "Некорректный баланс" }, { status: 400 });
       const current = await supabase.from("profiles").select("balance").eq("id", profileId).single();
       if (current.error || !current.data) throw current.error || new Error("Игрок не найден");
       const delta = target - Number(current.data.balance);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ListPlus, LockKeyhole, SortAsc, WalletCards, X } from "lucide-react";
+import { Check, ListPlus, LockKeyhole, Search, SortAsc, WalletCards, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { GiftAsset, Holding, PortfolioPoint, Profile } from "@/lib/types";
 import { ago, compact, money, percent, price } from "@/lib/format";
@@ -37,6 +37,7 @@ export default function VaultPage() {
     return saved === "pnl" || saved === "name" ? saved : "value";
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [assetQuery, setAssetQuery] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState<"fixed" | "floor">("floor");
@@ -77,7 +78,7 @@ export default function VaultPage() {
     if (offset == null || moreGiftsBusy) return;
     setMoreGiftsBusy(true);
     try {
-      const page = await apiFetch<{ gifts: GiftAsset[]; inventory: { giftCount: number; giftsLoaded: number; nextGiftOffset?: number | null } }>(`/api/portfolio?giftsOnly=1&giftOffset=${offset}&giftLimit=180`, { cacheMs: 0 });
+      const page = await apiFetch<{ gifts: GiftAsset[]; inventory: { giftCount: number; giftsLoaded: number; nextGiftOffset?: number | null } }>(`/api/portfolio?giftsOnly=1&giftOffset=${offset}&giftLimit=96`, { cacheMs: 0 });
       setData((current) => {
         if (!current) return current;
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
@@ -120,17 +121,19 @@ export default function VaultPage() {
 
   const listed = useMemo(() => data?.listedGifts ?? data?.gifts.filter((gift) => gift.status === "listed") ?? [], [data]);
   const activeGiftRows = useMemo(() => {
-    const rows = [...(tab === "listed" ? listed : data?.gifts || [])];
+    const q = assetQuery.trim().toLowerCase();
+    const rows = [...(tab === "listed" ? listed : data?.gifts || [])].filter((gift) => !q || `${gift.baseName} ${gift.modelName} ${gift.backdropName} ${gift.symbolName} ${gift.number}`.toLowerCase().includes(q));
     if (giftSort === "value") return rows.sort((a, b) => Number(b.estimatedValue || b.listingPrice || 0) - Number(a.estimatedValue || a.listingPrice || 0));
     if (giftSort === "name") return rows.sort((a, b) => `${a.baseName || a.telegramName}`.localeCompare(`${b.baseName || b.telegramName}`, "ru"));
     return rows;
-  }, [data?.gifts, giftSort, listed, tab]);
+  }, [assetQuery, data?.gifts, giftSort, listed, tab]);
   const sortedHoldings = useMemo(() => {
-    const rows = [...(data?.holdings || [])];
+    const q = assetQuery.trim().toLowerCase();
+    const rows = [...(data?.holdings || [])].filter((holding) => !q || `${holding.name} ${holding.symbol}`.toLowerCase().includes(q));
     if (coinSort === "pnl") return rows.sort((a, b) => b.pnl - a.pnl);
     if (coinSort === "name") return rows.sort((a, b) => a.name.localeCompare(b.name, "ru"));
     return rows.sort((a, b) => b.marketValue - a.marketValue);
-  }, [coinSort, data?.holdings]);
+  }, [assetQuery, coinSort, data?.holdings]);
   const visibleGiftRows = activeGiftRows.slice(0, giftRenderLimit);
   const realtimeFilters = useMemo(() => data?.profile.id ? ({ holdings: `profile_id=eq.${data.profile.id}`, trades: `profile_id=eq.${data.profile.id}`, virtual_gifts: `owner_profile_id=eq.${data.profile.id}` }) : undefined, [data?.profile.id]);
   if (!data) {
@@ -173,6 +176,7 @@ export default function VaultPage() {
         <Tab label="История" active={tab === "history"} onClick={() => setTab("history")} />
       </div>
 
+      {tab !== "history" ? <div className="mb-2 flex items-center gap-2"><label className="mxm-vault-search min-w-0 flex-1"><Search size={12} /><input value={assetQuery} onChange={(event) => setAssetQuery(event.target.value)} placeholder={tab === "coins" ? "Найти мемкоин" : "Найти подарок"} /></label>{assetQuery ? <button type="button" onClick={() => setAssetQuery("")} className="mxm-vault-search-clear" aria-label="Очистить поиск"><X size={12} /></button> : null}</div> : null}
       {tab === "gifts" || tab === "listed" ? <div className="mb-2 flex items-center justify-end gap-2 text-[9px] text-[var(--muted)]"><SortAsc size={11}/><select value={giftSort} onChange={(event)=>setGiftSort(event.target.value as typeof giftSort)} className="mxm-compact-select"><option value="new">Сначала новые</option><option value="value">По стоимости</option><option value="name">По названию</option></select></div> : null}
       {tab === "coins" ? <div className="mb-2 flex items-center justify-end gap-2 text-[9px] text-[var(--muted)]"><SortAsc size={11}/><select value={coinSort} onChange={(event)=>setCoinSort(event.target.value as typeof coinSort)} className="mxm-compact-select"><option value="value">По стоимости</option><option value="pnl">По результату</option><option value="name">По названию</option></select></div> : null}
 
@@ -184,7 +188,7 @@ export default function VaultPage() {
           </div> : null}
           <div className="market-grid grid gap-2">{visibleGiftRows.map((gift) => <div key={gift.virtualGiftId} className="relative">{selecting && tab === "gifts" ? <button type="button" aria-label={selected.has(gift.virtualGiftId) ? "Убрать из выбора" : "Выбрать подарок"} onClick={() => toggleSelected(gift.virtualGiftId)} className={`absolute right-2 top-2 z-20 grid h-7 w-7 place-items-center rounded-full border ${selected.has(gift.virtualGiftId) ? "border-[var(--accent)] bg-[var(--accent)] text-black" : "border-white/20 bg-black/55 text-white"}`}>{selected.has(gift.virtualGiftId) ? <Check size={14} /> : null}</button> : null}<div className={selecting && tab === "gifts" && !selected.has(gift.virtualGiftId) ? "opacity-80" : ""}><GiftCard gift={gift} /></div></div>)}</div>
           {visibleGiftRows.length < activeGiftRows.length ? <div className="mt-4 text-center"><button type="button" onClick={() => setGiftRenderLimit((value) => Math.min(activeGiftRows.length, value + 120))} className="border-b border-[var(--border)] pb-1 text-[10px] text-[var(--muted)]">Показать ещё {Math.min(120, activeGiftRows.length - visibleGiftRows.length)}</button></div> : null}
-          {tab === "gifts" && visibleGiftRows.length >= activeGiftRows.length && data.inventory?.nextGiftOffset != null ? <div className="mt-4 text-center"><button type="button" disabled={moreGiftsBusy} onClick={() => void loadMoreGifts()} className="border-b border-[var(--border)] pb-1 text-[10px] text-[var(--muted)] disabled:opacity-50">{moreGiftsBusy ? "Загружаем…" : `Загрузить ещё ${Math.min(180, Math.max(0, (data.inventory?.giftCount || 0) - data.gifts.length))}`}</button></div> : null}
+          {tab === "gifts" && visibleGiftRows.length >= activeGiftRows.length && data.inventory?.nextGiftOffset != null ? <div className="mt-4 text-center"><button type="button" disabled={moreGiftsBusy} onClick={() => void loadMoreGifts()} className="border-b border-[var(--border)] pb-1 text-[10px] text-[var(--muted)] disabled:opacity-50">{moreGiftsBusy ? "Загружаем…" : `Загрузить ещё ${Math.min(96, Math.max(0, (data.inventory?.giftCount || 0) - data.gifts.length))}`}</button></div> : null}
         </div> : <Empty title={tab === "listed" ? "Лотов нет" : "Подарков нет"} action={tab === "gifts" ? <Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Рынок</Link> : undefined} />
       ) : tab === "coins" ? (
         data.holdings.length ? <div className="overflow-hidden"><div className="divide-y divide-[var(--border-soft)]">{sortedHoldings.map((holding) => <Link href={`/coin/${holding.coinId}`} key={holding.coinId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr]"><div className="flex min-w-0 items-center gap-2.5"><CoinAvatar symbol={holding.symbol} imageUrl={holding.imageUrl} /><div className="min-w-0"><p className="truncate text-xs font-medium">{holding.name}</p><p className="text-[10px] text-[var(--muted)]">{compact(holding.quantity)} {holding.symbol}</p></div></div><div className="text-right sm:text-left"><p className="text-xs">{money(holding.marketValue)}</p><p className={`text-[10px] ${holding.pnl >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{holding.costBasis ? percent(holding.pnl / holding.costBasis * 100) : "—"}</p></div><div className="hidden sm:block"><p className="text-[10px] text-[var(--muted)]">Текущая цена</p><p className="text-xs">{price(holding.currentPrice)}</p></div></Link>)}</div></div> : <Empty title="Мемкоинов нет" action={<Link href="/market" className="inline-flex rounded-[13px] bg-[var(--panel-3)] px-4 py-2.5 text-[10px] font-medium">Рынок</Link>} />

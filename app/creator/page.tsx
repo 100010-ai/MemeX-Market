@@ -76,10 +76,14 @@ export default function CreatorDashboardPage() {
 
     <section className="mt-4 overflow-hidden rounded-[16px] border border-[var(--border)]">
       <div className="mxm-section-head"><span>Мои мемкоины</span><span>{data.coins.length}</span></div>
-      {data.coins.length?<div className="divide-y divide-[var(--border-soft)]">{data.coins.map((coin)=><Link href={`/coin/${coin.id}`} key={coin.id} className="block p-3 hover:bg-white/[.025]">
-        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-[11px] font-semibold">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[var(--muted)]"><span>{coin.holders} владельцев</span><span>объём {money(coin.volume)}</span><span>комиссия {money(coin.creatorFees)}</span>{coin.boostedUntil&&new Date(coin.boostedUntil).getTime()>Date.now()?<span className="text-[var(--accent)]">продвижение активно</span>:null}</div></div><div className="shrink-0 text-right"><p className="text-[11px]">{price(coin.currentPrice)}</p><p className="mt-1 text-[8px] text-[var(--muted)]">кап. {money(coin.marketCap)}</p></div></div>
-        {data.analyticsUnlocked?<div className="mt-2 flex flex-wrap gap-1.5">{[["Покупатели",coin.uniqueBuyers??0],["Удержание",`${coin.buyerRetentionPct??0}%`],["Buy/Sell",coin.buySellRatio??0]].map(([label,value])=><span key={String(label)} className="mxm-creator-metric-pill"><small>{label}</small><b>{value}</b></span>)}</div>:null}
-      </Link>)}</div>:<div className="p-8 text-center"><p className="text-xs text-[var(--muted)]">Вы ещё не запускали мемкоины.</p><Link href="/create" className="mt-3 inline-flex text-[9px] text-[var(--accent)]">Запустить первый</Link></div>}
+      {data.coins.length?<div className="divide-y divide-[var(--border-soft)]">{data.coins.map((coin)=>{
+        const hasMarketActivity=Number(coin.volume)>0 || Number(coin.uniqueBuyers||0)>0;
+        const boostActive=Boolean(coin.boostedUntil&&new Date(coin.boostedUntil).getTime()>Date.now());
+        return <Link href={`/coin/${coin.id}`} key={coin.id} className="block p-3 hover:bg-white/[.025]">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-[11px] font-semibold">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[var(--muted)]"><span>{coin.holders} владельцев</span>{hasMarketActivity?<span>объём {money(coin.volume)}</span>:<span className="text-[var(--accent)]">Новый рынок</span>}<span>комиссия {money(coin.creatorFees)}</span>{boostActive?<span className="text-[var(--accent)]">продвижение активно</span>:null}</div></div><div className="shrink-0 text-right"><p className="text-[11px]">{price(coin.currentPrice)}</p><p className="mt-1 text-[8px] text-[var(--muted)]">кап. {money(coin.marketCap)}</p></div></div>
+          {data.analyticsUnlocked&&hasMarketActivity?<div className="mt-2 flex flex-wrap gap-1.5">{[["Покупатели",coin.uniqueBuyers??0],["Удержание",`${coin.buyerRetentionPct??0}%`],["Buy/Sell",coin.buySellRatio??0]].map(([label,value])=><span key={String(label)} className="mxm-creator-metric-pill"><small>{label}</small><b>{value}</b></span>)}</div>:null}
+        </Link>;
+      })}</div>:<div className="p-8 text-center"><p className="text-xs text-[var(--muted)]">Вы ещё не запускали мемкоины.</p><Link href="/create" className="mt-3 inline-flex text-[9px] text-[var(--accent)]">Запустить первый</Link></div>}
     </section>
   </div>;
 }

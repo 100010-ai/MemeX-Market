@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { evaluatePlayerMarketHandoff } from "@/lib/npc-market";
+import { parseEconomyAmount } from "@/lib/economy";
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
@@ -17,10 +18,12 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID подарка" }, { status: 400 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  const price = body.price === null || body.price === "" || body.price === undefined ? null : Number(body.price);
-  const durationDays = body.durationDays == null ? null : Number(body.durationDays);
-  if (price !== null && (!Number.isFinite(price) || price <= 0)) return NextResponse.json({ error: "Некорректная цена лота" }, { status: 400 });
-  if (durationDays !== null && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 30)) return NextResponse.json({ error: "Срок продажи должен быть от 1 до 30 дней" }, { status: 400 });
+  const hasPrice = body.price !== null && body.price !== "" && body.price !== undefined;
+  const price = hasPrice ? parseEconomyAmount(body.price) : null;
+  const hasDuration = body.durationDays !== null && body.durationDays !== "" && body.durationDays !== undefined;
+  const durationDays = hasDuration ? parseEconomyAmount(body.durationDays) : null;
+  if (hasPrice && (price == null || price <= 0 || price > 1_000_000_000)) return NextResponse.json({ error: "Некорректная цена лота" }, { status: 400 });
+  if (hasDuration && (durationDays == null || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 30)) return NextResponse.json({ error: "Срок продажи должен быть от 1 до 30 дней" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("list_virtual_gift_v2", { p_profile_id: profile.id, p_virtual_gift_id: id, p_price: price, p_duration_days: durationDays });
   if (error) return NextResponse.json({ error: publicBusinessError(error, "Не удалось выставить подарок") }, { status: 400 });

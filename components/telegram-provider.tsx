@@ -403,6 +403,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       || (device.deviceMemory != null && device.deviceMemory <= 4)
       || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)
     );
+    const root = document.documentElement;
+    root.classList.toggle("mxm-device-constrained", constrainedDevice);
     for (const href of primaryRoutes) router.prefetch(href);
 
     const criticalRequests = [
@@ -450,7 +452,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       else window.setTimeout(warmSecondary, 180);
     });
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; root.classList.remove("mxm-device-constrained"); };
   }, [profileId, isControl, isPublic, router]);
 
   const value = useMemo(() => ({ profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);

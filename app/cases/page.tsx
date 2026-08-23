@@ -177,7 +177,8 @@ export default function CasesPage() {
       });
 
       const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      revealTimerRef.current = window.setTimeout(finishReveal, reducedMotion ? 180 : 1950);
+      const revealMs = result.reward.rarity === "legendary" ? 2300 : result.reward.rarity === "epic" ? 2100 : result.reward.rarity === "rare" ? 1900 : 1650;
+      revealTimerRef.current = window.setTimeout(finishReveal, reducedMotion ? 180 : revealMs);
     } catch (cause) {
       pendingRevealRef.current = null;
       setOpening(false);
@@ -219,7 +220,7 @@ export default function CasesPage() {
 
     <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
       <section className="min-w-0">
-        <div className={`mxm-case-stage-compact ${opening ? "is-opening" : ""} ${reward ? "has-reward" : ""}`}>
+        <div data-case-series={current?.sku || "case_starter"} className={`mxm-case-stage-compact ${opening ? "is-opening" : ""} ${reward ? `has-reward is-${reward.rarity}` : ""}`}>
           {reel && reelPhase !== "revealed" ? <div className="mxm-case-reel-wrap" aria-live="polite">
             <div className="mxm-case-reel-pointer" aria-hidden="true" />
             <div className="mxm-case-reel-fade is-left" aria-hidden="true" />

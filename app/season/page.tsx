@@ -27,7 +27,7 @@ function rewardIcon(kind: string | undefined) {
 }
 
 export default function SeasonPage() {
-  const { haptic } = useTelegramProfile();
+  const { haptic, refreshProfile } = useTelegramProfile();
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export default function SeasonPage() {
       const result = await apiFetch<{ status: string; reward?: Reward }>("/api/season", { method: "POST", body: JSON.stringify({ level, track }) });
       if (result.status !== "claimed") throw new Error("Награда пока недоступна");
       haptic("heavy");
-      await load();
+      await Promise.all([load(), refreshProfile()]);
       setNotice("Сезонная награда зачислена");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось забрать награду"); }
     finally { setBusy(null); }
@@ -86,7 +86,7 @@ export default function SeasonPage() {
     try {
       const result = await apiFetch<ClaimAllResult>("/api/season", { method: "POST", body: JSON.stringify({ action: "claim_all" }) });
       haptic("heavy");
-      await load();
+      await Promise.all([load(), refreshProfile()]);
       setNotice(`Получено сезонных наград: ${Number(result.claimedCount || 0)}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось забрать награды"); }
     finally { setBusy(null); }
@@ -99,7 +99,7 @@ export default function SeasonPage() {
     try {
       const result = await apiFetch<{ status: string; reward?: Reward }>("/api/season", { method: "POST", body: JSON.stringify({ action: "claim_prestige", prestigeLevel }) });
       haptic("heavy");
-      await load();
+      await Promise.all([load(), refreshProfile()]);
       setNotice(result.reward?.label ? `Prestige ${prestigeLevel}: ${result.reward.label}` : `Prestige ${prestigeLevel} получен`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось получить Prestige-награду"); }
     finally { setBusy(null); }
@@ -121,7 +121,7 @@ export default function SeasonPage() {
       <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--accent)] text-[12px] font-black text-black">{data?.level || 1}</span>
         <div>
-          <div className="flex justify-between text-[8px] text-[var(--muted)]"><span>{data?.xp || 0} XP</span><span>{next ? `${next.requiredXp} XP` : "МАКС."}</span></div>
+          <div className="flex justify-between text-[8px] text-[var(--muted)]"><span>{data?.xp || 0} XP</span><span>{next && data ? `ещё ${Math.max(0, next.requiredXp - data.xp)} XP` : "МАКС."}</span></div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress}%` }} /></div>
         </div>
         {data?.premium

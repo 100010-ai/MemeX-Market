@@ -6,8 +6,8 @@ import { giftMarketSelect, mapGift } from "@/lib/mappers";
 
 type DbRow = Record<string, unknown>;
 
-const DEFAULT_GIFT_PAGE_SIZE = 180;
-const MAX_GIFT_PAGE_SIZE = 360;
+const DEFAULT_GIFT_PAGE_SIZE = 96;
+const MAX_GIFT_PAGE_SIZE = 192;
 
 function boundedInt(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number(value);

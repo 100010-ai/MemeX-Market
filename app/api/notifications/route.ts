@@ -12,17 +12,27 @@ async function GETHandler() {
   // Reading notifications must stay read-only. Preferences are backfilled by
   // the production migration; if a just-created profile has no row yet, the
   // same defaults are returned without an unnecessary write transaction.
-  const [notifications, preferences, unread] = await Promise.all([
+  const [notifications, preferences] = await Promise.all([
     supabase.from("user_notifications").select("id,kind,title,body,href,metadata,read_at,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(80),
     supabase.from("notification_preferences").select(notificationPreferenceKeys.join(",")).eq("profile_id", profile.id).maybeSingle(),
-    supabase.from("user_notifications").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).is("read_at", null),
   ]);
-  const error = notifications.error || preferences.error || unread.error;
+  const error = notifications.error || preferences.error;
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
+  const seen = new Map<string, number>();
+  const normalized = (notifications.data || []).map((row) => ({
+    id: String(row.id), kind: String(row.kind || "system"), title: String(row.title || ""), body: String(row.body || ""),
+    href: normalizeNotificationHref(row.href), metadata: row.metadata || {}, readAt: row.read_at || null, createdAt: String(row.created_at || ""),
+  })).filter((row) => {
+    const signature = `${row.kind}:${row.title.trim().toLowerCase()}:${row.body.trim().toLowerCase()}:${row.href || ""}`;
+    const createdAt = Date.parse(row.createdAt);
+    const previous = seen.get(signature);
+    if (Number.isFinite(createdAt)) seen.set(signature, createdAt);
+    return previous == null || !Number.isFinite(createdAt) || Math.abs(previous - createdAt) > 5 * 60_000;
+  });
   return NextResponse.json({
-    notifications: (notifications.data || []).map((row) => ({ id: String(row.id), kind: row.kind, title: row.title, body: row.body, href: normalizeNotificationHref(row.href), metadata: row.metadata || {}, readAt: row.read_at || null, createdAt: row.created_at })),
+    notifications: normalized,
     preferences: normalizeNotificationPreferences(preferences.data),
-    unreadCount: Number(unread.count || 0),
+    unreadCount: normalized.reduce((count, row) => count + (row.readAt ? 0 : 1), 0),
   }, { headers: { "cache-control": "private, no-store" } });
 }
 

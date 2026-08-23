@@ -3076,3 +3076,67 @@ button:disabled { -webkit-text-fill-color: currentColor; }
 [data-profile-frame-size="small"].mxm-profile-frame > span:first-child { border-radius:9px; }
 [data-profile-frame-size="small"] .mxm-profile-frame-mark,
 [data-profile-frame-size="small"] .mxm-profile-frame-orbit-dot { display:none; }
+
+/* v0.64.7 — release economy/performance polish */
+.mxm-vault-search {
+  display:flex;
+  min-height:34px;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--border-soft);
+  border-radius:12px;
+  background:rgba(255,255,255,.018);
+  padding:0 9px;
+  color:var(--muted);
+}
+.mxm-vault-search input {
+  min-width:0;
+  flex:1;
+  background:transparent;
+  color:#f2f5f8;
+  font-size:10px;
+  outline:none;
+}
+.mxm-vault-search input::placeholder { color:var(--muted-2); }
+.mxm-vault-search-clear {
+  display:grid;
+  width:22px;
+  height:22px;
+  flex:none;
+  place-items:center;
+  border-radius:8px;
+  color:var(--muted);
+}
+.mxm-vault-search-clear:active { background:rgba(255,255,255,.05); color:white; }
+
+/* Case series share the same compact reel, but no longer look like recolored clones. */
+.mxm-case-stage-compact[data-case-series="case_starter"] { background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.008)); }
+.mxm-case-stage-compact[data-case-series="case_market"] { background:linear-gradient(180deg,rgba(92,145,220,.07),rgba(255,255,255,.008) 62%); }
+.mxm-case-stage-compact[data-case-series="case_rare"] { background:linear-gradient(180deg,rgba(68,159,218,.085),rgba(20,46,65,.018) 65%); }
+.mxm-case-stage-compact[data-case-series="case_creator"] { background:linear-gradient(180deg,rgba(126,104,201,.08),rgba(35,27,62,.015) 65%); }
+.mxm-case-stage-compact[data-case-series="case_legendary"] { background:linear-gradient(180deg,rgba(197,159,73,.075),rgba(55,42,18,.012) 68%); }
+.mxm-case-stage-compact[data-case-series="case_vault"] { background:linear-gradient(180deg,rgba(155,167,180,.065),rgba(30,35,41,.015) 68%); }
+.mxm-case-stage-compact[data-case-series] { border-color:rgba(255,255,255,.065); }
+
+/* Frames remain readable in leaderboard/header sizes instead of turning into decorative noise. */
+[data-profile-frame-size="regular"] .mxm-profile-frame-orbit-dot { scale:.72; }
+[data-profile-frame-size="regular"] .mxm-profile-frame-mark { opacity:.72; }
+.mxm-device-constrained .mxm-profile-frame,
+.mxm-device-constrained .mxm-profile-frame::before,
+.mxm-device-constrained .mxm-profile-frame::after {
+  animation:none!important;
+  filter:none!important;
+}
+.mxm-device-constrained .mxm-profile-frame-orbit-dot { display:none!important; }
+
+/* Long mobile surfaces should not propagate overscroll into Telegram's host viewport. */
+.mxm-shell-content { overscroll-behavior-y:contain; }
+.mxm-device-constrained .mxm-case-reel-track,
+.mxm-device-constrained .mxm-case-reward-compact { filter:none!important; }
+.mxm-device-constrained .mxm-case-reward-compact::before { filter:none; opacity:.72; }
+
+@media (max-height:690px) and (pointer:coarse) {
+  .mxm-compact-page-head { margin-bottom:8px; padding-bottom:8px; }
+  .mxm-card { border-radius:14px; }
+  .mxm-shell-content { padding-top:10px; }
+}

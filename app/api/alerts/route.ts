@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { finiteNumber, nullableText, safeIsoDate, text } from "@/lib/safe-data";
+import { parseEconomyAmount } from "@/lib/economy";
 
 const kinds = new Set(["coin", "gift", "gift_collection"]);
 const directions = new Set(["below", "above"]);
@@ -63,8 +64,8 @@ async function POSTHandler(request: Request) {
 
   const kind = typeof body.kind === "string" && kinds.has(body.kind) ? body.kind : null;
   const direction = typeof body.direction === "string" && directions.has(body.direction) ? body.direction : null;
-  const targetPrice = Number(body.targetPrice);
-  if (!kind || !direction || !Number.isFinite(targetPrice) || targetPrice <= 0 || targetPrice > 1_000_000_000_000) return NextResponse.json({ error: "Некорректный алерт" }, { status: 400 });
+  const targetPrice = parseEconomyAmount(body.targetPrice);
+  if (!kind || !direction || targetPrice == null || targetPrice <= 0 || targetPrice > 1_000_000_000_000) return NextResponse.json({ error: "Некорректный алерт" }, { status: 400 });
 
   const row: Record<string, unknown> = { profile_id: profile.id, kind, direction, target_price: targetPrice, enabled: true };
   if (kind === "coin") row.coin_id = typeof body.coinId === "string" && validUuidLike(body.coinId) ? body.coinId : null;

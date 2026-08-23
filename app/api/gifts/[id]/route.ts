@@ -28,12 +28,12 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     const nowIso = new Date().toISOString();
 
     const [tradesResult, offersResult, advancedOffersResult, collectionResult, itemStatsResult, listingEventsResult, cartResult, watchedResult, snapshot] = await Promise.all([
-      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(40),
-      supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(30),
-      supabase.from("advanced_gift_offers_v056").select("id,buyer_profile_id,base_name,scope_type,trait_value,amount,max_fills,filled_count,status,created_at,expires_at").eq("base_name", baseName).eq("status", "active").gt("expires_at", nowIso).order("amount", { ascending: false }).limit(50),
+      supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(30),
+      supabase.from("gift_offers").select("id,buyer_profile_id,amount,status,created_at,expires_at").eq("virtual_gift_id", virtualGiftId).eq("status", "pending").order("amount", { ascending: false }).limit(20),
+      supabase.from("advanced_gift_offers_v056").select("id,buyer_profile_id,base_name,scope_type,trait_value,amount,max_fills,filled_count,status,created_at,expires_at").eq("base_name", baseName).eq("status", "active").gt("expires_at", nowIso).order("amount", { ascending: false }).limit(30),
       supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
       supabase.rpc("gift_item_market_stats", { p_virtual_gift_id: virtualGiftId }).single(),
-      supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(60),
+      supabase.from("gift_listing_events").select("id,actor_profile_id,kind,price,previous_price,created_at").eq("virtual_gift_id", virtualGiftId).order("created_at", { ascending: false }).limit(40),
       supabase.from("market_cart_items").select("virtual_gift_id").eq("profile_id", profile.id).eq("virtual_gift_id", virtualGiftId).maybeSingle(),
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "gift").eq("virtual_gift_id", virtualGiftId).maybeSingle(),
       getProfileSnapshot(profile),

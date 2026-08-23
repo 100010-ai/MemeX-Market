@@ -182,6 +182,9 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
       haptic("heavy");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось выполнить действие");
+      // If another player bought/changed the lot first, immediately replace stale
+      // listing data instead of leaving a dead CTA on screen.
+      if (key === "buy" || key.startsWith("accept-")) await load().catch(() => undefined);
     } finally {
       setBusy(null);
     }
@@ -320,6 +323,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             <Trait label="Фон" value={gift.backdropName} rarity={gift.backdropRarityPerMille} floor={data.traitStats.backdropFloor} />
             <Trait label="Символ" value={gift.symbolName} rarity={gift.symbolRarityPerMille} floor={data.traitStats.symbolFloor} />
           </div>
+          <div className="flex items-center justify-between gap-2 px-1 text-[9px] text-[var(--muted)]"><span>Сравнить с рынком</span><Link href={`/market?tab=gifts&collection=${encodeURIComponent(gift.baseName)}`} className="text-[var(--accent)]">Похожие лоты</Link></div>
 
           {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие предложения</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
 
@@ -368,7 +372,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
 
           <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
             <div className="flex items-center gap-2"><BellRing size={14} className="text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">Ценовое уведомление</p><p className="text-[9px] text-[var(--muted)]">Уведомить, когда цена станет ниже заданной</p></div></div>
-            <div className="mt-2 flex gap-2"><input value={alertPrice} onChange={(event) => setAlertPrice(event.target.value)} inputMode="decimal" placeholder={String(gift.listingPrice || gift.referencePrice || gift.collectionFloor || "Цена TON")} className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs outline-none" /><button onClick={() => void createAlert()} disabled={busy !== null} className="rounded-[14px] bg-[var(--panel-3)] px-3 text-[10px]">Создать</button></div>
+            <div className="mt-2 flex gap-2"><input value={alertPrice} onChange={(event) => setAlertPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={String(gift.listingPrice || gift.referencePrice || gift.collectionFloor || "Цена TON")} className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs outline-none" /><button onClick={() => void createAlert()} disabled={busy !== null} className="rounded-[14px] bg-[var(--panel-3)] px-3 text-[10px]">Создать</button></div>
           </div>
 
           <div className="mxm-hscroll gap-1 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-1">
@@ -402,7 +406,7 @@ function OwnerTradePanel({ gift, listingPrice, setListingPrice, listingDays, set
       <button type="button" onClick={() => setSuggested(premiumPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">+10%</span><span className="mt-0.5 block text-[10px] font-medium">{premiumPrice == null ? "—" : money(premiumPrice)}</span></button>
     </div> : null}
     <div className="grid grid-cols-[minmax(0,1fr)_84px] gap-2">
-      <input value={listingPrice} onChange={(event) => setListingPrice(event.target.value)} inputMode="decimal" placeholder={gift.listingPrice == null ? "Цена" : String(gift.listingPrice)} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[#555960]" />
+      <input value={listingPrice} onChange={(event) => setListingPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={gift.listingPrice == null ? "Цена" : String(gift.listingPrice)} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[#555960]" />
       <select value={listingDays} onChange={(event) => setListingDays(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={3}>3 дн</option><option value={7}>7 дн</option><option value={14}>14 дн</option><option value={30}>30 дн</option></select>
     </div>
     <PrimaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0} onClick={() => onList(parsed)}><Tag size={14} className="mr-1 inline" />{busy === "list" ? "…" : gift.status === "listed" ? "Обновить цену" : "Выставить"}</PrimaryButton>
@@ -435,7 +439,7 @@ function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offe
       <SecondaryButton className="mt-2 flex w-full items-center justify-center gap-2" disabled={busy !== null} onClick={onCart}><ShoppingCart size={14} />{busy === "cart" ? "…" : inCart ? "Убрать из корзины" : "Добавить в корзину"}</SecondaryButton>
     </> : <div className="rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5 text-center text-xs text-[var(--muted)]">Не выставлен</div>}
     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_84px] gap-2">
-      <input value={offerAmount} onChange={(event) => setOfferAmount(event.target.value)} inputMode="decimal" placeholder={myOffer ? `Текущий ${myOffer.amount}` : "Сумма предложения"} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none" />
+      <input value={offerAmount} onChange={(event) => setOfferAmount(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={myOffer ? `Текущий ${myOffer.amount}` : "Сумма предложения"} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none" />
       <select value={offerHours} onChange={(event) => setOfferHours(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={24}>24 ч</option><option value={72}>72 ч</option><option value={168}>7 дн</option></select>
     </div>
     <SecondaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0 || parsed > availableBalance + (myOffer?.amount || 0)} onClick={() => onOffer(parsed)}>{busy === "offer" ? "…" : myOffer ? "Обновить предложение" : "Сделать предложение"}</SecondaryButton>

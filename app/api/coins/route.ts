@@ -6,6 +6,7 @@ import { removeCoinImage, uploadCoinImage } from "@/lib/coin-media";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { finiteNumber, safeIsoDate } from "@/lib/safe-data";
+import { parseEconomyAmount } from "@/lib/economy";
 
 export const runtime = "nodejs";
 
@@ -97,9 +98,9 @@ async function POSTHandler(request: Request) {
       symbol = String(form.get("symbol") || "").trim().toUpperCase();
       description = String(form.get("description") || "").trim();
       requestId = String(form.get("requestId") || "").trim();
-      initialBuy = Number(form.get("initialBuy"));
-      startPrice = Number(form.get("startPrice"));
-      floorPrice = Number(form.get("floorPrice"));
+      initialBuy = parseEconomyAmount(form.get("initialBuy")) ?? Number.NaN;
+      startPrice = parseEconomyAmount(form.get("startPrice")) ?? Number.NaN;
+      floorPrice = parseEconomyAmount(form.get("floorPrice")) ?? Number.NaN;
       const image = form.get("image");
       const validationError = validate(name, symbol, description);
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
@@ -111,9 +112,9 @@ async function POSTHandler(request: Request) {
       symbol = String(body.symbol || "").trim().toUpperCase();
       description = String(body.description || "").trim();
       requestId = String(body.requestId || "").trim();
-      initialBuy = Number(body.initialBuy);
-      startPrice = Number(body.startPrice);
-      floorPrice = Number(body.floorPrice);
+      initialBuy = parseEconomyAmount(body.initialBuy) ?? Number.NaN;
+      startPrice = parseEconomyAmount(body.startPrice) ?? Number.NaN;
+      floorPrice = parseEconomyAmount(body.floorPrice) ?? Number.NaN;
       const validationError = validate(name, symbol, description);
       if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     }

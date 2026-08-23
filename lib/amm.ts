@@ -8,8 +8,10 @@ export function calculateCoinQuote(args: {
   tokenReserve: number;
   quoteReserve: number;
   currentPrice: number;
+  feeRate?: number;
 }): CoinQuote | null {
   const { side, amount, tokenReserve, quoteReserve, currentPrice } = args;
+  const feeRate = Number.isFinite(args.feeRate) && Number(args.feeRate) >= 0 && Number(args.feeRate) < 1 ? Number(args.feeRate) : COIN_FEE_RATE;
   if (![amount, tokenReserve, quoteReserve, currentPrice].every(Number.isFinite)) return null;
   if (amount <= 0 || tokenReserve <= 0 || quoteReserve <= 0 || currentPrice <= 0) return null;
 
@@ -17,7 +19,7 @@ export function calculateCoinQuote(args: {
   if (!Number.isFinite(k) || k <= 0) return null;
 
   if (side === "buy") {
-    const feeAmount = amount * COIN_FEE_RATE;
+    const feeAmount = amount * feeRate;
     const quoteNet = amount - feeAmount;
     const newQuote = quoteReserve + quoteNet;
     const newToken = k / newQuote;
@@ -40,7 +42,7 @@ export function calculateCoinQuote(args: {
   const newToken = tokenReserve + amount;
   const newQuote = k / newToken;
   const quoteGross = quoteReserve - newQuote;
-  const feeAmount = quoteGross * COIN_FEE_RATE;
+  const feeAmount = quoteGross * feeRate;
   const outputAmount = quoteGross - feeAmount;
   if (!Number.isFinite(outputAmount) || outputAmount <= 0) return null;
   const executionPrice = outputAmount / amount;

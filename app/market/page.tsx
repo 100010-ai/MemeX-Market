@@ -281,9 +281,14 @@ export default function MarketPage() {
   useEffect(() => {
     const node = loadMoreRef.current;
     if (!node || tab !== "gifts" || data.nextOffset == null || query.trim().length >= 2 || loadMoreError) return;
+    const device = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
+    const effectiveType = device.connection?.effectiveType || "";
+    const constrainedNetwork = Boolean(device.connection?.saveData || effectiveType.includes("2g"));
+    // На слабой сети не тянем следующую страницу за сотни пикселей до viewport:
+    // пользователь всё ещё получает автоподгрузку, но без лишнего фонового трафика.
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreGifts();
-    }, { rootMargin: "280px 0px" });
+    }, { rootMargin: constrainedNetwork ? "72px 0px" : "280px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
   }, [tab, data.nextOffset, query, loadMoreError, loadMoreGifts]);

@@ -1,8 +1,23 @@
-# MXM Market v0.64.5
+# MXM Market v0.64.7
 
 Telegram Mini App: simulated secondary market for Telegram collectible Gifts plus player-created memecoins. Next.js, TypeScript, Supabase/Postgres and Vercel.
 
 > MXM uses **virtual TON only**. It cannot be deposited, withdrawn or redeemed. Telegram collectible Gifts supply real public metadata/media references; ownership, listings, offers, trades and PnL inside MXM are simulated and never transfer the real Telegram collectible.
+
+## v0.64.7 — Economy & Performance Polish
+
+- **Economy boundaries:** user/admin amount parsing accepts decimal comma, rejects non-finite values and applies bounded trade/control limits before mutations.
+- **Memecoins:** quote/trade/order paths share normalized inputs and the configured fee rate; pristine-market, minimum-buy, sell-all and optimistic reserve states stay coherent.
+- **Gift Market:** slower networks prefetch less aggressively; purchase conflicts return authoritative state instead of leaving stale CTAs; Gift detail payloads are smaller.
+- **Portfolio:** smaller initial Gift pages, local Gift/coin search and preserved tab/sort state reduce mobile payload and navigation friction.
+- **Cases / Battle Pass:** case series now have restrained visual identities and rarity-aware reveal pacing; season claims refresh the shared profile immediately.
+- **Profile / progression:** profile identity is more compact/private, frames simplify automatically on constrained devices, and task/progression refreshes are throttled to avoid duplicate requests.
+- **Leaderboard / notifications:** tied top ranks no longer duplicate in the table; notification deduplication is server-side and limited to genuinely repeated events in a short window.
+- **Store / Creator / Control:** unavailable purchase states explain themselves, pristine creator coins avoid fake-looking analytics, and admin balance mutations are bounded on both client and server.
+- **Telegram/mobile:** constrained-device rendering reduces frame/effect cost and long surfaces avoid unnecessary off-screen work.
+- **Release tooling:** `pnpm run verify` remains the dependency-backed pre-deploy gate; `pnpm run verify:static` is an offline source/security gate only.
+
+No new SQL migration is introduced by v0.64.7. Deployments using the memecoin clean-launch model must already have `supabase/migrations/100002_memecoin_market_polish_v0644.sql` applied.
 
 ## Market 2.0 Economy Update
 

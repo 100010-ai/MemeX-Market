@@ -11,6 +11,7 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
 import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
 import { compact, money, percent, price } from "@/lib/format";
+import { MIN_COIN_BUY_TON, nonNegativeEconomyValue, parseEconomyAmount } from "@/lib/economy";
 import type { Candle, Coin, Trade } from "@/lib/types";
 
 const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
@@ -116,12 +117,14 @@ export default function CoinPage() {
   const realtimeReload = useCallback(() => { if (!tradeInFlight.current) void load(true); }, [load]);
 
   const max = useMemo(() => side === "buy" ? data?.availableBalance || 0 : data?.holding.availableQuantity || 0, [data, side]);
-  const numericAmount = Number(amount);
-  const validAmount = Boolean(data && Number.isFinite(numericAmount) && numericAmount > 0 && (sellAll && side === "sell" ? max > 0 : numericAmount <= max));
+  const parsedAmount = parseEconomyAmount(amount);
+  const numericAmount = parsedAmount ?? 0;
+  const belowMinimumBuy = side === "buy" && numericAmount > 0 && numericAmount < MIN_COIN_BUY_TON;
+  const validAmount = Boolean(data && parsedAmount != null && numericAmount > 0 && !belowMinimumBuy && (sellAll && side === "sell" ? max > 0 : numericAmount <= max));
   const quote = useMemo(() => {
     if (!data || !validAmount) return null;
     const input = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
-    return calculateCoinQuote({ side, amount: input, tokenReserve: data.coin.tokenReserve, quoteReserve: data.coin.quoteReserve, currentPrice: data.coin.currentPrice });
+    return calculateCoinQuote({ side, amount: input, tokenReserve: data.coin.tokenReserve, quoteReserve: data.coin.quoteReserve, currentPrice: data.coin.currentPrice, feeRate: Math.max(0, Number(data.economy.totalFeeBps || 0)) / 10_000 });
   }, [data, numericAmount, sellAll, side, validAmount]);
 
   function switchSide(next: "buy" | "sell") {
@@ -162,6 +165,10 @@ export default function CoinPage() {
     const oldAvailableQuantity = data.holding.availableQuantity;
     const oldCost = data.holding.costBasis;
     const nextTokenReserve = side === "buy" ? data.coin.tokenReserve - quote.outputAmount : data.coin.tokenReserve + inputAmount;
+    if (!Number.isFinite(nextTokenReserve) || nextTokenReserve <= 0) {
+      setError("Слишком крупная сделка для текущей ликвидности.");
+      return;
+    }
     const nextQuoteReserve = (data.coin.tokenReserve * data.coin.quoteReserve) / nextTokenReserve;
     const nextMarketCap = quote.projectedPrice * data.coin.totalSupply;
     const costReduction = side === "sell" && oldQuantity > 0 ? oldCost * Math.min(1, inputAmount / oldQuantity) : 0;
@@ -171,8 +178,8 @@ export default function CoinPage() {
       holding: side === "buy"
         ? { quantity: oldQuantity + quote.outputAmount, availableQuantity: oldAvailableQuantity + quote.outputAmount, costBasis: oldCost + inputAmount }
         : { quantity: Math.max(0, oldQuantity - inputAmount), availableQuantity: Math.max(0, oldAvailableQuantity - inputAmount), costBasis: Math.max(0, oldCost - costReduction) },
-      balance: side === "buy" ? data.balance - inputAmount : data.balance + quote.outputAmount,
-      availableBalance: side === "buy" ? data.availableBalance - inputAmount : data.availableBalance + quote.outputAmount,
+      balance: side === "buy" ? nonNegativeEconomyValue(data.balance - inputAmount) : data.balance + quote.outputAmount,
+      availableBalance: side === "buy" ? nonNegativeEconomyValue(data.availableBalance - inputAmount) : data.availableBalance + quote.outputAmount,
     };
 
     tradeInFlight.current = true;
@@ -255,7 +262,7 @@ export default function CoinPage() {
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
       <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
-        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value); setSellAll(false); }} inputMode="decimal" placeholder="0" className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
+        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
         <span className="text-[10px] text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span>
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2">
@@ -270,7 +277,8 @@ export default function CoinPage() {
         <QuoteCompact label="Влияние" value={`${quote.priceImpact.toFixed(2)}%`} warning={quote.priceImpact >= 10} />
       </div> : null}
 
-      {Number.isFinite(numericAmount) && numericAmount > max && !sellAll ? <p className="mt-1.5 text-[9px] text-[var(--negative)]">Недостаточно доступного баланса.</p> : null}
+      {belowMinimumBuy ? <p className="mt-1.5 text-[9px] text-[var(--muted)]">Минимум {MIN_COIN_BUY_TON} TON.</p> : null}
+      {parsedAmount != null && numericAmount > max && !sellAll ? <p className="mt-1.5 text-[9px] text-[var(--negative)]">Недостаточно доступного баланса.</p> : null}
       {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1.5 truncate text-[8px] text-[#d9c27a]">Заблокировано: {compact(data.economy.lock.remaining)} {coin.symbol}</p> : null}
       {tradeNotice ? <div aria-live="polite" className={`mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
       {error ? <div className="mt-1.5 line-clamp-2 text-[9px] text-[#ff9aa4]">{error}</div> : null}
@@ -296,7 +304,7 @@ export default function CoinPage() {
         <CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-[15px] font-semibold tracking-[-.02em]">{coin.name}</h1><span className="shrink-0 text-[9px] text-[var(--muted)]">${coin.symbol}</span></div>
-          <div className="mt-0.5 flex items-center gap-2"><span className="text-[12px] font-semibold tabular-nums">{price(coin.currentPrice)}</span><span className={`text-[9px] font-medium ${visibleChange >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(visibleChange)}</span>{pristineMarket ? <span className="text-[8px] text-[var(--muted-2)]">торгов пока нет</span> : null}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5"><span className="text-[12px] font-semibold tabular-nums">{price(coin.currentPrice)}</span><span className={`text-[9px] font-medium ${visibleChange >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(visibleChange)}</span>{pristineMarket ? <span className="text-[8px] text-[var(--muted-2)]">Новый рынок</span> : <><span className="text-[8px] text-[var(--muted-2)]">{money(coin.volume24h)} 24ч</span><span className="text-[8px] text-[var(--muted-2)]">{publicTradeCount} сделок</span></>}</div>
         </div>
       </section>
 

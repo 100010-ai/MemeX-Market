@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { MAX_COIN_TRADE_INPUT, MIN_COIN_BUY_TON, parseEconomyAmount } from "@/lib/economy";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { recordAppError } from "@/lib/error-inbox";
 
@@ -54,12 +55,15 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const kind = typeof body.kind === "string" && ["limit_buy", "limit_sell", "take_profit", "stop_loss"].includes(body.kind) ? body.kind : "";
-    const triggerPrice = Number(body.triggerPrice);
-    const inputAmount = Number(body.inputAmount);
+    const triggerPrice = parseEconomyAmount(body.triggerPrice);
+    const inputAmount = parseEconomyAmount(body.inputAmount);
     const requestKey = typeof body.requestKey === "string" ? body.requestKey.trim() : "";
     const durationDays = Math.min(config.remoteConfig.coinOrderMaxDays, Number(body.durationDays ?? 7));
-    if (!kind || !Number.isFinite(triggerPrice) || triggerPrice <= 0 || triggerPrice > 1_000_000_000_000 || !Number.isFinite(inputAmount) || inputAmount <= 0 || inputAmount > 1_000_000_000_000 || !/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey) || !Number.isInteger(durationDays) || durationDays < 1) {
+    if (!kind || triggerPrice == null || triggerPrice <= 0 || triggerPrice > MAX_COIN_TRADE_INPUT || inputAmount == null || inputAmount <= 0 || inputAmount > MAX_COIN_TRADE_INPUT || !/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey) || !Number.isInteger(durationDays) || durationDays < 1) {
       return NextResponse.json({ error: "Некорректные параметры ордера" }, { status: 400 });
+    }
+    if (kind === "limit_buy" && inputAmount < MIN_COIN_BUY_TON) {
+      return NextResponse.json({ error: `Минимальная сумма покупки — ${MIN_COIN_BUY_TON} TON` }, { status: 400 });
     }
     const supabase = getSupabaseAdmin();
     const { count, error: countError } = await supabase.from("coin_conditional_orders_v056").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).eq("status", "active");
