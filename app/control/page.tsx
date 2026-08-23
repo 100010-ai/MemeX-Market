@@ -14,7 +14,8 @@ type NpcState = { key:string; locked_until:string|null; last_tick_at:string|null
 type NpcLog = { id:string; virtual_gift_id:string|null; asset_id:string|null; npc_profile_id:string|null; fair_price:number|string; listing_price:number|string; pricing_mode:"normal"|"discount"|"rare_deal"; rarity_score:number|string; created_at:string };
 type TonApiState = { last_discovery_at:string|null; last_sync_at:string|null; last_error:string|null; lock_until:string|null; updated_at:string };
 type LiquidityState = { mode:"npc_bootstrap"|"player_only"; playerOnly:boolean; playerOwned:number; playerListed:number; activeSellers:number; npcListed:number; playerOwnedThreshold:number; playerListedThreshold:number; activeSellersThreshold:number; ready:boolean; transitionedAt:string|null };
-type Payload = { metrics:{ players:number;banned:number;hidden:number;coins:number;activeCoins:number;gifts:number;listedGifts:number;npcListings:number;catalogSources:number;tonapiAssets:number;tonapiVerified:number }; profiles:ProfileRow[]; missions:MissionRow[]; coins:CoinRow[]; gifts:GiftRow[]; audit:AuditRow[]; catalogSources:CatalogSource[]; npcState:NpcState|null; npcLog:NpcLog[]; tonapiState:TonApiState|null; liquidity:LiquidityState|null; checkedAt:string };
+type SchemaHealth = { ready:boolean; schemaVersion:number; requiredSchemaVersion:number; missingRequired:string[]; missingOptional:string[]; capabilities:Array<{key:string;label:string;required:boolean;ok:boolean;code:string|null}> };
+type Payload = { metrics:{ players:number;banned:number;hidden:number;coins:number;activeCoins:number;gifts:number;listedGifts:number;npcListings:number;catalogSources:number;tonapiAssets:number;tonapiVerified:number }; profiles:ProfileRow[]; missions:MissionRow[]; coins:CoinRow[]; gifts:GiftRow[]; audit:AuditRow[]; catalogSources:CatalogSource[]; npcState:NpcState|null; npcLog:NpcLog[]; tonapiState:TonApiState|null; liquidity:LiquidityState|null; schemaHealth:SchemaHealth; checkedAt:string };
 type Tab = "players"|"missions"|"coins"|"gifts"|"audit";
 const CONTROL_ACTION_LABELS: Record<string,string> = {
   "balance.adjust":"Баланс скорректирован", "balance.set":"Баланс установлен", "profile.set_xp":"XP обновлён",
@@ -111,6 +112,7 @@ export default function ControlPage(){
       {error?<div className="control-alert control-alert-error" role="alert">{error}</div>:null}{notice?<div className="control-alert control-alert-ok" role="status" aria-live="polite">{notice}</div>:null}
       {!data?<ControlLoading/>:<>
         <MetricStrip data={data}/>
+        <SchemaHealthStrip health={data.schemaHealth}/>
         {tab==="players"?<PlayersPanel rows={data.profiles} query={query} act={act} busy={busy}/>:null}
         {tab==="missions"?<MissionsPanel rows={data.missions} query={query} act={act} busy={busy}/>:null}
         {tab==="coins"?<CoinsPanel rows={data.coins} profiles={data.profiles} query={query} act={act} busy={busy}/>:null}
@@ -119,6 +121,14 @@ export default function ControlPage(){
       </>}
     </main>
   </div>;
+}
+
+function SchemaHealthStrip({health}:{health:SchemaHealth}){
+ const optionalFastPath=health.capabilities.find((item)=>item.key==="orders_fast_path");
+ return <div className={`control-schema-health ${health.ready?"is-ready":"is-error"}`}>
+  <div className="flex min-w-0 flex-1 items-center gap-2"><ShieldCheck size={13}/><div className="min-w-0"><p className="text-[10px] font-semibold">Schema {health.schemaVersion}/{health.requiredSchemaVersion}</p><p className="truncate text-[9px] text-[var(--muted)]">{health.ready?"Критические контракты готовы":`Не хватает: ${health.missingRequired.join(", ")}`}</p></div></div>
+  <div className="ml-auto flex items-center gap-2">{optionalFastPath&&!optionalFastPath.ok?<span className="text-[8px] text-[#e7c867]">Orders compat mode</span>:null}<Badge bad={!health.ready}>{health.ready?"READY":"SCHEMA"}</Badge></div>
+ </div>;
 }
 
 function MetricStrip({data}:{data:Payload}){const cards=[["Игроки",data.metrics.players,Users],["Забанены",data.metrics.banned,Ban],["Скрыты",data.metrics.hidden,EyeOff],["Коины",data.metrics.activeCoins,BarChart3],["Лоты",data.metrics.listedGifts,Gift]] as const;return <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">{cards.map(([label,value,Icon])=><div className="control-panel p-3" key={label}><div className="flex items-center gap-1.5 text-[10px] text-[var(--muted)]"><Icon size={12}/>{label}</div><div className="mt-2 text-lg font-semibold">{value}</div></div>)}</div>}

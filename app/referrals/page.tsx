@@ -8,6 +8,7 @@ import { money, ago } from "@/lib/format";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { rankLabel } from "@/lib/ui-copy";
+import { openTelegramLinkSafely } from "@/lib/telegram-webapp";
 
 type Payload = {
   code: string;
@@ -34,8 +35,7 @@ export default function ReferralsPage() {
   function share() {
     if (!data?.inviteLink) return;
     const url = `https://t.me/share/url?url=${encodeURIComponent(data.inviteLink)}&text=${encodeURIComponent(`Залетай в MXM — виртуальный рынок Telegram-подарков и мемкоинов.`)}`;
-    if (window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(url);
-    else window.open(url, "_blank");
+    openTelegramLinkSafely(url);
   }
 
   return <div className="mx-auto max-w-3xl">

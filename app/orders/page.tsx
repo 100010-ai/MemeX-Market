@@ -12,7 +12,14 @@ import { GiftMedia } from "@/components/gifts/gift-media";
 
 const realtimeGiftTables = ["virtual_gifts"];
 const realtimeOfferTables = ["gift_offers"];
-type Payload = { outgoing: GiftOffer[]; incoming: GiftOffer[]; listings: GiftAsset[]; counts?: { outgoing: number; incoming: number; listings: number }; truncated?: { outgoing: boolean; incoming: boolean; listings: boolean } };
+type Payload = {
+  outgoing: GiftOffer[];
+  incoming: GiftOffer[];
+  listings: GiftAsset[];
+  counts?: { outgoing: number; incoming: number; listings: number };
+  truncated?: { outgoing: boolean; incoming: boolean; listings: boolean };
+  capabilities?: { sellerScopedOffers?: boolean };
+};
 
 export default function OrdersPage() {
   const [data, setData] = useState<Payload>({ outgoing: [], incoming: [], listings: [] });
@@ -32,6 +39,17 @@ export default function OrdersPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  useEffect(() => {
+    if (data.capabilities?.sellerScopedOffers !== false) return;
+    // Compatibility mode for databases that have not applied the optimized
+    // seller_profile_id migration yet. Keep incoming offers fresh without a
+    // Realtime filter that references a column missing from that schema.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void load().catch(() => undefined);
+    }, 12_000);
+    return () => window.clearInterval(timer);
+  }, [data.capabilities?.sellerScopedOffers, load]);
   const realtimeReload = useCallback(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Не удалось обновить заявки")); }, [load]);
 
   async function act(id: string, action: "accept" | "reject" | "cancel") {
@@ -60,7 +78,7 @@ export default function OrdersPage() {
         debounceMs={900}
       />
       {profile?.id ? <RealtimeRefresh channelName="mxm-orders-offers-out" tables={realtimeOfferTables} filters={{ gift_offers: `buyer_profile_id=eq.${profile.id}` }} onChange={realtimeReload} debounceMs={650} /> : null}
-      {profile?.id ? <RealtimeRefresh channelName="mxm-orders-offers-in" tables={realtimeOfferTables} filters={{ gift_offers: `seller_profile_id=eq.${profile.id}` }} onChange={realtimeReload} debounceMs={650} /> : null}
+      {profile?.id && data.capabilities?.sellerScopedOffers === true ? <RealtimeRefresh channelName="mxm-orders-offers-in" tables={realtimeOfferTables} filters={{ gift_offers: `seller_profile_id=eq.${profile.id}` }} onChange={realtimeReload} debounceMs={650} /> : null}
 
       <div className="mb-3 flex items-end justify-between gap-3"><div><h1 className="text-[15px] font-semibold tracking-[-.02em]">Заявки и лоты</h1><p className="mt-1 text-[10px] text-[var(--muted)]">Предложения и активные лоты</p></div></div>
       <div className="mxm-segment mb-3">

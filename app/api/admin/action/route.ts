@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -465,7 +465,7 @@ async function POSTHandler(request: Request) {
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
   } catch (error) {
     console.error("admin action", action, error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Операция не выполнена" }, { status: 400 });
+    return apiFailure(error, "Операция не выполнена");
   }
 }
 export const POST = withApiErrors("app/api/admin/action/route.ts:POST", POSTHandler);

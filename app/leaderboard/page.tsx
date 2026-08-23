@@ -105,7 +105,7 @@ export default function LeaderboardPage() {
             {tablePlayers.map((player) => {
               const value = boardValue(player, board);
               const pnlBoard = board === "pnl" || board === "giftPnl" || board === "coinPnl";
-              return <Link href={`/u/${player.id}`} key={player.id} className={`grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 py-3 ${player.isMe ? "border-l-2 border-[var(--accent)] pl-2" : ""}`}>
+              return <Link href={`/u/${player.id}`} key={player.id} className={`mxm-row-interactive grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 py-3 ${player.isMe ? "border-l-2 border-[var(--accent)] pl-2" : ""}`}>
                 <div className={`text-center text-xs font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>{player.rank}</div>
                 <div className="flex min-w-0 items-center gap-2.5">
                   <ProfileAvatar photoUrl={player.photoUrl} name={player.name} equippedFrame={player.equippedFrame} size="small" />

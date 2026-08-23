@@ -17,9 +17,11 @@ type Snapshot = {
   apiInFlight: number;
   apiAverageMs: number;
   apiFailures: number;
+  apiSlow: number;
   realtimeChannels: number;
   realtimeSubscribed: number;
   realtimeDegraded: number;
+  realtimeFallbackPolls: number;
 };
 
 type PerformanceMemory = { usedJSHeapSize?: number };
@@ -66,9 +68,11 @@ export function PerfOverlay() {
         apiInFlight: api.inFlight,
         apiAverageMs: api.avgLatencyMs,
         apiFailures: api.failures,
+        apiSlow: api.slow,
         realtimeChannels: realtime.channels,
         realtimeSubscribed: realtime.subscribed,
         realtimeDegraded: realtime.degraded,
+        realtimeFallbackPolls: realtime.fallbackPolls,
       });
     }, 650);
     return () => { cancelAnimationFrame(raf); window.clearInterval(timer); };
@@ -80,8 +84,8 @@ export function PerfOverlay() {
       <div>FPS <b className={snapshot.fps < 45 ? "text-[#ff8c95]" : "text-[#79dcb6]"}>{snapshot.fps}</b> · DOM {snapshot.dom}</div>
       <div>MEDIA {snapshot.animationPermits}/{snapshot.animationCandidates} · max {snapshot.animationLimit}</div>
       <div>LOT {snapshot.lottieCacheEntries} · {snapshot.motionPaused ? "paused" : "run"}</div>
-      <div>API {snapshot.apiInFlight} live · {snapshot.apiAverageMs}ms · err {snapshot.apiFailures}</div>
-      <div>WS {snapshot.realtimeSubscribed}/{snapshot.realtimeChannels}{snapshot.realtimeDegraded ? ` · bad ${snapshot.realtimeDegraded}` : ""}</div>
+      <div>API {snapshot.apiInFlight} live · {snapshot.apiAverageMs}ms · err {snapshot.apiFailures}{snapshot.apiSlow ? ` · slow ${snapshot.apiSlow}` : ""}</div>
+      <div>WS {snapshot.realtimeSubscribed}/{snapshot.realtimeChannels}{snapshot.realtimeDegraded ? ` · bad ${snapshot.realtimeDegraded}` : ""}{snapshot.realtimeFallbackPolls ? ` · poll ${snapshot.realtimeFallbackPolls}` : ""}</div>
       {snapshot.memoryMb != null ? <div>HEAP {snapshot.memoryMb} MB</div> : null}
     </div>
   );

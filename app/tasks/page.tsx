@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import type { Mission, MissionPeriod } from "@/lib/types";
 import { money } from "@/lib/format";
 import { useTelegramProfile } from "@/components/telegram-provider";
+import { openTelegramLinkSafely } from "@/lib/telegram-webapp";
 
 const sectionMeta: Record<MissionPeriod, { title: string; icon: typeof Gift }> = {
   onboarding: { title: "Старт", icon: Gift },
@@ -93,8 +94,7 @@ export default function TasksPage() {
   }
 
   function openChannel(url: string) {
-    if (window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(url);
-    else window.open(url, "_blank", "noopener,noreferrer");
+    openTelegramLinkSafely(url);
   }
 
   async function verifyChannel() {
@@ -153,7 +153,7 @@ export default function TasksPage() {
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
       {error ? <div className="mxm-alert mxm-alert-error mb-4">{error}</div> : null}
-      {notice ? <div className="mxm-alert mb-4" role="status" aria-live="polite">{notice}</div> : null}
+      {notice ? <div className="mxm-alert mxm-success-pop mb-4" role="status" aria-live="polite">{notice}</div> : null}
 
       <section className="mb-7 flex items-center gap-2 border-y border-[var(--border-soft)] py-3">
         <TicketCheck size={14} className="shrink-0 text-[var(--muted)]" />

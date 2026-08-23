@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types";
 import { apiFetch, prefetchApi, setApiCacheNamespace } from "@/lib/api";
-import { telegramVersionAtLeast } from "@/lib/telegram-webapp";
+import { telegramCapabilitySnapshot, telegramSupports } from "@/lib/telegram-webapp";
+import { getClientPerformanceProfile } from "@/lib/client-performance";
 
 type TelegramContextValue = {
   profile: Profile | null;
@@ -90,7 +91,7 @@ function prepareWebApp() {
   // WebApp protocol is 6.0, but calling them then logs noisy unsupported API
   // warnings. Gate protocol-versioned methods explicitly instead of relying
   // on optional chaining alone.
-  if (telegramVersionAtLeast(webApp, "6.1")) {
+  if (telegramSupports(webApp, "colors")) {
     webApp.setHeaderColor?.("#07090c");
     webApp.setBackgroundColor?.("#07090c");
   }
@@ -155,7 +156,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
   const haptic = useCallback((style: "light" | "medium" | "heavy" = "light") => {
     const webApp = window.Telegram?.WebApp;
-    if (!telegramVersionAtLeast(webApp, "6.1")) return;
+    if (!telegramSupports(webApp, "haptics")) return;
     webApp?.HapticFeedback?.impactOccurred(style);
   }, []);
 
@@ -308,7 +309,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     const webApp = window.Telegram?.WebApp;
     document.addEventListener("visibilitychange", checkIdentity);
     window.addEventListener("focus", checkIdentity);
-    const supportsActivationEvent = telegramVersionAtLeast(webApp, "8.0");
+    const supportsActivationEvent = telegramSupports(webApp, "activationEvent");
     if (supportsActivationEvent) webApp?.onEvent?.("activated", checkIdentity);
     return () => {
       document.removeEventListener("visibilitychange", checkIdentity);
@@ -318,9 +319,24 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, [isControl, isPublic, profile?.telegramId]);
 
   useEffect(() => {
+    const root = document.documentElement;
+    const capabilities = telegramCapabilitySnapshot(window.Telegram?.WebApp);
+    root.dataset.telegramVersion = capabilities.version;
+    root.dataset.telegramSafeArea = capabilities.safeArea ? "1" : "0";
+    root.dataset.telegramBackButton = capabilities.backButton ? "1" : "0";
+    root.dataset.telegramInvoice = capabilities.invoice ? "1" : "0";
+    return () => {
+      delete root.dataset.telegramVersion;
+      delete root.dataset.telegramSafeArea;
+      delete root.dataset.telegramBackButton;
+      delete root.dataset.telegramInvoice;
+    };
+  }, []);
+
+  useEffect(() => {
     const webApp = window.Telegram?.WebApp;
     const root = document.documentElement;
-    const supportsSafeArea = telegramVersionAtLeast(webApp, "8.0");
+    const supportsSafeArea = telegramSupports(webApp, "safeArea");
     const syncViewport = () => {
       const viewportHeight = Number(webApp?.viewportHeight || window.visualViewport?.height || window.innerHeight);
       const stableHeight = Number(webApp?.viewportStableHeight || viewportHeight);
@@ -357,7 +373,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
-    if (!telegramVersionAtLeast(webApp, "6.1")) return;
+    if (!telegramSupports(webApp, "backButton")) return;
     const backButton = webApp?.BackButton;
     if (!backButton) return;
     const rootRoutes = new Set(["/", "/market", "/orders", "/hub", "/tasks", "/vault", "/profile"]);
@@ -392,17 +408,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
     const primaryRoutes = ["/hub", "/market", "/orders", "/tasks", "/vault"];
     const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/progression", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
-    const device = navigator as Navigator & {
-      deviceMemory?: number;
-      connection?: { saveData?: boolean; effectiveType?: string };
-    };
-    const effectiveType = device.connection?.effectiveType || "";
-    const constrainedDevice = Boolean(
-      device.connection?.saveData
-      || effectiveType.includes("2g")
-      || (device.deviceMemory != null && device.deviceMemory <= 4)
-      || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)
-    );
+    const performanceProfile = getClientPerformanceProfile();
+    const constrainedDevice = performanceProfile.constrained;
     const root = document.documentElement;
     root.classList.toggle("mxm-device-constrained", constrainedDevice);
     for (const href of primaryRoutes) router.prefetch(href);

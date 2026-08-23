@@ -1,0 +1,34 @@
+MemeX Market v0.64.9 — final verification
+========================================
+
+Scope
+-----
+20-point Stability & Visual Consistency pass over existing systems, Telegram compatibility,
+API contracts, Supabase compatibility, Realtime and observability.
+
+Static/source verification
+--------------------------
+node scripts/verify.mjs --static: PASS
+TS/TSX parser: 187 files, 0 syntax errors
+Local import scan: 187 source files, 0 broken local imports
+CSS brace balance: 1031 open / 1031 close
+API contract audit: PASS (6 checks; 81 API route files / 99 exported handlers)
+Release product/security gate: 202 PASS / 0 FAIL
+Direct app/components openTelegramLink calls outside compatibility helper: 0
+Migration 100004 structural sanity: PASS (balanced function bodies + transaction + PGRST reload)
+
+Dependency-backed verification
+------------------------------
+Project node_modules are not present in the supplied source tree.
+The environment has a global TypeScript binary, but project framework/dependency typings are unavailable,
+so its raw output is dependency-noise and is not reported as a green project typecheck.
+Corepack also cannot fetch pnpm@10.15.0 from registry.npmjs.org in this container.
+Therefore this file DOES NOT claim a successful `pnpm run verify` or `next build`.
+Run after dependency installation in CI/Vercel/local:
+  pnpm install --frozen-lockfile
+  pnpm run verify
+
+Database
+--------
+Apply supabase/migrations/100004_schema_health_v0649.sql before v0.64.9 deployment.
+The migration is idempotent and does not fake/increment the economic schema version.

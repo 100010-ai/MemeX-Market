@@ -287,7 +287,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
         </section>
 
         <section className="min-w-0 space-y-3">
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
+          <div className="mxm-surface p-3">
             <div className="mxm-gift-metrics grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               <Metric label="Цена" value={gift.listingPrice == null ? "—" : money(gift.listingPrice)} />
               <Metric label="Floor" value={data.traitStats.collectionFloor == null ? "—" : money(data.traitStats.collectionFloor)} />
@@ -317,19 +317,9 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
             </details>
           </div>
 
-          <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
-            <Link href={`/collections/${encodeURIComponent(gift.baseName)}`} className="block"><Trait label="Коллекция" value={gift.baseName} rarity={null} floor={data.traitStats.collectionFloor} /></Link>
-            <Trait label="Модель" value={gift.modelName} rarity={gift.modelRarityPerMille} floor={data.traitStats.modelFloor} />
-            <Trait label="Фон" value={gift.backdropName} rarity={gift.backdropRarityPerMille} floor={data.traitStats.backdropFloor} />
-            <Trait label="Символ" value={gift.symbolName} rarity={gift.symbolRarityPerMille} floor={data.traitStats.symbolFloor} />
-          </div>
-          <div className="flex items-center justify-between gap-2 px-1 text-[9px] text-[var(--muted)]"><span>Сравнить с рынком</span><Link href={`/market?tab=gifts&collection=${encodeURIComponent(gift.baseName)}`} className="text-[var(--accent)]">Похожие лоты</Link></div>
-
-          {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие предложения</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
-
           {error ? <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
 
-          <div className="mxm-gift-trade-panel rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
+          <div className="mxm-gift-trade-panel mxm-surface p-3">
             {gift.isBurned ? (
               <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-3 text-xs text-[#ff9aa4]">Telegram пометил этот подарок как сожжённый. В MXM для него отключены продажа, предложения и покупки.</div>
             ) : data.isOwner ? (
@@ -367,13 +357,23 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined}
               />
             )}
-            <p className="mt-2 text-[9px] text-[var(--muted-2)]">Виртуальная сделка внутри MXM.</p>
+            
           </div>
 
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-3">
-            <div className="flex items-center gap-2"><BellRing size={14} className="text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="text-xs font-medium">Ценовое уведомление</p><p className="text-[9px] text-[var(--muted)]">Уведомить, когда цена станет ниже заданной</p></div></div>
-            <div className="mt-2 flex gap-2"><input value={alertPrice} onChange={(event) => setAlertPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={String(gift.listingPrice || gift.referencePrice || gift.collectionFloor || "Цена TON")} className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-xs outline-none" /><button onClick={() => void createAlert()} disabled={busy !== null} className="rounded-[14px] bg-[var(--panel-3)] px-3 text-[10px]">Создать</button></div>
+          <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
+            <Link href={`/collections/${encodeURIComponent(gift.baseName)}`} className="block"><Trait label="Коллекция" value={gift.baseName} rarity={null} floor={data.traitStats.collectionFloor} /></Link>
+            <Trait label="Модель" value={gift.modelName} rarity={gift.modelRarityPerMille} floor={data.traitStats.modelFloor} />
+            <Trait label="Фон" value={gift.backdropName} rarity={gift.backdropRarityPerMille} floor={data.traitStats.backdropFloor} />
+            <Trait label="Символ" value={gift.symbolName} rarity={gift.symbolRarityPerMille} floor={data.traitStats.symbolFloor} />
           </div>
+          <div className="flex items-center justify-between gap-2 px-1 text-[9px] text-[var(--muted)]"><span>Сравнить с рынком</span><Link href={`/market?tab=gifts&collection=${encodeURIComponent(gift.baseName)}`} className="text-[var(--accent)]">Похожие лоты</Link></div>
+
+          {data.isOwner && data.advancedOffers.length ? <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]"><div className="border-b border-[var(--border-soft)] px-3 py-2.5"><p className="text-xs font-medium">Подходящие предложения</p></div><div className="divide-y divide-[var(--border-soft)]">{data.advancedOffers.slice(0, 8).map((offer) => <div key={offer.id} className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{offer.buyerName}</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{advancedScopeLabel(offer)} · ещё {timeUntil(offer.expiresAt)}</p></div><span className="flex shrink-0 items-center gap-1 text-xs font-semibold"><Gem size={10} fill="currentColor" />{money(offer.amount)}</span><button type="button" disabled={busy !== null} onClick={() => void run(`accept-advanced-${offer.id}`, () => apiFetch(`/api/market/offers/${offer.id}`, { method: "POST", body: JSON.stringify({ action: "accept", virtualGiftId: canonicalGiftId }) }))} className="rounded-[14px] bg-[var(--accent)] px-2.5 py-2 text-[10px] font-semibold text-black disabled:opacity-50">Принять</button></div>)}</div></div> : null}
+
+          <details className="mxm-gift-market-details mxm-surface px-3">
+            <summary><span className="inline-flex items-center gap-1.5"><BellRing size={12} className="text-[var(--accent)]" />Уведомить о цене</span></summary>
+            <div className="flex gap-2 border-t border-[var(--border-soft)] py-3"><input value={alertPrice} onChange={(event) => setAlertPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={String(gift.listingPrice || gift.referencePrice || gift.collectionFloor || "Цена TON")} className="mxm-input min-w-0 flex-1 !py-2 !text-[10px]" /><button onClick={() => void createAlert()} disabled={busy !== null} className="mxm-secondary-action mxm-pressable shrink-0">Создать</button></div>
+          </details>
 
           <div className="mxm-hscroll gap-1 rounded-[18px] border border-[var(--border)] bg-[var(--panel)] p-1">
             <TabButton active={tab === "activity"} onClick={() => void openTab("activity")} icon={<History size={12} />} label="История" />

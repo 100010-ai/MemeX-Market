@@ -2,7 +2,7 @@ import Image from "next/image";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`mxm-card ${className}`}>{children}</section>;
+  return <section className={`mxm-card mxm-surface-block ${className}`}>{children}</section>;
 }
 
 export function SectionTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
@@ -35,13 +35,25 @@ export function CoinAvatar({ symbol, imageUrl = null, size = "md" }: { symbol: s
 }
 
 export function PrimaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`mxm-primary-action ${className}`}>{children}</button>;
+  return <button {...props} className={`mxm-primary-action mxm-pressable ${className}`}>{children}</button>;
 }
 
 export function SecondaryButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`border-b border-[var(--border)] px-1 py-2 text-[11px] text-[var(--text)] transition hover:border-white active:opacity-70 disabled:opacity-40 ${className}`}>{children}</button>;
+  return <button {...props} className={`mxm-secondary-action mxm-pressable ${className}`}>{children}</button>;
 }
 
 export function Chip({ children, active = false }: { children: ReactNode; active?: boolean }) {
   return <span className={`inline-flex h-7 items-center border-b px-0.5 text-[10px] ${active ? "border-white text-white" : "border-transparent text-[#9098a1]"}`}>{children}</span>;
+}
+
+export function IconButton({ className = "", children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button {...props} className={`mxm-icon-action mxm-pressable ${className}`}>{children}</button>;
+}
+
+export function InlineNotice({ children, tone = "neutral", className = "" }: { children: ReactNode; tone?: "neutral" | "error" | "success"; className?: string }) {
+  return <div className={`mxm-inline-notice is-${tone} ${className}`} role={tone === "error" ? "alert" : "status"}>{children}</div>;
+}
+
+export function CompactEmpty({ icon, title, action, className = "" }: { icon?: ReactNode; title: string; action?: ReactNode; className?: string }) {
+  return <div className={`mxm-empty-state ${className}`}>{icon ? <span className="mxm-empty-icon">{icon}</span> : null}<p>{title}</p>{action ? <div className="mt-3">{action}</div> : null}</div>;
 }

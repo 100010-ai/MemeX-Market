@@ -2,6 +2,7 @@ import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { inspectSchemaHealth } from "@/lib/schema-health";
 
 export const runtime = "nodejs";
 
@@ -86,11 +87,12 @@ async function GETHandler(request: Request) {
         .limit(60),
     ]);
 
-    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult, liquidityResult] = await Promise.all([
+    const [tonapiCountResult, tonapiVerifiedResult, tonapiStateResult, liquidityResult, schemaHealth] = await Promise.all([
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi"),
       supabase.from("gift_assets").select("id", { head: true, count: "exact" }).eq("catalog_source", "tonapi").eq("chain_verified", true),
       supabase.from("tonapi_catalog_state").select("last_discovery_at,last_sync_at,last_error,lock_until,updated_at").eq("singleton", true).maybeSingle(),
       supabase.rpc("gift_market_liquidity_state"),
+      inspectSchemaHealth(supabase),
     ]);
     if (tonapiCountResult.error) throw tonapiCountResult.error;
     if (tonapiVerifiedResult.error) throw tonapiVerifiedResult.error;
@@ -129,6 +131,7 @@ async function GETHandler(request: Request) {
       npcLog: npcLogRows.data || [],
       tonapiState: tonapiStateResult.data || null,
       liquidity: liquidityResult.data || null,
+      schemaHealth,
       checkedAt: new Date().toISOString(),
     });
   } catch (error) {

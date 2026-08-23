@@ -1,4 +1,4 @@
-import { apiFailure, withApiErrors } from "@/lib/api-route";
+import { apiFailure, errorCode, errorMessage, isDatabaseSchemaError, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -24,6 +24,13 @@ function safeIso(value: unknown) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date(0).toISOString();
 }
 
+function isMissingSellerProfileColumn(error: unknown) {
+  const code = errorCode(error);
+  const message = errorMessage(error);
+  return (code === "42703" || code === "PGRST204" || isDatabaseSchemaError(error))
+    && /seller_profile_id/i.test(message);
+}
+
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
@@ -34,16 +41,16 @@ async function GETHandler() {
     // seller_profile_id is maintained by the final production migration. It
     // removes the old O(number_of_owned_gifts) ID collection + huge `.in()`
     // request and also gives Realtime a player-scoped filter.
-    const [outgoingResult, incomingResult, listingsResult] = await Promise.all([
+    const [outgoingResult, incomingFastResult, listingsResult] = await Promise.all([
       supabase.from("gift_offers")
-        .select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,amount,status,created_at,expires_at", { count: "exact" })
+        .select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at", { count: "exact" })
         .eq("buyer_profile_id", profile.id)
         .eq("status", "pending")
         .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
         .order("created_at", { ascending: false })
         .limit(OFFER_LIMIT),
       supabase.from("gift_offers")
-        .select("id,virtual_gift_id,buyer_profile_id,seller_profile_id,amount,status,created_at,expires_at", { count: "exact" })
+        .select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at", { count: "exact" })
         .eq("seller_profile_id", profile.id)
         .eq("status", "pending")
         .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
@@ -59,6 +66,30 @@ async function GETHandler() {
         .order("listing_price", { ascending: true })
         .limit(LISTING_LIMIT),
     ]);
+
+    // v0.64.2 introduced seller_profile_id as a hot-path denormalization. A
+    // production database that has not applied that polish migration should
+    // still be able to open Orders instead of turning the whole page into a
+    // DB_SCHEMA_OUTDATED banner. Fall back to the existing FK join; once the
+    // new column is present the fast indexed path is used automatically.
+    let incomingResult: { data: unknown[] | null; error: unknown; count: number | null } = incomingFastResult;
+    let sellerScopedOffers = true;
+    if (incomingFastResult.error && isMissingSellerProfileColumn(incomingFastResult.error)) {
+      sellerScopedOffers = false;
+      const legacyIncoming = await supabase.from("gift_offers")
+        .select("id,virtual_gift_id,buyer_profile_id,amount,status,created_at,expires_at,virtual_gifts!inner(owner_profile_id)", { count: "exact" })
+        .eq("virtual_gifts.owner_profile_id", profile.id)
+        .eq("status", "pending")
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        .order("amount", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(OFFER_LIMIT);
+      incomingResult = { data: legacyIncoming.data, error: legacyIncoming.error, count: legacyIncoming.count };
+      if (!legacyIncoming.error) {
+        console.warn("[orders] seller_profile_id is missing; using FK compatibility path. Apply 100003_orders_runtime_compat_v0648.sql.");
+      }
+    }
+
     const firstError = outgoingResult.error || incomingResult.error || listingsResult.error;
     if (firstError) throw firstError;
 
@@ -139,6 +170,7 @@ async function GETHandler() {
         incoming: Number(incomingResult.count || 0) > incoming.length,
         listings: Number(listingsResult.count || 0) > listings.length,
       },
+      capabilities: { sellerScopedOffers },
     }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("orders", error);

@@ -72,6 +72,7 @@ export class ApiRequestError extends Error {
 type ApiPerfState = {
   total: number;
   failures: number;
+  slow: number;
   inFlight: number;
   lastLatencyMs: number;
   avgLatencyMs: number;
@@ -81,6 +82,7 @@ type ApiPerfState = {
 const apiPerf: ApiPerfState = {
   total: 0,
   failures: 0,
+  slow: 0,
   inFlight: 0,
   lastLatencyMs: 0,
   avgLatencyMs: 0,
@@ -174,6 +176,7 @@ function markCompleted(startedAt: number, failed: boolean) {
   apiPerf.inFlight = Math.max(0, apiPerf.inFlight - 1);
   apiPerf.total += 1;
   if (failed) apiPerf.failures += 1;
+  if (latency >= 1_500) apiPerf.slow += 1;
   apiPerf.lastLatencyMs = latency;
   apiPerf.slowestLatencyMs = Math.max(apiPerf.slowestLatencyMs, latency);
   apiPerf.avgLatencyMs = apiPerf.total === 1
@@ -183,6 +186,11 @@ function markCompleted(startedAt: number, failed: boolean) {
 
 export function getApiPerfSnapshot() {
   return { ...apiPerf };
+}
+
+function makeClientRequestId() {
+  try { return globalThis.crypto?.randomUUID?.() || `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
+  catch { return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 }
 
 export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise<T> {
@@ -203,6 +211,7 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
 
   const task = (async () => {
     const headers = new Headers(requestInit.headers);
+    if (!headers.has("x-mxm-request-id")) headers.set("x-mxm-request-id", makeClientRequestId());
     const activeTelegramId = activeTelegramIdForRequest();
     if (activeTelegramId && !headers.has("x-mxm-telegram-id")) headers.set("x-mxm-telegram-id", String(activeTelegramId));
     const isForm = typeof FormData !== "undefined" && requestInit.body instanceof FormData;
@@ -232,7 +241,7 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
           if (!response.ok) {
             const rawMessage = typeof payload.error === "string" ? payload.error : `Запрос не выполнен (${response.status})`;
             const code = typeof payload.code === "string" ? payload.code : null;
-            const id = response.headers.get("x-mxm-request-id");
+            const id = response.headers.get("x-mxm-request-id") || headers.get("x-mxm-request-id");
             if (typeof window !== "undefined" && input !== "/api/auth/telegram" && (response.status === 401 || code === "SESSION_ACCOUNT_MISMATCH")) {
               clearApiMemoryCache();
               window.dispatchEvent(new CustomEvent("mxm:auth-invalid", { detail: { status: response.status, code } }));

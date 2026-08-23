@@ -130,7 +130,16 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.7 package version", packageJson.includes('"version": "0.64.7"'));
+check("v0.64.9 package version", packageJson.includes('"version": "0.64.9"'));
+const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
+check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
+check("v0.64.8 Orders tolerates missing seller denormalization",
+  read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
+  && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")
+  && read("app/orders/page.tsx").includes("sellerScopedOffers")
+  && migration100003.includes("add column if not exists seller_profile_id")
+  && migration100003.includes("notify pgrst, 'reload schema'")
+);
 check("v0.63.1 case RPC is self-healing", migration100000.includes("create or replace function public.open_case_v200") && migration100000.includes("decode(replace(gen_random_uuid()::text") && migration100000.includes("notify pgrst, 'reload schema'"));
 check("v0.63.1 case errors are observable", read("app/api/cases/route.ts").includes("[cases:open]") && read("app/api/cases/route.ts").includes("schemaMismatch"));
 check("v0.63.1 keeps retired games disabled", !migration100000.includes("play_virtual_game"));
@@ -176,7 +185,7 @@ check("v0.64.5 case result has rarity-aware feedback", read("app/cases/page.tsx"
 check("v0.64.5 memecoin high-impact trade needs confirmation", read("app/coin/[id]/page.tsx").includes("impactArmed") && read("app/coin/[id]/page.tsx").includes("Подтвердить сделку"));
 check("v0.64.5 task claim-all is server batched", read("app/api/tasks/claim/route.ts").includes('action === "claim_all"') && read("app/tasks/page.tsx").includes('action: "claim_all"'));
 check("v0.64.5 notifications de-duplicate exact rows", read("app/api/notifications/route.ts").includes("const seen = new Map<string, number>()"));
-check("v0.64.5 Telegram warmup adapts to weak devices", read("components/telegram-provider.tsx").includes("constrainedDevice") && read("components/telegram-provider.tsx").includes("deviceMemory"));
+check("v0.64.5 Telegram warmup adapts to weak devices", read("components/telegram-provider.tsx").includes("getClientPerformanceProfile") && read("lib/client-performance.ts").includes("deviceMemory"));
 check("v0.64.5 Telegram keyboard avoids bottom-nav overlap", read("components/telegram-provider.tsx").includes("mxm-keyboard-open") && read("app/globals.css").includes(".mxm-keyboard-open .mxm-bottom-nav"));
 check("v0.64.5 shell renders equipped frames consistently", read("components/app-shell.tsx").includes("<ProfileAvatar") && read("components/app-shell.tsx").includes("equippedFrame"));
 check("v0.64.5 dashboard coin query uses compact payload", read("app/hub/page.tsx").includes("compact=1") && read("app/api/market/route.ts").includes('const compact = request.nextUrl.searchParams.get("compact") === "1"'));
@@ -185,8 +194,8 @@ check("v0.64.5 control audit records before/after", read("app/api/control/action
 check("v0.64.5 one-command verifier present", exists("scripts/verify.mjs") && packageJson.includes('"verify": "node scripts/verify.mjs"') && packageJson.includes('"verify:static"'));
 
 // v0.64.6 Telegram 6.0 compatibility + Control request hardening.
-check("v0.64.6 Telegram protocol methods are version-gated", read("components/telegram-provider.tsx").includes('telegramVersionAtLeast(webApp, "6.1")') && read("components/telegram-provider.tsx").includes('telegramVersionAtLeast(webApp, "8.0")') && exists("lib/telegram-webapp.ts"));
-check("v0.64.6 Stars invoice is version-gated", read("components/store-front.tsx").includes('telegramVersionAtLeast(webApp, "6.1")') && read("components/store-front.tsx").includes("Обнови Telegram"));
+check("v0.64.6 Telegram protocol methods are version-gated", read("components/telegram-provider.tsx").includes('telegramSupports(webApp, "backButton")') && read("components/telegram-provider.tsx").includes('telegramSupports(webApp, "safeArea")') && read("lib/telegram-webapp.ts").includes("FEATURE_MIN_VERSION"));
+check("v0.64.6 Stars invoice is version-gated", read("components/store-front.tsx").includes('telegramSupports(webApp, "invoice")') && read("components/store-front.tsx").includes("Обнови Telegram"));
 check("v0.64.6 Control validates payload before POST", read("app/control/page.tsx").includes("controlPayloadError") && read("app/control/page.tsx").includes("validPrice"));
 check("v0.64.6 Control server separates validation from runtime failures", read("app/api/control/action/route.ts").includes("isDatabaseSchemaError") && read("app/api/control/action/route.ts").includes("CONTROL_FAILED") && read("app/api/control/action/route.ts").includes("CONTROL_CONFLICT"));
 
@@ -205,10 +214,34 @@ check("v0.64.7 frames degrade cleanly on constrained devices", read("components/
 check("v0.64.7 progression refresh is de-bounced and notices self-clear", tasks.includes("lastRefreshAt") && tasks.includes("setTimeout(() => setNotice(null), 3600") && read("app/progression/page.tsx").includes("lastRefreshAt"));
 check("v0.64.7 leaderboard handles tied podium ranks without duplicate rows", read("app/leaderboard/page.tsx").includes("player.rank <= 3") && read("app/leaderboard/page.tsx").includes("player.rank > 3"));
 check("v0.64.7 notifications de-duplicate before badge count", notificationsApi.includes("const seen = new Map<string, number>()") && notificationsApi.includes("normalized.reduce"));
-check("v0.64.7 store CTA surfaces owned/unavailable state", read("components/store-front.tsx").includes("unavailable ? unavailable") && read("components/store-front.tsx").includes("highlights.slice(0, 2)"));
+check("v0.64.7 store CTA surfaces owned/unavailable state", read("components/store-front.tsx").includes("actionReason") && read("components/store-front.tsx").includes("highlights.slice(0, 2)"));
 check("v0.64.7 creator analytics stays quiet for pristine markets", read("app/creator/page.tsx").includes("hasMarketActivity") && read("app/creator/page.tsx").includes("Новый рынок"));
 check("v0.64.7 control caps economy mutations on client and server", read("app/control/page.tsx").includes("CONTROL_MAX_BALANCE") && read("app/api/control/action/route.ts").includes("CONTROL_MAX_BALANCE") && read("app/control/page.tsx").includes('aria-live="polite"'));
 check("v0.64.7 Telegram/mobile performance mode is surfaced to CSS", read("components/telegram-provider.tsx").includes('classList.toggle("mxm-device-constrained"') && read("app/globals.css").includes("overscroll-behavior-y:contain"));
+
+
+// v0.64.9 Stability & Visual Consistency: final 20-point production polish.
+check("v0.64.9 UI primitives are unified", read("components/ui.tsx").includes("mxm-surface-block") && read("components/ui.tsx").includes("InlineNotice") && read("app/globals.css").includes(".mxm-pressable"));
+check("v0.64.9 motion respects constrained and reduced-motion clients", read("lib/client-performance.ts").includes("shouldUseRichMotion") && read("app/globals.css").includes("prefers-reduced-motion"));
+check("v0.64.9 Gift Market uses adaptive page sizing", read("app/market/page.tsx").includes("adaptiveListPageSize") && read("app/market/page.tsx").includes("rootMargin"));
+check("v0.64.9 Gift detail prioritizes trading", read("components/gifts/gift-detail.tsx").includes("mxm-gift-trade-panel") && read("app/globals.css").includes("position:sticky"));
+check("v0.64.9 memecoin chart waits for real market history", read("app/coin/[id]/page.tsx").includes("График появится после второй сделки") && read("app/coin/[id]/page.tsx").includes("openTelegramLinkSafely"));
+check("v0.64.9 portfolio supports adaptive rendering and quick sell", read("app/vault/page.tsx").includes("adaptiveListPageSize") && read("app/vault/page.tsx").includes("mxm-vault-quick-sell"));
+check("v0.64.9 battle pass has focused track and live success state", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("mxm-success-pop"));
+check("v0.64.9 cases reduce roulette work on constrained devices", read("app/cases/page.tsx").includes("getClientPerformanceProfile") && read("app/cases/page.tsx").includes("constrained"));
+check("v0.64.9 profile keeps secondary metrics collapsed", read("app/profile/page.tsx").includes("mxm-profile-more") && read("app/profile/page.tsx").includes("Активы"));
+check("v0.64.9 frames simplify small and constrained renders", read("app/globals.css").includes('[data-profile-frame-size="small"] .mxm-profile-frame-mark') && read("app/globals.css").includes(".mxm-device-constrained .mxm-profile-frame-mark"));
+check("v0.64.9 progression feedback is live and compact", read("app/progression/page.tsx").includes("mxm-success-pop") && read("app/tasks/page.tsx").includes("mxm-success-pop"));
+check("v0.64.9 leaderboard rows use consistent interaction styling", read("app/leaderboard/page.tsx").includes("mxm-row-interactive") && read("app/leaderboard/page.tsx").includes("player.rank > 3"));
+check("v0.64.9 notifications group by day", read("app/notifications/page.tsx").includes("Сегодня") && read("app/notifications/page.tsx").includes("Вчера"));
+check("v0.64.9 store keeps unavailable CTA short with reason nearby", read("components/store-front.tsx").includes('unavailable ? "Недоступно"') && read("components/store-front.tsx").includes("actionReason"));
+check("v0.64.9 control surfaces schema health", read("app/control/page.tsx").includes("SchemaHealthStrip") && read("app/api/control/bootstrap/route.ts").includes("inspectSchemaHealth"));
+check("v0.64.9 Telegram feature matrix gates protocol calls", read("lib/telegram-webapp.ts").includes("FEATURE_MIN_VERSION") && read("lib/telegram-webapp.ts").includes("openTelegramLinkSafely") && read("components/telegram-provider.tsx").includes("telegramCapabilitySnapshot"));
+check("v0.64.9 Telegram links use the compatibility helper", read("app/referrals/page.tsx").includes("openTelegramLinkSafely(url)") && read("app/tasks/page.tsx").includes("openTelegramLinkSafely(url)") && read("app/coin/[id]/page.tsx").includes("openTelegramLinkSafely(shareUrl)"));
+check("v0.64.9 API contract auditor is part of verify", exists("scripts/api-contract-audit.mjs") && read("scripts/verify.mjs").includes("api-contract-audit.mjs"));
+check("v0.64.9 schema health RPC and fallback probes exist", exists("lib/schema-health.ts") && exists("supabase/migrations/100004_schema_health_v0649.sql") && read("supabase/migrations/100004_schema_health_v0649.sql").includes("mxm_schema_health_v0649"));
+check("v0.64.9 realtime has bounded polling fallback", read("components/realtime-refresh.tsx").includes("CHANNEL_ERROR") && read("components/realtime-refresh.tsx").includes("fallbackPolls") && read("components/realtime-refresh.tsx").includes("15_000"));
+check("v0.64.9 request observability is correlated", read("lib/api-route.ts").includes("x-mxm-request-id") && read("lib/api-route.ts").includes("server-timing") && read("app/api/health/route.ts").includes("APP_VERSION"));
 
 // v0.64.3 UX & Quality: quieter hierarchy, stronger mobile states, same mechanics.
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));
@@ -258,7 +291,11 @@ check("Admin Health Center", exists("app/admin/health/page.tsx") && exists("app/
 check("Error Inbox infrastructure", exists("lib/error-inbox.ts") && migration026.includes("error_inbox_v056"));
 
 check("Environment template present", Boolean(envTemplate));
-check("Human support username documented", /^SUPPORT_TELEGRAM_USERNAME=@?[A-Za-z0-9_]{5,32}$/m.test(envTemplate));
+check("Human support username documented",
+  /^SUPPORT_TELEGRAM_USERNAME=/m.test(envTemplate)
+  && read("README.md").includes("SUPPORT_TELEGRAM_USERNAME")
+  && read("README.md").includes("human support account")
+);
 check("Payment support never falls back to the bot",
   supportPage.includes("getHumanSupportUsername")
   && supportPage.includes("<a href={humanSupportTelegramUrl(support)}")

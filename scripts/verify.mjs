@@ -83,6 +83,7 @@ for (const file of cssFiles) {
 }
 result("CSS brace balance", open === close, `${open} open / ${close} close`);
 
+run("API contract audit", process.execPath, [path.join(root, "scripts/api-contract-audit.mjs")]);
 run("Release product/security gate", process.execPath, [path.join(root, "scripts/release-check.mjs")], staticOnly ? { ...process.env, MXM_RELEASE_STATIC: "1" } : process.env);
 
 if (!staticOnly) {

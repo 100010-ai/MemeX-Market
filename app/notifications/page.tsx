@@ -68,6 +68,23 @@ export default function NotificationsPage() {
     }
   }
   const visible = useMemo(() => data?.notifications.filter((item) => filter === "all" || !item.readAt) || [], [data?.notifications, filter]);
+  const groups = useMemo(() => {
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const keyOf = (value: string) => new Date(value).toDateString();
+    const labels = new Map([[today.toDateString(), "Сегодня"], [yesterday.toDateString(), "Вчера"]]);
+    const result: Array<{ key: string; label: string; items: Notification[] }> = [];
+    for (const item of visible) {
+      const key = keyOf(item.createdAt);
+      let group = result.find((entry) => entry.key === key);
+      if (!group) {
+        group = { key, label: labels.get(key) || new Date(item.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }), items: [] };
+        result.push(group);
+      }
+      group.items.push(item);
+    }
+    return result;
+  }, [visible]);
 
   if (!data) return <div className="mx-auto max-w-3xl"><div className="mxm-skeleton h-24 rounded-[22px]" /><div className="mxm-skeleton mt-3 h-80 rounded-[22px]" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
   return <div className="mx-auto max-w-3xl">
@@ -89,10 +106,10 @@ export default function NotificationsPage() {
 
     {settings ? <section className="mxm-card mt-3 p-3"><p className="mb-2 text-xs font-medium">Настройки</p><div className="space-y-0.5">{([['gift_sold','Продажи подарков'],['gift_offer','Новые предложения'],['offer_resolved','Решение по предложению'],['price_alert','Ценовые уведомления'],['coin_move','Движение мемкоинов'],['referral_reward','Доход от рефералов'],['promo','Промокоды'],['telegram_push','Уведомления в Telegram']] as [NotificationPreferenceKey,string][]).map(([key,label]) => <button key={key} role="switch" aria-checked={data.preferences[key]} disabled={busy === `pref:${key}`} onClick={() => void toggle(key)} className="flex w-full items-center justify-between rounded-[12px] px-2.5 py-2 text-left text-[10px] hover:bg-[var(--panel-2)] disabled:opacity-60"><span>{label}</span><span aria-hidden="true" className={`mxm-switch ${data.preferences[key] ? 'is-on' : ''}`}><span /></span></button>)}</div></section> : null}
 
-    <section className="mt-3 overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--panel)]">{visible.length ? <div className="divide-y divide-[var(--border-soft)]">{visible.map((n) => {
-      const inner = <div className={`flex gap-3 p-3 ${n.readAt ? '' : 'bg-white/[.025]'}`}><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[13px] bg-[var(--panel-2)]">{iconFor(n.kind)}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-[11px] font-medium">{n.title}</p>{!n.readAt ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" /> : null}</div>{n.body ? <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-[var(--muted)]">{n.body}</p> : null}<p className="mt-1 text-[8px] text-[var(--muted-2)]">{ago(n.createdAt)}{busy === n.id ? " · сохраняем…" : ""}</p></div></div>;
+    <section className="mt-3 overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--panel)]">{visible.length ? <div>{groups.map((group) => <div key={group.key}><div className="mxm-notification-day">{group.label}</div><div className="divide-y divide-[var(--border-soft)]">{group.items.map((n) => {
+      const inner = <div className={`mxm-row-interactive flex gap-3 p-3 ${n.readAt ? '' : 'bg-white/[.025]'}`}><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[13px] bg-[var(--panel-2)]">{iconFor(n.kind)}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-[11px] font-medium">{n.title}</p>{!n.readAt ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" /> : null}</div>{n.body ? <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-[var(--muted)]">{n.body}</p> : null}<p className="mt-1 text-[8px] text-[var(--muted-2)]">{ago(n.createdAt)}{busy === n.id ? " · сохраняем…" : ""}</p></div></div>;
       return n.href ? <Link key={n.id} href={n.href} onClick={() => { if (!n.readAt) void read(n.id); }}>{inner}</Link> : <button key={n.id} disabled={busy === n.id} onClick={() => { if (!n.readAt) void read(n.id); }} className="w-full text-left disabled:opacity-70">{inner}</button>;
-    })}</div> : <div className="p-9 text-center"><Bell size={21} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">{filter === "unread" ? "Непрочитанных нет" : "Уведомлений пока нет"}</p></div>}</section>
+    })}</div></div>)}</div> : <div className="p-9 text-center"><Bell size={21} className="mx-auto text-[var(--muted-2)]" /><p className="mt-3 text-xs font-medium">{filter === "unread" ? "Непрочитанных нет" : "Уведомлений пока нет"}</p></div>}</section>
   </div>;
 }
 

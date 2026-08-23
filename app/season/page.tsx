@@ -131,7 +131,7 @@ export default function SeasonPage() {
     </header>
 
     {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
-    {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
+    {notice ? <div role="status" aria-live="polite" className="mxm-alert mxm-success-pop mb-3">{notice}</div> : null}
 
     <section className="mb-3 border-y border-[var(--border-soft)] py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">

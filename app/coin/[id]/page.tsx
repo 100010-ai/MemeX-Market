@@ -13,6 +13,7 @@ import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
 import { compact, money, percent, price } from "@/lib/format";
 import { MIN_COIN_BUY_TON, nonNegativeEconomyValue, parseEconomyAmount } from "@/lib/economy";
 import type { Candle, Coin, Trade } from "@/lib/types";
+import { openTelegramLinkSafely } from "@/lib/telegram-webapp";
 
 const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
   ssr: false,
@@ -103,6 +104,8 @@ export default function CoinPage() {
   }, [id]);
 
   useEffect(() => {
+    const requestedSide = new URLSearchParams(window.location.search).get("side");
+    if (requestedSide === "sell" || requestedSide === "buy") setSide(requestedSide);
     const savedSlippage = Number(window.sessionStorage.getItem("mxm-coin-slippage"));
     if ([0.5, 1, 2, 5].includes(savedSlippage)) setSlippage(savedSlippage);
     const savedTab = window.sessionStorage.getItem("mxm-coin-market-tab");
@@ -225,8 +228,7 @@ export default function CoinPage() {
     if (!data) return;
     const target = typeof window !== "undefined" ? `${window.location.origin}/coin/${id}` : "";
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(target)}&text=${encodeURIComponent(`${data.coin.name} ($${data.coin.symbol}) на MXM`)}`;
-    if (window.Telegram?.WebApp?.openTelegramLink) window.Telegram.WebApp.openTelegramLink(shareUrl);
-    else window.open(shareUrl, "_blank", "noopener,noreferrer");
+    openTelegramLinkSafely(shareUrl);
     haptic("light");
   }
 
@@ -252,13 +254,16 @@ export default function CoinPage() {
   const publicTradeCount = Math.max(0, data.economy.publicTradeCount ?? coin.tradeCount24h);
   const pristineMarket = publicTradeCount === 0 && coin.allTimeVolume <= 0;
   const chartCandles = pristineMarket ? [] : data.candles;
+  const chartReady = chartCandles.length >= 2;
+  const renderedCandles = chartReady ? chartCandles : [];
+  const chartEmptyLabel = pristineMarket ? "Первая свеча появится после сделки" : chartCandles.length === 1 ? "График появится после второй сделки" : undefined;
   const visibleChange = pristineMarket ? 0 : coin.change24h;
 
   const tradePanel = (
     <section className="mxm-trade-panel mxm-coin-trade-panel">
       <div className="grid grid-cols-2 border-b border-[var(--border-soft)]">
-        <button disabled={busy} onClick={() => switchSide("buy")} className={`py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
-        <button disabled={busy} onClick={() => switchSide("sell")} className={`py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
+        <button disabled={busy} onClick={() => switchSide("buy")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
+        <button disabled={busy} onClick={() => switchSide("sell")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
       <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
@@ -280,7 +285,7 @@ export default function CoinPage() {
       {belowMinimumBuy ? <p className="mt-1.5 text-[9px] text-[var(--muted)]">Минимум {MIN_COIN_BUY_TON} TON.</p> : null}
       {parsedAmount != null && numericAmount > max && !sellAll ? <p className="mt-1.5 text-[9px] text-[var(--negative)]">Недостаточно доступного баланса.</p> : null}
       {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1.5 truncate text-[8px] text-[#d9c27a]">Заблокировано: {compact(data.economy.lock.remaining)} {coin.symbol}</p> : null}
-      {tradeNotice ? <div aria-live="polite" className={`mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
+      {tradeNotice ? <div aria-live="polite" className={`mxm-success-pop mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
       {error ? <div className="mt-1.5 line-clamp-2 text-[9px] text-[#ff9aa4]">{error}</div> : null}
       <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-2.5 w-full !min-h-9 !py-2 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : impactArmed ? "Подтвердить сделку" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
       {data.holding.quantity > 0 ? <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[var(--border-soft)] pt-2"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Результат" value={money(holdingPnl)} tone={holdingPnl} /></div> : null}
@@ -310,7 +315,7 @@ export default function CoinPage() {
 
       <div className="mxm-coin-layout">
         <section className="mxm-coin-chart-slot">
-          <CoinChart candles={chartCandles} height={148} baseFrame="15m" compact emptyLabel={pristineMarket ? "Первая свеча появится после сделки" : undefined} />
+          <CoinChart candles={renderedCandles} height={148} baseFrame="15m" compact emptyLabel={chartEmptyLabel} />
         </section>
 
         <div className="mxm-coin-tabs" role="tablist" aria-label="Разделы мемкоина">

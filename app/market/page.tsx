@@ -12,6 +12,7 @@ import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
+import { adaptiveListPageSize, getClientPerformanceProfile } from "@/lib/client-performance";
 
 type GenesisState = { total: number; released: number; remainingToRelease: number; completed: boolean; npcAvailable: number };
 type GiftFilterOptions = { collections: string[]; models: string[]; backdrops: string[]; symbols: string[] };
@@ -58,7 +59,6 @@ function liquidityMaturity(state: LiquidityState) {
 }
 const marketCache = new Map<string, { at: number; payload: MarketPayload }>();
 const MARKET_CACHE_MS = 30_000;
-const GIFT_PAGE_SIZE = 24;
 const MARKET_UI_STATE_KEY = "mxm-market-ui-v0642";
 type MarketUiState = {
   tab?: "gifts" | "coins"; query?: string; watchOnly?: boolean; collection?: string; model?: string; backdrop?: string; symbol?: string;
@@ -66,6 +66,7 @@ type MarketUiState = {
 };
 
 export default function MarketPage() {
+  const [giftPageSize] = useState(() => adaptiveListPageSize(24, 16));
   const [data, setData] = useState<MarketPayload>(() => emptyMarketPayload());
   const [tab, setTab] = useState<"gifts" | "coins">("gifts");
   const [query, setQuery] = useState("");
@@ -202,7 +203,7 @@ export default function MarketPage() {
     if (cacheFresh && !silent) silent = true;
     try {
       const catalogParams = tab === "gifts" && giftCatalogQuery ? `&${giftCatalogQuery}` : "";
-      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? GIFT_PAGE_SIZE : 72}&t=${forced || fresh ? Date.now() : 0}${catalogParams}`, {
+      const payload = await apiFetch<MarketPayload>(`/api/market?scope=${tab}&limit=${tab === "gifts" ? giftPageSize : 72}&t=${forced || fresh ? Date.now() : 0}${catalogParams}`, {
         cacheMs: fresh ? 0 : undefined,
         dedupe: !fresh,
       });
@@ -222,7 +223,7 @@ export default function MarketPage() {
       }
       else console.error("market revalidate", cause);
     } finally { if (seq === loadSeq.current) setLoading(false); }
-  }, [tab, activeScopeKey, giftCatalogQuery]);
+  }, [tab, activeScopeKey, giftCatalogQuery, giftPageSize]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -250,7 +251,7 @@ export default function MarketPage() {
     setLoadMoreError(null);
     try {
       const catalogParams = giftCatalogQuery ? `&${giftCatalogQuery}` : "";
-      const payload = await apiFetch<GiftPageChunk>(`/api/market?scope=gifts&lean=1&offset=${data.nextOffset}&limit=${GIFT_PAGE_SIZE}&seed=${encodeURIComponent(data.marketSeed)}${catalogParams}`, { cacheMs: 0 });
+      const payload = await apiFetch<GiftPageChunk>(`/api/market?scope=gifts&lean=1&offset=${data.nextOffset}&limit=${giftPageSize}&seed=${encodeURIComponent(data.marketSeed)}${catalogParams}`, { cacheMs: 0 });
       if (activeTabRef.current !== "gifts") return;
       setData((current) => {
         const seen = new Set(current.gifts.map((gift) => gift.virtualGiftId));
@@ -276,14 +277,13 @@ export default function MarketPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [tab, loadingMore, data.nextOffset, data.marketSeed, query, giftCatalogQuery, giftScopeKey]);
+  }, [tab, loadingMore, data.nextOffset, data.marketSeed, query, giftCatalogQuery, giftScopeKey, giftPageSize]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
     if (!node || tab !== "gifts" || data.nextOffset == null || query.trim().length >= 2 || loadMoreError) return;
-    const device = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
-    const effectiveType = device.connection?.effectiveType || "";
-    const constrainedNetwork = Boolean(device.connection?.saveData || effectiveType.includes("2g"));
+    const performanceProfile = getClientPerformanceProfile();
+    const constrainedNetwork = performanceProfile.constrained;
     // На слабой сети не тянем следующую страницу за сотни пикселей до viewport:
     // пользователь всё ещё получает автоподгрузку, но без лишнего фонового трафика.
     const observer = new IntersectionObserver((entries) => {
@@ -305,7 +305,8 @@ export default function MarketPage() {
         });
         setCollectionCards(Array.isArray(payload.collections) ? payload.collections : []);
       } else {
-        const payload = await apiFetch<{ activity: ActivityItem[] }>("/api/feed?limit=50", {
+        const feedLimit = getClientPerformanceProfile().constrained ? 28 : 50;
+        const payload = await apiFetch<{ activity: ActivityItem[] }>(`/api/feed?limit=${feedLimit}`, {
           cacheMs: fresh ? 0 : 5_000,
           dedupe: !fresh,
         });

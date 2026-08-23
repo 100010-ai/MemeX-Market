@@ -130,7 +130,7 @@ async function POSTHandler(request: Request) {
   } catch (error) {
     const cancelResult = await supabase.from("star_purchases").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", purchaseId);
     if (cancelResult.error) console.error("star purchase cancellation", cancelResult.error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось открыть оплату Stars" }, { status: 502 });
+    return apiFailure(error, "Не удалось открыть оплату Stars", 502);
   }
 }
 export const POST = withApiErrors("app/api/stars/invoice/route.ts:POST", POSTHandler);

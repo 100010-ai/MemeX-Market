@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { API_VERSION } from "@/lib/app-version";
 
 type RouteHandler<Args extends unknown[] = unknown[]> = (...args: Args) => Response | Promise<Response>;
 
@@ -10,6 +11,23 @@ function requestId() {
   } catch {
     return `mxm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
+}
+
+function requestFromArgs(args: unknown[]) {
+  const candidate = args[0];
+  return candidate instanceof Request ? candidate : null;
+}
+
+function safeRoutePath(request: Request | null) {
+  if (!request) return null;
+  try { return new URL(request.url).pathname; } catch { return null; }
+}
+
+function structuredApiLog(level: "info" | "warn" | "error", payload: Record<string, unknown>) {
+  const message = `[mxm-api] ${JSON.stringify(payload)}`;
+  if (level === "error") console.error(message);
+  else if (level === "warn") console.warn(message);
+  else console.info(message);
 }
 
 export function errorMessage(error: unknown) {
@@ -77,6 +95,7 @@ function decorateResponse(response: Response, id: string, startedAt: number) {
   // observability must never become a new failure mode.
   try {
     response.headers.set("x-mxm-request-id", id);
+    response.headers.set("x-mxm-api-version", API_VERSION);
     const duration = Math.max(0, Date.now() - startedAt);
     const currentTiming = response.headers.get("server-timing");
     response.headers.set("server-timing", currentTiming ? `${currentTiming}, mxm-route;dur=${duration}` : `mxm-route;dur=${duration}`);
@@ -94,13 +113,25 @@ function decorateResponse(response: Response, id: string, startedAt: number) {
  */
 export function withApiErrors<Args extends unknown[]>(label: string, handler: RouteHandler<Args>): RouteHandler<Args> {
   return async (...args: Args) => {
-    const id = requestId();
+    const request = requestFromArgs(args);
+    const inboundId = request?.headers.get("x-mxm-request-id")?.trim();
+    const id = inboundId && /^[A-Za-z0-9._:-]{8,128}$/.test(inboundId) ? inboundId : requestId();
     const startedAt = Date.now();
+    const method = request?.method || "UNKNOWN";
+    const path = safeRoutePath(request);
     try {
       const response = await handler(...args);
+      const duration = Math.max(0, Date.now() - startedAt);
+      if (response.status >= 500) {
+        structuredApiLog("error", { event: "route.response", id, label, method, path, status: response.status, durationMs: duration });
+      } else if (response.status >= 400) {
+        structuredApiLog("warn", { event: "route.response", id, label, method, path, status: response.status, durationMs: duration });
+      } else if (duration >= 1_500) {
+        structuredApiLog("warn", { event: "route.slow", id, label, method, path, status: response.status, durationMs: duration });
+      }
       return decorateResponse(response, id, startedAt);
     } catch (error) {
-      console.error(`[api:${label}][${id}]`, error);
+      structuredApiLog("error", { event: "route.exception", id, label, method, path, code: errorCode(error) || undefined, message: errorMessage(error), durationMs: Math.max(0, Date.now() - startedAt) });
       return decorateResponse(apiFailure(error), id, startedAt);
     }
   };

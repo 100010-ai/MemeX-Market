@@ -1,4 +1,4 @@
-import { withApiErrors } from "@/lib/api-route";
+import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { syncTelegramGifts } from "@/lib/gifts";
@@ -16,7 +16,7 @@ async function POSTHandler(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("gift sync", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось синхронизировать подарки Telegram" }, { status: 502 });
+    return apiFailure(error, "Не удалось синхронизировать подарки Telegram", 502);
   }
 }
 export const POST = withApiErrors("app/api/gifts/sync/route.ts:POST", POSTHandler);

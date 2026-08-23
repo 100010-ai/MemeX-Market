@@ -7,6 +7,7 @@ import { Box, Clock3, Gem, PackageOpen, ShieldCheck, Sparkles, Star } from "luci
 import { apiFetch } from "@/lib/api";
 import { rarityLabel } from "@/lib/ui-copy";
 import { useTelegramProfile } from "@/components/telegram-provider";
+import { getClientPerformanceProfile } from "@/lib/client-performance";
 
 type PityTier = { current: number; threshold: number; remaining: number } | null;
 type CaseOdd = { reward: string; label: string; percent: number; rarity: string };
@@ -57,13 +58,13 @@ function textSeed(value: string) {
   return hash >>> 0;
 }
 
-function buildReel(caseItem: CaseItem, reward: Reward): ReelState {
+function buildReel(caseItem: CaseItem, reward: Reward, constrained = false): ReelState {
   const source = caseItem.odds.length
     ? caseItem.odds
     : [{ reward: "fallback", label: "Награда MXM", percent: 100, rarity: "common" }];
   const seed = textSeed(`${caseItem.sku}:${reward.label}:${reward.rarity}`);
-  const stopIndex = 29 + (seed % 3);
-  const length = stopIndex + 7;
+  const stopIndex = (constrained ? 18 : 29) + (seed % 3);
+  const length = stopIndex + (constrained ? 5 : 7);
   const items: ReelItem[] = [];
   for (let index = 0; index < length; index += 1) {
     let sourceIndex = (seed + index * 7 + Math.floor(index / 3) * 3) % source.length;
@@ -86,6 +87,7 @@ function pityPercent(pity: PityTier) {
 
 export default function CasesPage() {
   const { haptic } = useTelegramProfile();
+  const [performanceProfile] = useState(() => getClientPerformanceProfile());
   const [data, setData] = useState<Payload | null>(null);
   const [selected, setSelected] = useState<string>("case_starter");
   const [opening, setOpening] = useState(false);
@@ -169,7 +171,7 @@ export default function CasesPage() {
       openingRequestRef.current = null;
 
       pendingRevealRef.current = result;
-      const nextReel = buildReel(current, result.reward);
+      const nextReel = buildReel(current, result.reward, performanceProfile.constrained);
       setReel(nextReel);
       setReelPhase("armed");
       reelFrameRef.current = window.requestAnimationFrame(() => {
@@ -178,7 +180,8 @@ export default function CasesPage() {
 
       const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       const revealMs = result.reward.rarity === "legendary" ? 2300 : result.reward.rarity === "epic" ? 2100 : result.reward.rarity === "rare" ? 1900 : 1650;
-      revealTimerRef.current = window.setTimeout(finishReveal, reducedMotion ? 180 : revealMs);
+      const pacedRevealMs = performanceProfile.constrained ? Math.min(1450, revealMs) : revealMs;
+      revealTimerRef.current = window.setTimeout(finishReveal, reducedMotion ? 180 : pacedRevealMs);
     } catch (cause) {
       pendingRevealRef.current = null;
       setOpening(false);

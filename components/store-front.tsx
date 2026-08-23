@@ -24,7 +24,7 @@ import { useTelegramProfile } from "@/components/telegram-provider";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { getProfileFrameDefinition } from "@/lib/profile-frames";
 import { rarityLabel } from "@/lib/ui-copy";
-import { telegramVersionAtLeast } from "@/lib/telegram-webapp";
+import { telegramSupports } from "@/lib/telegram-webapp";
 
 type Wallet = {
   mxmCoins: number;
@@ -198,7 +198,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         body: JSON.stringify({ sku: product.sku, termsAccepted: true, context: requiresCoin ? { coinId: creatorCoinId } : {} }),
       });
       const webApp = window.Telegram?.WebApp;
-      if (!telegramVersionAtLeast(webApp, "6.1") || !webApp?.openInvoice) {
+      if (!telegramSupports(webApp, "invoice") || !webApp?.openInvoice) {
         throw new Error("Обнови Telegram, чтобы оплачивать покупки Stars внутри приложения");
       }
       webApp.openInvoice(invoice.invoiceUrl, (status) => {
@@ -345,7 +345,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
                 <div className="mb-2 min-h-4">{unavailable ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><CheckCircle2 size={11} />{unavailable}</span> : owned > 0 ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><CheckCircle2 size={11} />В инвентаре: {owned}</span> : product.category === "cases" && data.caseAvailability[product.sku] != null ? <span className="text-[8px] text-[var(--muted-2)]">Осталось в серии: {Number(data.caseAvailability[product.sku]).toLocaleString("ru-RU")}</span> : <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted-2)]"><ShieldCheck size={9} />Без реальной стоимости</span>}</div>
                 <div className="flex flex-wrap items-stretch gap-1.5">
                   {sink ? <button type="button" title={insufficientMxm ? `Нужно ${sink.mxmPrice.toLocaleString("ru-RU")} MXM` : "Купить за MXM"} disabled={Boolean(busy) || !data.migrationReady || Boolean(unavailable) || insufficientMxm} onClick={() => void buyWithMxm(product)} className="mxm-secondary-action min-w-[92px] flex-1 !text-[10px]"><Gem size={11} />{busy === `mxm:${product.sku}` ? "Покупка…" : sink.mxmPrice.toLocaleString("ru-RU")}</button> : null}
-                  <button type="button" title={!data.starsEnabled ? "Покупки Stars отключены в Runtime Config" : unavailable || "Купить за Telegram Stars"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="mxm-primary-action min-w-[104px] flex-1"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : unavailable ? unavailable : `${product.stars} · Купить`}</button>
+                  <button type="button" title={!data.starsEnabled ? "Покупки Stars отключены в Runtime Config" : unavailable || "Купить за Telegram Stars"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="mxm-primary-action min-w-[104px] flex-1"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : unavailable ? "Недоступно" : `${product.stars} · Купить`}</button>
                 </div>
                 {actionReason ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />{actionReason}</span> : null}
               </div>

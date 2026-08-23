@@ -111,14 +111,14 @@ export default function ProgressionPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const categories = useMemo(() => {
+  const categories: Array<readonly [string, Achievement[]]> = useMemo(() => {
     const result = new Map<string, Achievement[]>();
     for (const achievement of data?.achievements || []) {
       result.set(achievement.category, [...(result.get(achievement.category) || []), achievement]);
     }
     return [...result.entries()].map(([category, items]) => [category, [...items].sort((a, b) => Number(b.unlocked) - Number(a.unlocked) || (b.progress / Math.max(1, b.target)) - (a.progress / Math.max(1, a.target)))] as const);
   }, [data?.achievements]);
-  const visibleCategories = useMemo(() => achievementFilter === "all" ? categories : categories.filter(([category]) => category === achievementFilter), [achievementFilter, categories]);
+  const visibleCategories: Array<readonly [string, Achievement[]]> = useMemo(() => achievementFilter === "all" ? categories : categories.filter(([category]: readonly [string, Achievement[]]) => category === achievementFilter), [achievementFilter, categories]);
 
   const unlockedCount = data?.achievements.filter((item) => item.unlocked).length || 0;
   const pendingLevelRewards = data?.account.rewards.filter((item) => item.unlocked && !item.claimed) || [];
@@ -155,8 +155,8 @@ export default function ProgressionPage() {
     </header>
 
     {error ? <div className="mxm-alert mxm-alert-error mb-2.5">{error}</div> : null}
-    {notice ? <div className="mxm-alert mb-2.5" role="status" aria-live="polite">{notice}</div> : null}
-    {data?.newlyUnlocked ? <div className="mxm-alert mb-2.5">Открыто новых достижений: {data.newlyUnlocked}. XP уже начислен.</div> : null}
+    {notice ? <div className="mxm-alert mxm-success-pop mb-2.5" role="status" aria-live="polite">{notice}</div> : null}
+    {data?.newlyUnlocked ? <div className="mxm-alert mxm-success-pop mb-2.5" role="status" aria-live="polite">Открыто новых достижений: {data.newlyUnlocked}. XP уже начислен.</div> : null}
 
     <section className="mxm-summary-card p-3">
       <div className="flex items-center gap-3">

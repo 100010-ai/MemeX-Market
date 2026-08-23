@@ -1,4 +1,4 @@
-import { readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -34,7 +34,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     p_virtual_gift_id: id,
     p_price: price,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return apiFailure(error, "Не удалось опубликовать системный подарок");
   return NextResponse.json({ listing: data });
 }
 export const POST = withApiErrors("app/api/admin/inventory/[id]/release/route.ts:POST", POSTHandler);

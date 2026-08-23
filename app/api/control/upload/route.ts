@@ -1,4 +1,4 @@
-import { readFormData, withApiErrors } from "@/lib/api-route";
+import { apiFailure, readFormData, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireLocalControl } from "@/lib/local-admin";
 import { uploadCoinImage } from "@/lib/coin-media";
@@ -17,7 +17,7 @@ async function POSTHandler(request: Request) {
     const uploaded = await uploadCoinImage(file, "local-admin");
     return NextResponse.json(uploaded);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось загрузить изображение" }, { status: 400 });
+    return apiFailure(error, "Не удалось загрузить изображение", 400);
   }
 }
 export const POST = withApiErrors("app/api/control/upload/route.ts:POST", POSTHandler);
