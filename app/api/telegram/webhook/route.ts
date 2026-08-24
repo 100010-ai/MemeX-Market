@@ -169,8 +169,9 @@ async function POSTHandler(request: Request) {
         ? result.data as Record<string, unknown>
         : {};
       if (finalized.status !== "paid") {
-        console.error("star purchase was not finalized", { purchaseId, status: finalized.status });
-        return await done(NextResponse.json({ error: "Платёж не был завершён" }, { status: 409 }));
+        const stateError = new Error(`Stars payment update was not finalized: ${String(finalized.status || "unknown")} (${String(finalized.reason || "no_reason")})`);
+        console.error("star purchase was not finalized", { purchaseId, status: finalized.status, reason: finalized.reason });
+        return await failed(stateError, "Stars payment fulfillment failed");
       }
       if (payment.provider_payment_charge_id) {
         const providerCharge = await supabase.from("star_purchases").update({ provider_payment_charge_id: payment.provider_payment_charge_id, updated_at: new Date().toISOString() }).eq("id", purchaseId);
