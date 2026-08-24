@@ -17,14 +17,13 @@ function validate(name: string, symbol: string, description: string) {
   return null;
 }
 
-
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
   const [coinsResult, settingsResult, monetizationResult] = await Promise.all([
     supabase.from("coins").select("id,status,created_at").eq("creator_profile_id", profile.id).order("created_at", { ascending: false }).limit(100),
-    supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost").eq("singleton", true).maybeSingle(),
+    supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost,coin_total_fee_bps").eq("singleton", true).maybeSingle(),
     supabase.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
   ]);
   const firstError = coinsResult.error || settingsResult.error || monetizationResult.error;
@@ -37,6 +36,7 @@ async function GETHandler() {
   const launchFee = Math.max(0, finiteNumber(settingsResult.data.coin_launch_fee));
   const cooldownHours = Math.max(1, finiteNumber(settingsResult.data.coin_launch_cooldown_hours, 12));
   const maxActiveCoins = Math.max(1, Math.floor(finiteNumber(settingsResult.data.coin_max_active, 2)));
+  const tradeFeePercent = Math.max(0, finiteNumber(settingsResult.data.coin_total_fee_bps)) / 100;
   const wallet = monetizationResult.data && typeof monetizationResult.data === "object" && !Array.isArray(monetizationResult.data)
     ? (monetizationResult.data as { wallet?: { energy?: unknown; maxEnergy?: unknown } }).wallet
     : null;
@@ -55,6 +55,7 @@ async function GETHandler() {
     startPriceMax: Math.max(0, finiteNumber(settingsResult.data.coin_start_price_max)),
     floorMaxBps: Math.max(0, finiteNumber(settingsResult.data.coin_floor_max_bps)),
     energyCost: Math.max(0, finiteNumber(settingsResult.data.coin_launch_energy_cost)),
+    tradeFeePercent,
     energy: Math.max(0, finiteNumber(wallet?.energy)),
     maxEnergy: Math.max(1, finiteNumber(wallet?.maxEnergy, 100)),
     economyReady: true,
@@ -157,7 +158,6 @@ async function POSTHandler(request: Request) {
     }
     const coinId = data && typeof data === "object" && "id" in data ? String((data as { id: unknown }).id) : "";
     if (!coinId) {
-      // The RPC is atomic: if it succeeded, do not delete an uploaded logo or attempt a second mutation.
       console.error("coin create: RPC returned no id", data);
       return NextResponse.json({ error: "Мемкоин создан, но сервер вернул неполный ответ. Обновите маркет перед повторной попыткой." }, { status: 502 });
     }
