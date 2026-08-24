@@ -23,7 +23,8 @@ type InventoryItem = {
 type SyncOutcome = { telegramId: number; assetsUpserted?: number; error?: string };
 
 function hex(color: number) {
-  return `#${color.toString(16).padStart(6, "0")}`;
+  const safe = Number.isFinite(color) ? Math.max(0, Math.min(0xffffff, Math.round(color))) : 0x1a1a1a;
+  return `#${safe.toString(16).padStart(6, "0")}`;
 }
 
 export function AdminCatalogPanel() {
@@ -58,6 +59,7 @@ export function AdminCatalogPanel() {
   }, []);
 
   const runSync = useCallback(async () => {
+    if (syncing || releasing) return;
     setSyncing(true);
     setError(null);
     try {
@@ -69,10 +71,11 @@ export function AdminCatalogPanel() {
     } finally {
       setSyncing(false);
     }
-  }, [load]);
+  }, [load, releasing, syncing]);
 
   const release = useCallback(
     async (virtualGiftId: string) => {
+      if (releasing || syncing) return;
       const price = Number(prices[virtualGiftId]);
       if (!Number.isFinite(price) || price <= 0) {
         setError("Укажите цену больше нуля перед публикацией");
@@ -89,8 +92,10 @@ export function AdminCatalogPanel() {
         setReleasing(null);
       }
     },
-    [prices],
+    [prices, releasing, syncing],
   );
+
+  const actionsBusy = syncing || releasing !== null;
 
   return (
     <section className="mt-3 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
@@ -99,7 +104,14 @@ export function AdminCatalogPanel() {
           <p className="text-xs font-medium">Каталог и дропы</p>
           <p className="mt-0.5 text-[10px] text-[var(--muted)]">Импорт реальных Telegram Gifts из источников, настроенных в локальном MXM Control. Без MTProto/user session.</p>
         </div>
-        <button onClick={() => void runSync()} disabled={syncing} className="header-action shrink-0">
+        <button
+          type="button"
+          onClick={() => void runSync()}
+          disabled={actionsBusy}
+          aria-label="Синхронизировать каталог"
+          title="Синхронизировать каталог"
+          className="header-action shrink-0"
+        >
           <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
         </button>
       </div>
@@ -154,16 +166,18 @@ export function AdminCatalogPanel() {
                     step="0.01"
                     placeholder="Цена"
                     value={prices[item.virtualGiftId] ?? ""}
+                    disabled={actionsBusy}
                     onChange={(e) => setPrices((prev) => ({ ...prev, [item.virtualGiftId]: e.target.value }))}
-                    className="w-16 bg-transparent text-[11px] outline-none placeholder:text-[var(--muted)]"
+                    className="w-16 bg-transparent text-[11px] outline-none placeholder:text-[var(--muted)] disabled:opacity-50"
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={() => void release(item.virtualGiftId)}
-                  disabled={releasing === item.virtualGiftId}
+                  disabled={actionsBusy}
                   className="shrink-0 rounded-xl bg-[var(--accent)] px-2.5 py-1.5 text-[11px] font-medium text-[#151515] disabled:opacity-50"
                 >
-                  Опубликовать
+                  {releasing === item.virtualGiftId ? "Публикуем…" : "Опубликовать"}
                 </button>
               </div>
             </div>
