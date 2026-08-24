@@ -18,7 +18,7 @@ export function getRealtimePerfSnapshot() {
   let fallbackPolls = 0;
   for (const state of channelStates.values()) {
     if (state === "SUBSCRIBED") subscribed += 1;
-    else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT") degraded += 1;
+    else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT" || state === "CLOSED") degraded += 1;
   }
   for (const count of channelFallbacks.values()) fallbackPolls += count;
   const lastEventAt = Math.max(0, ...channelLastEventAt.values());
@@ -37,6 +37,7 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
     let connecting = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let lastRun = 0;
     channelStates.set(channelName, "CONNECTING");
 
@@ -72,13 +73,28 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
       }, 15_000);
     };
 
+    const scheduleReconnect = () => {
+      if (cancelled || pageHidden() || reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (!cancelled && !pageHidden()) void connect();
+      }, 2_000);
+    };
+
     const connect = async () => {
       if (cancelled || connecting || disconnect || pageHidden()) return;
       connecting = true;
       channelStates.set(channelName, "CONNECTING");
       try {
         const supabase = await getSupabaseBrowser();
-        if (cancelled || pageHidden() || !supabase) return;
+        if (cancelled || pageHidden()) return;
+        if (!supabase) {
+          // Realtime can be intentionally unavailable during configuration or
+          // rollout. Keep pages fresh through the documented polling fallback.
+          channelStates.set(channelName, "CHANNEL_ERROR");
+          startFallback();
+          return;
+        }
         const channel = supabase.channel(channelName);
         for (const table of tableList) {
           const filter = filters?.[table];
@@ -87,25 +103,33 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
             : { event: "*" as const, schema: "public", table };
           channel.on("postgres_changes", config, scheduleRefresh);
         }
+        disconnect = () => {
+          disconnect = null;
+          void supabase.removeChannel(channel);
+        };
         channel.subscribe((status) => {
           if (cancelled) return;
           const normalized = status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED"
             ? status
             : "CONNECTING";
           channelStates.set(channelName, normalized);
-          if (status === "SUBSCRIBED") stopFallback();
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          if (status === "SUBSCRIBED") {
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+            stopFallback();
+            return;
+          }
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             console.error(`[MXM] Realtime ${channelName}: ${status}; включён fallback polling`);
             startFallback();
+            disconnect?.();
+            scheduleReconnect();
           }
         });
-        disconnect = () => {
-          disconnect = null;
-          void supabase.removeChannel(channel);
-        };
       } catch (error) {
         channelStates.set(channelName, "CHANNEL_ERROR");
         startFallback();
+        scheduleReconnect();
         console.error("[MXM] Ошибка запуска Realtime", error);
       } finally {
         connecting = false;
@@ -115,6 +139,7 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
     const onVisibility = () => {
       if (pageHidden()) {
         if (timer) { clearTimeout(timer); timer = null; }
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         disconnect?.();
         stopFallback();
         channelStates.set(channelName, "CLOSED");
@@ -140,6 +165,7 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
       channelFallbacks.delete(channelName);
       channelLastEventAt.delete(channelName);
       if (timer) clearTimeout(timer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       stopFallback();
       if (startupTimer) window.clearTimeout(startupTimer);
       if (startupIdle != null && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(startupIdle);
