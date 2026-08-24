@@ -12,7 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
 import { compact, money, percent, price } from "@/lib/format";
 import { MIN_COIN_BUY_TON, nonNegativeEconomyValue, parseEconomyAmount } from "@/lib/economy";
-import type { Candle, Coin, Trade } from "@/lib/types";
+import type { Candle, Coin, CoinQuote, Trade } from "@/lib/types";
 import { openTelegramLinkSafely } from "@/lib/telegram-webapp";
 
 const CoinChart = dynamic(() => import("@/components/coin-chart").then((module) => module.CoinChart), {
@@ -127,7 +127,16 @@ export default function CoinPage() {
   const quote = useMemo(() => {
     if (!data || !validAmount) return null;
     const input = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
-    return calculateCoinQuote({ side, amount: input, tokenReserve: data.coin.tokenReserve, quoteReserve: data.coin.quoteReserve, currentPrice: data.coin.currentPrice, feeRate: Math.max(0, Number(data.economy.totalFeeBps || 0)) / 10_000 });
+    return calculateCoinQuote({
+      side,
+      amount: input,
+      tokenReserve: data.coin.tokenReserve,
+      quoteReserve: data.coin.quoteReserve,
+      currentPrice: data.coin.currentPrice,
+      feeRate: Math.max(0, Number(data.economy.totalFeeBps || 0)) / 10_000,
+      floorPrice: data.economy.floorPrice,
+      floorActive: data.economy.floorActive,
+    });
   }, [data, numericAmount, sellAll, side, validAmount]);
 
   function switchSide(next: "buy" | "sell") {
@@ -154,40 +163,76 @@ export default function CoinPage() {
   }
 
   async function trade() {
-    if (!data || busy || !quote || !validAmount) return;
-    if (quote.priceImpact >= 10 && !impactArmed) {
-      setImpactArmed(true);
-      setTradeNotice(`Влияние ${quote.priceImpact.toFixed(1)}% · нажми ещё раз`);
-      haptic("light");
-      return;
-    }
-    setImpactArmed(false);
+    if (!data || busy || !quote || !validAmount || tradeInFlight.current) return;
     const previous = data;
-    const inputAmount = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
-    const oldQuantity = data.holding.quantity;
-    const oldAvailableQuantity = data.holding.availableQuantity;
-    const oldCost = data.holding.costBasis;
-    const nextTokenReserve = side === "buy" ? data.coin.tokenReserve - quote.outputAmount : data.coin.tokenReserve + inputAmount;
-    if (!Number.isFinite(nextTokenReserve) || nextTokenReserve <= 0) {
-      setError("Слишком крупная сделка для текущей ликвидности.");
-      return;
-    }
-    const nextQuoteReserve = (data.coin.tokenReserve * data.coin.quoteReserve) / nextTokenReserve;
-    const nextMarketCap = quote.projectedPrice * data.coin.totalSupply;
-    const costReduction = side === "sell" && oldQuantity > 0 ? oldCost * Math.min(1, inputAmount / oldQuantity) : 0;
-    const optimistic: Payload = {
-      ...data,
-      coin: { ...data.coin, currentPrice: quote.projectedPrice, marketCap: nextMarketCap, tokenReserve: nextTokenReserve, quoteReserve: nextQuoteReserve },
-      holding: side === "buy"
-        ? { quantity: oldQuantity + quote.outputAmount, availableQuantity: oldAvailableQuantity + quote.outputAmount, costBasis: oldCost + inputAmount }
-        : { quantity: Math.max(0, oldQuantity - inputAmount), availableQuantity: Math.max(0, oldAvailableQuantity - inputAmount), costBasis: Math.max(0, oldCost - costReduction) },
-      balance: side === "buy" ? nonNegativeEconomyValue(data.balance - inputAmount) : data.balance + quote.outputAmount,
-      availableBalance: side === "buy" ? nonNegativeEconomyValue(data.availableBalance - inputAmount) : data.availableBalance + quote.outputAmount,
-    };
+    const requestedInputAmount = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
+    const wasSellAll = side === "sell" && sellAll;
 
     tradeInFlight.current = true;
     setBusy(true);
     setError(null);
+
+    let authoritativeQuote: CoinQuote;
+    try {
+      const quoteResult = await apiFetch<{ quote: CoinQuote }>(`/api/coins/${id}/quote`, {
+        method: "POST",
+        body: JSON.stringify({ side, amount: requestedInputAmount }),
+      });
+      authoritativeQuote = quoteResult.quote;
+      if (!authoritativeQuote
+        || authoritativeQuote.side !== side
+        || !Number.isFinite(authoritativeQuote.inputAmount)
+        || !Number.isFinite(authoritativeQuote.outputAmount)
+        || !Number.isFinite(authoritativeQuote.executionPrice)
+        || !Number.isFinite(authoritativeQuote.projectedPrice)
+        || !Number.isFinite(authoritativeQuote.priceImpact)
+        || authoritativeQuote.inputAmount <= 0
+        || authoritativeQuote.outputAmount <= 0) {
+        throw new Error("Сервер вернул некорректную котировку");
+      }
+    } catch (cause) {
+      tradeInFlight.current = false;
+      setBusy(false);
+      setTradeNotice(null);
+      setError(cause instanceof Error ? cause.message : "Не удалось обновить котировку");
+      void load(true);
+      return;
+    }
+
+    if (authoritativeQuote.priceImpact >= 10 && !impactArmed) {
+      tradeInFlight.current = false;
+      setBusy(false);
+      setImpactArmed(true);
+      setTradeNotice(`Влияние ${authoritativeQuote.priceImpact.toFixed(1)}% · нажми ещё раз`);
+      haptic("light");
+      return;
+    }
+    setImpactArmed(false);
+
+    const inputAmount = authoritativeQuote.inputAmount;
+    const oldQuantity = data.holding.quantity;
+    const oldAvailableQuantity = data.holding.availableQuantity;
+    const oldCost = data.holding.costBasis;
+    const nextTokenReserve = side === "buy" ? data.coin.tokenReserve - authoritativeQuote.outputAmount : data.coin.tokenReserve + inputAmount;
+    if (!Number.isFinite(nextTokenReserve) || nextTokenReserve <= 0) {
+      tradeInFlight.current = false;
+      setBusy(false);
+      setError("Слишком крупная сделка для текущей ликвидности.");
+      return;
+    }
+    const nextQuoteReserve = (data.coin.tokenReserve * data.coin.quoteReserve) / nextTokenReserve;
+    const nextMarketCap = authoritativeQuote.projectedPrice * data.coin.totalSupply;
+    const costReduction = side === "sell" && oldQuantity > 0 ? oldCost * Math.min(1, inputAmount / oldQuantity) : 0;
+    const optimistic: Payload = {
+      ...data,
+      coin: { ...data.coin, currentPrice: authoritativeQuote.projectedPrice, marketCap: nextMarketCap, tokenReserve: nextTokenReserve, quoteReserve: nextQuoteReserve },
+      holding: side === "buy"
+        ? { quantity: oldQuantity + authoritativeQuote.outputAmount, availableQuantity: oldAvailableQuantity + authoritativeQuote.outputAmount, costBasis: oldCost + inputAmount }
+        : { quantity: Math.max(0, oldQuantity - inputAmount), availableQuantity: Math.max(0, oldAvailableQuantity - inputAmount), costBasis: Math.max(0, oldCost - costReduction) },
+      balance: side === "buy" ? nonNegativeEconomyValue(data.balance - inputAmount) : data.balance + authoritativeQuote.outputAmount,
+      availableBalance: side === "buy" ? nonNegativeEconomyValue(data.availableBalance - inputAmount) : data.availableBalance + authoritativeQuote.outputAmount,
+    };
+
     setTradeNotice(null);
     setData(optimistic);
     patchProfile({ balance: optimistic.balance, availableBalance: optimistic.availableBalance });
@@ -196,18 +241,18 @@ export default function CoinPage() {
     haptic("medium");
 
     try {
-      const minOutput = Math.max(0, quote.outputAmount * (1 - slippage / 100));
+      const minOutput = Math.max(0, authoritativeQuote.outputAmount * (1 - slippage / 100));
       const requestId = tradeRequestId.current || makeTradeRequestId();
       tradeRequestId.current = requestId;
       await apiFetch("/api/trade", {
         method: "POST",
-        body: JSON.stringify({ requestId, coinId: id, side, amount: inputAmount, sellAll: side === "sell" && sellAll, minOutput }),
+        body: JSON.stringify({ requestId, coinId: id, side, amount: inputAmount, sellAll: wasSellAll, minOutput }),
       });
       haptic("light");
       tradeRequestId.current = null;
       tradeInFlight.current = false;
       setBusy(false);
-      setTradeNotice(side === "buy" ? `+${compact(quote.outputAmount)} ${data.coin.symbol}` : `+${money(quote.outputAmount)}`);
+      setTradeNotice(side === "buy" ? `+${compact(authoritativeQuote.outputAmount)} ${data.coin.symbol}` : `+${money(authoritativeQuote.outputAmount)}`);
       void refreshProfile();
       void load(true);
     } catch (e) {
@@ -217,9 +262,9 @@ export default function CoinPage() {
       setTradeNotice(null);
       patchProfile({ balance: previous.balance, availableBalance: previous.availableBalance });
       setAmount(amountText(inputAmount));
-      setSellAll(side === "sell" && Math.abs(inputAmount - previous.holding.availableQuantity) <= Math.max(1e-8, previous.holding.availableQuantity * 1e-12));
+      setSellAll(wasSellAll);
       const message = e instanceof Error ? e.message : "Сделка не выполнена";
-      setError((message.includes("Insufficient token balance") || message.includes("Недостаточно токенов")) ? "Баланс изменился. Нажми МАКС ещё раз." : message);
+      setError((message.includes("Insufficient token balance") || message.includes("Недостаточно токенов") || message.includes("unreserved token")) ? "Баланс изменился. Нажми МАКС ещё раз." : message);
       void load(true);
     }
   }
@@ -284,6 +329,7 @@ export default function CoinPage() {
 
       {belowMinimumBuy ? <p className="mt-1.5 text-[9px] text-[var(--muted)]">Минимум {MIN_COIN_BUY_TON} TON.</p> : null}
       {parsedAmount != null && numericAmount > max && !sellAll ? <p className="mt-1.5 text-[9px] text-[var(--negative)]">Недостаточно доступного баланса.</p> : null}
+      {side === "sell" && validAmount && !quote && data.economy.floorActive ? <p className="mt-1.5 text-[9px] text-[#d9c27a]">Активный floor не позволяет продать такой объём.</p> : null}
       {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1.5 truncate text-[8px] text-[#d9c27a]">Заблокировано: {compact(data.economy.lock.remaining)} {coin.symbol}</p> : null}
       {tradeNotice ? <div aria-live="polite" className={`mxm-success-pop mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
       {error ? <div className="mt-1.5 line-clamp-2 text-[9px] text-[#ff9aa4]">{error}</div> : null}
