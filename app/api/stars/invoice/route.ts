@@ -34,6 +34,22 @@ async function POSTHandler(request: Request) {
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  // Telegram does not guarantee an explicit cancellation update for an invoice
+  // that the user simply abandons. Keep the user's pending ledger truthful so
+  // old checkout attempts cannot remain pending forever.
+  const stalePending = await supabase.from("star_purchases")
+    .update({ status: "expired", updated_at: nowIso })
+    .eq("profile_id", profile.id)
+    .eq("status", "pending")
+    .lt("expires_at", nowIso)
+    .select("id");
+  if (stalePending.error) {
+    if (isDatabaseSchemaError(stalePending.error)) return apiFailure(stalePending.error, "Схема Stars требует актуальной миграции");
+    console.error("star pending cleanup", stalePending.error);
+  }
+
   const cleanupResult = await supabase
     .rpc("release_expired_star_authorizations_v200", { p_limit: 25 })
     .abortSignal(AbortSignal.timeout(1_500));
