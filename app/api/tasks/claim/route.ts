@@ -12,9 +12,11 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "mission-claim", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов. Подождите немного." }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  const action = body.action == null ? "claim" : body.action === "claim" || body.action === "claim_all" ? body.action : null;
+  if (!action) return NextResponse.json({ error: "Некорректное действие с заданием" }, { status: 400 });
   const supabase = getSupabaseAdmin();
 
-  if (body.action === "claim_all") {
+  if (action === "claim_all") {
     const snapshot = await supabase
       .from("user_missions_view")
       .select("mission_id,key,target,progress,claimed")

@@ -21,7 +21,10 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "profile-cosmetic", String(profile.id), 20, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  if (body.action === "reset" && body.key == null) {
+  const action = body.action == null ? "equip" : body.action === "equip" || body.action === "reset" ? body.action : null;
+  if (!action) return NextResponse.json({ error: "Некорректное действие с оформлением" }, { status: 400 });
+  if (action === "reset") {
+    if (body.key != null) return NextResponse.json({ error: "Для снятия рамки предмет не указывается" }, { status: 400 });
     const reset = await getSupabaseAdmin().from("profiles").update({ equipped_profile_frame: null, updated_at: new Date().toISOString() }).eq("id", profile.id).select("equipped_profile_frame").single();
     if (reset.error) return apiFailure(reset.error, "Не удалось снять рамку");
     return NextResponse.json({ status: "unequipped", key: null }, { headers: { "cache-control": "no-store" } });
