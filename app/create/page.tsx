@@ -9,7 +9,7 @@ import { money } from "@/lib/format";
 import { PrimaryButton } from "@/components/ui";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { prepareCoinImage } from "@/lib/client-image";
-import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR, COIN_TRADE_FEE_PERCENT } from "@/lib/economy";
+import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CREATOR, COIN_TRADE_FEE_PERCENT, parseEconomyAmount } from "@/lib/economy";
 
 const MAX_IMAGE = 2 * 1024 * 1024;
 const ACCEPTED = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -17,6 +17,7 @@ const MARKET_UI_STATE_KEY = "mxm-market-ui-v0642";
 type Rules = {
   launchFee:number; cooldownHours:number; maxActiveCoins:number; activeCoins:number; nextLaunchAt:string|null; economyReady:boolean;
   initialBuyMin:number; initialBuyMax:number; startPriceMin:number; startPriceMax:number; floorMaxBps:number;
+  creatorLockBps:number; creatorLockDays:number;
   energyCost:number; energy:number; maxEnergy:number; tradeFeePercent:number;
 };
 
@@ -39,7 +40,7 @@ export default function CreatePage() {
   const [floorPrice, setFloorPrice] = useState("0.00000005");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS, maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR, activeCoins: 0, nextLaunchAt: null, economyReady: false, initialBuyMin: 1, initialBuyMax: 1_000, startPriceMin: 0.00000001, startPriceMax: 0.000001, floorMaxBps: 5_000, energyCost: 20, energy: 0, maxEnergy: 100, tradeFeePercent: COIN_TRADE_FEE_PERCENT });
+  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS, maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR, activeCoins: 0, nextLaunchAt: null, economyReady: false, initialBuyMin: 1, initialBuyMax: 1_000, startPriceMin: 0.00000001, startPriceMax: 0.000001, floorMaxBps: 5_000, creatorLockBps: 5_000, creatorLockDays: 30, energyCost: 20, energy: 0, maxEnergy: 100, tradeFeePercent: COIN_TRADE_FEE_PERCENT });
   const [rulesLoaded, setRulesLoaded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
@@ -49,7 +50,12 @@ export default function CreatePage() {
 
   useEffect(() => {
     void apiFetch<Rules>("/api/coins", { cacheMs: 15_000 })
-      .then((next) => setRules({ ...next, tradeFeePercent: Number.isFinite(next.tradeFeePercent) ? next.tradeFeePercent : COIN_TRADE_FEE_PERCENT }))
+      .then((next) => setRules({
+        ...next,
+        tradeFeePercent: Number.isFinite(next.tradeFeePercent) ? next.tradeFeePercent : COIN_TRADE_FEE_PERCENT,
+        creatorLockBps: Number.isFinite(next.creatorLockBps) ? next.creatorLockBps : 5_000,
+        creatorLockDays: Number.isFinite(next.creatorLockDays) ? next.creatorLockDays : 30,
+      }))
       .catch(() => setError("Не удалось загрузить параметры запуска"))
       .finally(() => setRulesLoaded(true));
   }, []);
@@ -85,20 +91,25 @@ export default function CreatePage() {
 
   const cooldownActive = Boolean(rules.nextLaunchAt && new Date(rules.nextLaunchAt).getTime() > now);
   const hasSlot = rules.activeCoins < rules.maxActiveCoins;
-  const initialBuyValue = Number(initialBuy);
-  const startPriceValue = Number(startPrice);
-  const floorPriceValue = Number(floorPrice);
-  const validEconomy = Number.isFinite(initialBuyValue) && initialBuyValue >= rules.initialBuyMin && initialBuyValue <= rules.initialBuyMax
-    && Number.isFinite(startPriceValue) && startPriceValue >= rules.startPriceMin && startPriceValue <= rules.startPriceMax
-    && Number.isFinite(floorPriceValue) && floorPriceValue >= 0 && floorPriceValue <= startPriceValue * rules.floorMaxBps / 10_000;
-  const hasBalance = Boolean(profile && profile.availableBalance >= rules.launchFee + (Number.isFinite(initialBuyValue) ? initialBuyValue : 0));
+  const parsedInitialBuy = parseEconomyAmount(initialBuy);
+  const parsedStartPrice = parseEconomyAmount(startPrice);
+  const parsedFloorPrice = parseEconomyAmount(floorPrice);
+  const initialBuyValue = parsedInitialBuy ?? Number.NaN;
+  const startPriceValue = parsedStartPrice ?? Number.NaN;
+  const floorPriceValue = parsedFloorPrice ?? Number.NaN;
+  const validEconomy = parsedInitialBuy != null && initialBuyValue >= rules.initialBuyMin && initialBuyValue <= rules.initialBuyMax
+    && parsedStartPrice != null && startPriceValue >= rules.startPriceMin && startPriceValue <= rules.startPriceMax
+    && parsedFloorPrice != null && floorPriceValue >= 0 && floorPriceValue <= startPriceValue * rules.floorMaxBps / 10_000;
+  const hasBalance = Boolean(profile && profile.availableBalance >= rules.launchFee + (parsedInitialBuy ?? 0));
   const hasEnergy = rules.energy >= rules.energyCost;
   const launchPreview = (() => {
-    if (!Number.isFinite(initialBuyValue) || !Number.isFinite(startPriceValue) || initialBuyValue <= 0 || startPriceValue <= 0) return null;
+    if (parsedInitialBuy == null || parsedStartPrice == null || initialBuyValue <= 0 || startPriceValue <= 0) return null;
     const supply = 1_000_000_000;
     const initialQuoteReserve = supply * startPriceValue;
     const initialTokenReserve = supply;
-    const netSeed = initialBuyValue * (1 - rules.tradeFeePercent / 100);
+    const fee = Number((initialBuyValue * rules.tradeFeePercent / 100).toFixed(8));
+    const netSeed = initialBuyValue - fee;
+    if (netSeed <= 0) return null;
     const invariant = initialTokenReserve * initialQuoteReserve;
     const quoteReserve = initialQuoteReserve + netSeed;
     const tokenReserve = invariant / quoteReserve;
@@ -134,7 +145,7 @@ export default function CreatePage() {
     finally { setBusy(false); }
   }
 
-  const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Экономика рынка ещё не готова" : !validEconomy ? "Проверьте стартовую позицию и цены" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных мемкоинов` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasEnergy ? `Нужно ${rules.energyCost} энергии · доступно ${rules.energy}` : !hasBalance ? `Нужно ${money(rules.launchFee + initialBuyValue)} доступного баланса` : null;
+  const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Экономика рынка ещё не готова" : !validEconomy ? "Проверьте стартовую позицию и цены" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных мемкоинов` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasEnergy ? `Нужно ${rules.energyCost} энергии · доступно ${rules.energy}` : !hasBalance ? `Нужно ${money(rules.launchFee + (parsedInitialBuy ?? 0))} доступного баланса` : null;
 
   return (
     <div className="mx-auto max-w-xl mxm-page-enter">
@@ -163,9 +174,9 @@ export default function CreatePage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Стартовый резерв" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><input value={initialBuy} onChange={(e) => setInitialBuy(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
             <Field label="Стартовая цена" hint={`${rules.startPriceMin}–${rules.startPriceMax}`}><input value={startPrice} onChange={(e) => setStartPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
-            <Field label="Мин. цена на 30 дней" hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(e) => setFloorPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
+            <Field label={`Мин. цена на ${rules.creatorLockDays} дней`} hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(e) => setFloorPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
           </div>
-          <p className="text-[9px] leading-4 text-[var(--muted-2)]">50% токенов стартового резерва линейно разблокируются за 30 дней. Минимальная цена действует только в стартовый 30-дневный период.</p>
+          <p className="text-[9px] leading-4 text-[var(--muted-2)]">{rules.creatorLockBps / 100}% токенов стартовой позиции линейно разблокируются за {rules.creatorLockDays} дней. Минимальная цена действует в тот же стартовый период.</p>
         </div>
 
         <div className="mt-4 border-y border-[var(--border-soft)] py-3">
