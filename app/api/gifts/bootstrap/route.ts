@@ -77,14 +77,16 @@ async function POSTHandler(request: Request) {
       );
     }
 
-    // Keep network work out of GET /api/market. Import a few real Telegram Gift
-    // collections in one bounded mutation, then release a finite Genesis batch.
+    // Keep this request deliberately bounded. A previous production version
+    // attempted up to 18 collections x 500 items after three discovery pages
+    // and hit Vercel's 60-second function timeout. Bootstrap is incremental,
+    // so smaller batches are safer and later calls continue from next_offset.
     const hasTonApiKey = Boolean(process.env.TONAPI_KEY?.trim());
     const catalog = await syncTonApiGiftCatalog({
       bootstrapOnly: false,
-      discoverPages: hasTonApiKey ? 3 : 1,
-      maxCollections: hasTonApiKey ? 18 : 8,
-      itemsPerCollection: hasTonApiKey ? 500 : 180,
+      discoverPages: 1,
+      maxCollections: hasTonApiKey ? 6 : 3,
+      itemsPerCollection: hasTonApiKey ? 240 : 120,
     });
 
     // Another request may already own the global TonAPI lock. Do not race it
@@ -96,7 +98,9 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ ok: true, pending: true, skipped: true, listed: 0, catalog, retryAfterMs: 5000 }, { status: 202, headers: { "retry-after": "5" } });
     }
 
-    const genesis = await ensureGenesisGiftMarket({ batchSize: 700, force: true });
+    // Genesis is incremental too. Avoid making the same request perform a
+    // second oversized database batch after the network import has completed.
+    const genesis = await ensureGenesisGiftMarket({ batchSize: 350, force: true });
     const listed = await listedCount();
 
     if (listed <= 0) {
