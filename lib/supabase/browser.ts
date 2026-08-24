@@ -15,15 +15,25 @@ async function loadRealtimeConfig(): Promise<RealtimeConfig> {
 
 export function getSupabaseBrowser(): Promise<SupabaseClient | null> {
   if (clientPromise) return clientPromise;
-  clientPromise = loadRealtimeConfig().then((config) => {
-    if (!config.enabled) {
-      console.warn(`[MXM] Supabase Realtime отключён: ${config.reason}`);
-      return null;
+  clientPromise = (async () => {
+    try {
+      const config = await loadRealtimeConfig();
+      if (!config.enabled) {
+        console.warn(`[MXM] Supabase Realtime отключён: ${config.reason}`);
+        return null;
+      }
+      const { createClient } = await import("@supabase/supabase-js");
+      return createClient(config.url, config.key, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        realtime: { params: { eventsPerSecond: 10 } },
+      });
+    } catch (error) {
+      // A transient config/network/chunk failure must not poison Realtime for
+      // the entire lifetime of the Mini App. Let the next reconnect attempt
+      // build a fresh client instead of reusing a permanently rejected promise.
+      clientPromise = null;
+      throw error;
     }
-    return import("@supabase/supabase-js").then(({ createClient }) => createClient(config.url, config.key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      realtime: { params: { eventsPerSecond: 10 } },
-    }));
-  });
+  })();
   return clientPromise;
 }

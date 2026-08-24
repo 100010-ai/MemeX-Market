@@ -41,15 +41,19 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     if (error) throw error;
     if (!profileResult.data) return NextResponse.json({ error: "Игрок не найден" }, { status: 404 });
 
-    // Only refresh metadata for a profile that actually exists. Previously this
-    // background RPC ran before the existence check, so normal 404 requests
-    // produced P0001 "Profile not found" entries in Vercel runtime errors.
-    after(async () => {
-      try {
-        const refresh = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: id });
-        if (refresh.error) console.error("public profile meta refresh", refresh.error);
-      } catch (error) { console.error("public profile meta refresh", error); }
-    });
+    // Public profile reads used to enqueue a write RPC on every view, even if
+    // reputation metadata had just been refreshed. Only schedule the repair
+    // when the materialized profile metadata is absent or older than 5 minutes.
+    const reputationUpdatedAt = reputationResult.data?.updated_at ? Date.parse(String(reputationResult.data.updated_at)) : 0;
+    const reputationStale = !Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000;
+    if (reputationStale) {
+      after(async () => {
+        try {
+          const refresh = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: id });
+          if (refresh.error) console.error("public profile meta refresh", refresh.error);
+        } catch (error) { console.error("public profile meta refresh", error); }
+      });
+    }
 
     const person = profileResult.data;
     const stats = statsResult.data && typeof statsResult.data === "object" && !Array.isArray(statsResult.data)

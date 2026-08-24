@@ -53,15 +53,24 @@ async function POSTHandler(request: Request) {
   if (action === "read") {
     const id = typeof body.id === "string" ? body.id : "";
     if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID уведомления" }, { status: 400 });
-    const { error } = await supabase.from("user_notifications").update({ read_at: new Date().toISOString() }).eq("profile_id", profile.id).eq("id", id);
-    if (error) return apiFailure(error, "Не удалось обновить уведомления");
+    const result = await supabase.from("user_notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("profile_id", profile.id)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (result.error) return apiFailure(result.error, "Не удалось обновить уведомления");
+    if (!result.data) return NextResponse.json({ error: "Уведомление не найдено" }, { status: 404 });
     return NextResponse.json({ ok: true });
   }
   if (action === "preferences") {
     const update: Record<string, unknown> = { profile_id: profile.id, updated_at: new Date().toISOString() };
     let changed = false;
     for (const key of notificationPreferenceKeys) {
-      if (typeof body[key] !== "boolean") continue;
+      if (!(key in body)) continue;
+      if (typeof body[key] !== "boolean") {
+        return NextResponse.json({ error: "Некорректное значение настройки уведомлений", key }, { status: 400 });
+      }
       update[key] = body[key];
       changed = true;
     }
