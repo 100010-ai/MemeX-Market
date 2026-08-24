@@ -1,8 +1,7 @@
-import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { calculateCoinQuote } from "@/lib/amm";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { MAX_COIN_TRADE_INPUT, MIN_COIN_BUY_TON, parseEconomyAmount } from "@/lib/economy";
 import { getRuntimeConfig } from "@/lib/runtime-config";
@@ -24,24 +23,19 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (side === "buy" && amount < MIN_COIN_BUY_TON) return NextResponse.json({ error: `Минимальная покупка — ${MIN_COIN_BUY_TON} TON` }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
-  const [coinResult, settingsResult] = await Promise.all([
-    supabase.from("coins").select("id,status,token_reserve,quote_reserve,current_price").eq("id", id).maybeSingle(),
-    supabase.from("economy_settings").select("coin_total_fee_bps").eq("singleton", true).maybeSingle(),
-  ]);
-  if (coinResult.error || settingsResult.error) return apiFailure(coinResult.error || settingsResult.error, "Не удалось выполнить запрос");
-  const coin = coinResult.data;
-  if (!coin || coin.status !== "active") return NextResponse.json({ error: "Этот мемкоин недоступен для торговли" }, { status: 404 });
-
-  const feeRate = Math.max(0, Number(settingsResult.data?.coin_total_fee_bps || 0)) / 10_000;
-  const quote = calculateCoinQuote({
-    side,
-    amount,
-    tokenReserve: Number(coin.token_reserve),
-    quoteReserve: Number(coin.quote_reserve),
-    currentPrice: Number(coin.current_price),
-    feeRate,
+  const { data, error } = await supabase.rpc("quote_coin_trade_v202", {
+    p_profile_id: profile.id,
+    p_coin_id: id,
+    p_side: side,
+    p_amount: amount,
   });
-  if (!quote) return NextResponse.json({ error: "Сумма сделки слишком мала" }, { status: 400 });
-  return NextResponse.json({ quote });
+  if (error) {
+    if (/schema cache|does not exist|could not find the function/i.test(error.message || "")) return apiFailure(error, "Схема котировок требует актуальной миграции");
+    return NextResponse.json({ error: publicBusinessError(error, "Не удалось рассчитать котировку") }, { status: 400 });
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return NextResponse.json({ error: "Сервер вернул некорректную котировку" }, { status: 502 });
+  }
+  return NextResponse.json({ quote: data }, { headers: { "cache-control": "no-store" } });
 }
 export const POST = withApiErrors("app/api/coins/[id]/quote/route.ts:POST", POSTHandler);
