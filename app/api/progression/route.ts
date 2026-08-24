@@ -113,7 +113,7 @@ async function POSTHandler(request: Request) {
   }
 
   if (body.action === "claim_level") {
-    const level = Math.floor(Number(body.level));
+    const level = Number(body.level);
     if (!Number.isInteger(level) || level < 2 || level > 100) return NextResponse.json({ error: "Некорректный уровень" }, { status: 400 });
     const { data, error } = await supabase.rpc("claim_account_level_reward_v064", { p_profile_id: profile.id, p_level: level });
     if (error) {
