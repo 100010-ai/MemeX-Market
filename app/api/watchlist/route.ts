@@ -1,5 +1,5 @@
 import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
@@ -33,13 +33,14 @@ function mapCollection(row: Record<string, unknown>) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  const profileId = String(profile.id);
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(500);
   if (error) return apiFailure(error, "Не удалось загрузить избранное");
   const rows = data || [];
-  const coinIds = rows.filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id));
-  const giftCollections = rows.filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection));
-  const giftIds = rows.filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id));
+  const coinIds = [...new Set(rows.filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)))];
+  const giftCollections = [...new Set(rows.filter((row) => row.kind === "gift_collection" && row.gift_collection).map((row) => String(row.gift_collection)))];
+  const giftIds = [...new Set(rows.filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id)))];
 
   const [config, premiumResult] = await Promise.all([
     getRuntimeConfig(),
@@ -62,13 +63,45 @@ async function GETHandler() {
   const collections = (collectionsResult.data || []).flatMap((row) => { const mapped = mapCollection(row as Record<string, unknown>); return mapped ? [mapped] : []; }).sort((a, b) => giftCollections.indexOf(a.baseName) - giftCollections.indexOf(b.baseName));
   const gifts = (giftsResult.data || []).map(mapGift).sort((a, b) => giftIds.indexOf(a.virtualGiftId) - giftIds.indexOf(b.virtualGiftId));
 
+  const validCoinIds = new Set(coins.map((coin) => coin.id));
+  const validCollections = new Set(collections.map((collection) => collection.baseName));
+  const validGiftIds = new Set(gifts.map((gift) => gift.virtualGiftId));
+  const cleanCoinIds = coinIds.filter((id) => validCoinIds.has(id));
+  const cleanCollections = giftCollections.filter((name) => validCollections.has(name));
+  const cleanGiftIds = giftIds.filter((id) => validGiftIds.has(id));
+  const staleCoinIds = coinIds.filter((id) => !validCoinIds.has(id));
+  const staleCollections = giftCollections.filter((name) => !validCollections.has(name));
+  const staleGiftIds = giftIds.filter((id) => !validGiftIds.has(id));
+
+  if (staleCoinIds.length || staleCollections.length || staleGiftIds.length) {
+    after(async () => {
+      const cleanup = getSupabaseAdmin();
+      try {
+        if (staleCoinIds.length) {
+          const result = await cleanup.from("user_watchlist").delete().eq("profile_id", profileId).eq("kind", "coin").in("coin_id", staleCoinIds);
+          if (result.error) console.error("watchlist stale coin cleanup", result.error);
+        }
+        if (staleCollections.length) {
+          const result = await cleanup.from("user_watchlist").delete().eq("profile_id", profileId).eq("kind", "gift_collection").in("gift_collection", staleCollections);
+          if (result.error) console.error("watchlist stale collection cleanup", result.error);
+        }
+        if (staleGiftIds.length) {
+          const result = await cleanup.from("user_watchlist").delete().eq("profile_id", profileId).eq("kind", "gift").in("virtual_gift_id", staleGiftIds);
+          if (result.error) console.error("watchlist stale gift cleanup", result.error);
+        }
+      } catch (cause) {
+        console.error("watchlist stale cleanup", cause);
+      }
+    });
+  }
+
   return NextResponse.json({
-    watchlist: { coinIds, giftCollections, giftIds },
+    watchlist: { coinIds: cleanCoinIds, giftCollections: cleanCollections, giftIds: cleanGiftIds },
     coins,
     collections,
     gifts,
     alerts: (alertsResult.data || []).map((row) => ({ id: String(row.id), kind: row.kind, coinId: row.coin_id || null, giftId: row.virtual_gift_id || null, giftCollection: row.gift_collection || null, direction: row.direction, targetPrice: Math.max(0, finiteNumber(row.target_price)), enabled: Boolean(row.enabled), lastTriggeredAt: row.last_triggered_at || null, createdAt: row.created_at })),
-    watchlistMeta: { used: rows.length, limit: watchlistLimit, premiumActive },
+    watchlistMeta: { used: cleanCoinIds.length + cleanCollections.length + cleanGiftIds.length, limit: watchlistLimit, premiumActive },
   });
 }
 
@@ -81,8 +114,9 @@ async function POSTHandler(request: Request) {
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const kind = body.kind === "coin" ? "coin" : body.kind === "gift_collection" ? "gift_collection" : body.kind === "gift" ? "gift" : null;
-  const enabled = body.enabled === true;
   if (!kind) return NextResponse.json({ error: "Некорректный тип избранного" }, { status: 400 });
+  if (typeof body.enabled !== "boolean") return NextResponse.json({ error: "Некорректное состояние избранного" }, { status: 400 });
+  const enabled = body.enabled;
   const supabase = getSupabaseAdmin();
   const config = await getRuntimeConfig();
   let watchlistLimit = config.remoteConfig.maxWatchlistItems;

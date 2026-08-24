@@ -1,14 +1,17 @@
 import { withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { tonApiHealth } from "@/lib/providers/tonapi-client";
 
 export const runtime = "nodejs";
 
 async function GETHandler() {
-  const session = await requireSession();
-  if (!session) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
+  // Operational health contains provider state and database diagnostics. Keep
+  // it behind the same admin allowlist as the rest of the control surface.
+  const admin = await requireAdminProfile();
+  if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const supabase = getSupabaseAdmin();
   const settings = await supabase.from("market_settings").select("external_quote_hours").eq("singleton", true).maybeSingle();
   const quoteHours = Math.max(1, Math.min(168, Number(settings.data?.external_quote_hours || 12)));
@@ -23,6 +26,9 @@ async function GETHandler() {
   ]);
 
   const errors = [settings.error, catalogState.error, collections.error, assets.error, listed.error, quotedAssets.error, freshQuotedAssets.error].filter(Boolean);
+  if (errors.length) {
+    console.warn("market health database diagnostics", errors.map((error) => ({ code: error?.code || null })));
+  }
   return NextResponse.json({
     ok: errors.length === 0,
     provider: { name: "tonapi", ...tonApiHealth() },
@@ -39,7 +45,7 @@ async function GETHandler() {
       freshQuotedAssets: freshQuotedAssets.count || 0,
       staleQuotedAssets: Math.max(0, (quotedAssets.count || 0) - (freshQuotedAssets.count || 0)),
     },
-    databaseErrors: errors.map((error) => error?.message || "database error").slice(0, 4),
+    databaseErrorCount: errors.length,
   }, { headers: { "cache-control": "private, no-store" } });
 }
 export const GET = withApiErrors("app/api/system/market-health/route.ts:GET", GETHandler);
