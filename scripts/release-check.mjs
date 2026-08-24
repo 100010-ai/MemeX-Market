@@ -74,6 +74,8 @@ const migration028 = read("supabase/migrations/028_remove_advertising.sql");
 const migration029 = read("supabase/migrations/029_market_scalability.sql");
 const migration9994 = read("supabase/migrations/9994_mrkt_player_market_handoff.sql");
 const migration99999 = read("supabase/migrations/99999_store_battlepass_cases_v13.sql");
+const migration100022 = read("supabase/migrations/100022_memecoin_vip_launch_repair_v0661.sql");
+const migration100023 = read("supabase/migrations/100023_memecoin_launch_fee_rebalance_v0662.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -133,6 +135,8 @@ check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration1
 check("v0.64.9 package version", packageJson.includes('"version": "0.64.9"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
+check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
+check("Migration 100023 makes the paid launch reachable", migration100023.includes("coin_launch_fee=50") && migration100023.includes("coin_launch_fee=150"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")
@@ -201,7 +205,7 @@ check("v0.64.6 Control server separates validation from runtime failures", read(
 
 // v0.64.7 Economy & Performance Polish: all 16 requested existing-system passes.
 check("v0.64.7 economy input is normalized centrally", economy.includes("parseEconomyAmount") && economy.includes("MAX_COIN_TRADE_INPUT") && read("app/api/trade/route.ts").includes("MIN_COIN_BUY_TON"));
-check("v0.64.7 AMM preview uses configured fee", read("lib/amm.ts").includes("feeRate?: number") && read("app/coin/[id]/page.tsx").includes("data.economy.totalFeeBps") && read("app/api/coins/[id]/quote/route.ts").includes("coin_total_fee_bps"));
+check("v0.64.7 AMM preview uses configured fee", read("lib/amm.ts").includes("feeRate?: number") && read("app/coin/[id]/page.tsx").includes("data.economy.totalFeeBps") && read("app/api/coins/[id]/quote/route.ts").includes("quote_coin_trade_v202"));
 check("v0.64.7 memecoin trade boundaries are hardened", read("app/api/coins/[id]/quote/route.ts").includes("MAX_COIN_TRADE_INPUT") && read("app/api/coins/[id]/orders/route.ts").includes("MIN_COIN_BUY_TON") && read("app/coin/[id]/page.tsx").includes("nextTokenReserve <= 0"));
 check("v0.64.7 gift market paging adapts to constrained networks", marketPage.includes("constrainedNetwork") && marketPage.includes('"72px 0px"'));
 check("v0.64.7 stale gift purchase conflicts refresh authoritatively", read("components/gifts/gift-detail.tsx").includes('key === "buy"') && read("app/api/gifts/[id]/buy/route.ts").includes("GIFT_CONFLICT"));
@@ -225,7 +229,7 @@ check("v0.64.9 UI primitives are unified", read("components/ui.tsx").includes("m
 check("v0.64.9 motion respects constrained and reduced-motion clients", read("lib/client-performance.ts").includes("shouldUseRichMotion") && read("app/globals.css").includes("prefers-reduced-motion"));
 check("v0.64.9 Gift Market uses adaptive page sizing", read("app/market/page.tsx").includes("adaptiveListPageSize") && read("app/market/page.tsx").includes("rootMargin"));
 check("v0.64.9 Gift detail prioritizes trading", read("components/gifts/gift-detail.tsx").includes("mxm-gift-trade-panel") && read("app/globals.css").includes("position:sticky"));
-check("v0.64.9 memecoin chart waits for real market history", read("app/coin/[id]/page.tsx").includes("График появится после второй сделки") && read("app/coin/[id]/page.tsx").includes("openTelegramLinkSafely"));
+check("v0.64.9 memecoin chart starts from the first public candle", read("app/coin/[id]/page.tsx").includes("chartCandles.length >= 1") && read("app/coin/[id]/page.tsx").includes("openTelegramLinkSafely"));
 check("v0.64.9 portfolio supports adaptive rendering and quick sell", read("app/vault/page.tsx").includes("adaptiveListPageSize") && read("app/vault/page.tsx").includes("mxm-vault-quick-sell"));
 check("v0.64.9 battle pass has focused track and live success state", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("mxm-success-pop"));
 check("v0.64.9 cases reduce roulette work on constrained devices", read("app/cases/page.tsx").includes("getClientPerformanceProfile") && read("app/cases/page.tsx").includes("constrained"));
@@ -324,7 +328,7 @@ check("Games disabled in DB", migration019.includes("daily_game_3") && migration
 check("Old market side dashboard removed", !marketPage.includes("MarketSide") && !marketPage.includes("Рынок сейчас") && !marketPage.includes("Медианный флор"));
 check("One robust Gift filter drawer", marketPage.includes("GiftFiltersDrawer") && filters.includes("createPortal") && filters.includes("document.body"));
 check("Misleading 25M launch copy removed", !/25[ ,.\u00a0]?000[ ,.\u00a0]?000|Стартовая позиция/i.test(createPage));
-check("Current launch economics", economy.includes("COIN_LAUNCH_FEE_TON = 150") && economy.includes("COIN_MAX_ACTIVE_PER_CREATOR = 2") && economy.includes("COIN_LAUNCH_COOLDOWN_HOURS = 12"));
+check("Current launch economics", economy.includes("COIN_LAUNCH_FEE_TON = 50") && economy.includes("COIN_MAX_ACTIVE_PER_CREATOR = 2") && economy.includes("COIN_LAUNCH_COOLDOWN_HOURS = 12"));
 check("Coin launch waits for economy migration", coinRoute.includes("schema_version") && coinRoute.includes("экономика обновляется") && createPage.includes("economyReady"));
 check("Coin create has no post-RPC visibility mutation", !coinRoute.includes('from("coins").update({ status: "active"'));
 
@@ -350,7 +354,7 @@ const retiredAdvertisingPattern = /(adsgram|reward(?:ed)?[_-]?ads?|sponsored[_-]
 const liveAdvertisingReferences = trackedFiles()
   .filter((relative) => exists(relative))
   .filter((relative) => relative === ".env.example" || relative === "package.json" || /^(app|components|lib|scripts)\//.test(relative))
-  .filter((relative) => relative !== "scripts/release-check.mjs" && relative !== "scripts/cleanup-retired-source.mjs")
+  .filter((relative) => !["scripts/release-check.mjs", "scripts/prebuild-check.mjs", "scripts/cleanup-retired-source.mjs"].includes(relative))
   .filter((relative) => retiredAdvertisingPattern.test(read(relative)));
 
 check("Advertising routes, helpers, pages and setup docs removed", retiredAdvertisingFiles.every((relative) => !exists(relative)), retiredAdvertisingFiles.filter(exists).join(", "));

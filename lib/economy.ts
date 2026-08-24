@@ -1,4 +1,4 @@
-export const COIN_LAUNCH_FEE_TON = 150;
+export const COIN_LAUNCH_FEE_TON = 50;
 export const COIN_LAUNCH_COOLDOWN_HOURS = 12;
 export const COIN_MAX_ACTIVE_PER_CREATOR = 2;
 
