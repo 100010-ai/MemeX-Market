@@ -23,6 +23,7 @@ check("Verifier exists", exists("scripts/verify.mjs"));
 check("Full release gate exists", exists("scripts/release-check.mjs"));
 
 const retiredRuntimePaths = [
+  "app/api/auth/dev",
   "app/api/games",
   "app/api/rewards/ads",
   "app/api/sponsored-tasks",
