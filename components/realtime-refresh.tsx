@@ -8,6 +8,13 @@ const channelStates = new Map<string, ChannelState>();
 const channelFallbacks = new Map<string, number>();
 const channelLastEventAt = new Map<string, number>();
 
+// Some internal audit tables are intentionally service-role-only and are not
+// safe browser Realtime sources. Subscribe to the public mutation table that
+// changes in the same transaction instead so the UI still receives a signal.
+const realtimeTableAliases: Readonly<Record<string, string>> = {
+  gift_listing_events: "virtual_gifts",
+};
+
 function pageHidden() {
   return document.visibilityState === "hidden";
 }
@@ -58,7 +65,13 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
       }, wait);
     };
 
-    const tableList = tableKey.split("|").filter(Boolean);
+    const seenRealtimeTables = new Set<string>();
+    const tableList = tableKey.split("|").filter(Boolean).flatMap((sourceTable) => {
+      const table = realtimeTableAliases[sourceTable] || sourceTable;
+      if (seenRealtimeTables.has(table)) return [];
+      seenRealtimeTables.add(table);
+      return [{ sourceTable, table }];
+    });
 
     const stopFallback = () => {
       if (fallbackTimer) clearInterval(fallbackTimer);
@@ -96,8 +109,8 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
           return;
         }
         const channel = supabase.channel(channelName);
-        for (const table of tableList) {
-          const filter = filters?.[table];
+        for (const { sourceTable, table } of tableList) {
+          const filter = filters?.[sourceTable] || filters?.[table];
           const config = filter
             ? { event: "*" as const, schema: "public", table, filter }
             : { event: "*" as const, schema: "public", table };
