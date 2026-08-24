@@ -80,12 +80,19 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "season-claim", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  if (body.action === "claim_all") {
+  const action = body.action == null
+    ? "claim"
+    : body.action === "claim" || body.action === "claim_all" || body.action === "claim_prestige"
+      ? body.action
+      : null;
+  if (!action) return NextResponse.json({ error: "Некорректное действие с сезонной наградой" }, { status: 400 });
+
+  if (action === "claim_all") {
     const { data, error } = await getSupabaseAdmin().rpc("claim_all_season_rewards_v300", { p_profile_id: profile.id });
     if (error) return apiFailure(error, "Не удалось забрать сезонные награды", 400);
     return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
   }
-  if (body.action === "claim_prestige") {
+  if (action === "claim_prestige") {
     const prestigeLevel = Number(body.prestigeLevel);
     if (!Number.isInteger(prestigeLevel) || prestigeLevel < 1 || prestigeLevel > 1000) return NextResponse.json({ error: "Некорректный Prestige-уровень" }, { status: 400 });
     const { data, error } = await getSupabaseAdmin().rpc("claim_season_prestige_v064", { p_profile_id: profile.id, p_prestige_level: prestigeLevel });
