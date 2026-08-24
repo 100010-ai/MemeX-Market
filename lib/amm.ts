@@ -2,6 +2,10 @@ import type { CoinQuote } from "@/lib/types";
 
 export const COIN_FEE_RATE = 0.005;
 
+function roundFee(value: number) {
+  return Number(value.toFixed(8));
+}
+
 export function calculateCoinQuote(args: {
   side: "buy" | "sell";
   amount: number;
@@ -9,6 +13,8 @@ export function calculateCoinQuote(args: {
   quoteReserve: number;
   currentPrice: number;
   feeRate?: number;
+  floorPrice?: number | null;
+  floorActive?: boolean;
 }): CoinQuote | null {
   const { side, amount, tokenReserve, quoteReserve, currentPrice } = args;
   const feeRate = Number.isFinite(args.feeRate) && Number(args.feeRate) >= 0 && Number(args.feeRate) < 1 ? Number(args.feeRate) : COIN_FEE_RATE;
@@ -19,7 +25,7 @@ export function calculateCoinQuote(args: {
   if (!Number.isFinite(k) || k <= 0) return null;
 
   if (side === "buy") {
-    const feeAmount = amount * feeRate;
+    const feeAmount = roundFee(amount * feeRate);
     const quoteNet = amount - feeAmount;
     const newQuote = quoteReserve + quoteNet;
     const newToken = k / newQuote;
@@ -41,12 +47,14 @@ export function calculateCoinQuote(args: {
 
   const newToken = tokenReserve + amount;
   const newQuote = k / newToken;
-  const quoteGross = quoteReserve - newQuote;
-  const feeAmount = quoteGross * feeRate;
-  const outputAmount = quoteGross - feeAmount;
-  if (!Number.isFinite(outputAmount) || outputAmount <= 0) return null;
-  const executionPrice = outputAmount / amount;
   const projectedPrice = newQuote / newToken;
+  const floorPrice = Number(args.floorPrice);
+  if (args.floorActive === true && Number.isFinite(floorPrice) && floorPrice > 0 && projectedPrice < floorPrice) return null;
+  const quoteGross = quoteReserve - newQuote;
+  const feeAmount = roundFee(quoteGross * feeRate);
+  const outputAmount = quoteGross - feeAmount;
+  if (!Number.isFinite(outputAmount) || outputAmount < 0.000001) return null;
+  const executionPrice = outputAmount / amount;
   return {
     side,
     inputAmount: amount,
