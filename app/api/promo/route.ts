@@ -11,7 +11,10 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "promo-code", String(profile.id), 12, 300))) return NextResponse.json({ error: "Слишком много попыток. Попробуйте позже." }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  const code = String(body.code || "").trim().toUpperCase().slice(0, 32);
+  if (typeof body.code !== "string") return NextResponse.json({ error: "Некорректный промокод" }, { status: 400 });
+  const rawCode = body.code.trim();
+  if (rawCode.length < 3 || rawCode.length > 32) return NextResponse.json({ error: "Некорректный промокод" }, { status: 400 });
+  const code = rawCode.toUpperCase();
   if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return NextResponse.json({ error: "Некорректный промокод" }, { status: 400 });
   const result = await getSupabaseAdmin().rpc("redeem_promo_code_v047", { p_profile_id: profile.id, p_code: code });
   if (result.error) { if (String(result.error.code || "") === "42P01") return apiFailure(result.error, "Промокоды временно недоступны"); return NextResponse.json({ error: publicBusinessError(result.error, "Промокод недействителен или больше недоступен") }, { status: 400 }); }
