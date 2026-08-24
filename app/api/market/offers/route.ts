@@ -7,14 +7,18 @@ import { recordAppError } from "@/lib/error-inbox";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { parseEconomyAmount } from "@/lib/economy";
 
-function cleanText(value: unknown, max = 120) {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
+function strictText(value: unknown, max = 120) {
+  if (typeof value !== "string") return null;
+  const clean = value.trim();
+  return clean && clean.length <= max ? clean : null;
 }
 
 async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-  const baseName = cleanText(request.nextUrl.searchParams.get("baseName"));
+  const rawBaseName = request.nextUrl.searchParams.get("baseName");
+  const baseName = rawBaseName == null ? null : strictText(rawBaseName);
+  if (rawBaseName != null && !baseName) return NextResponse.json({ error: "Некорректное имя коллекции" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   try {
     const outgoingBase = () => supabase.from("advanced_gift_offers_v056")
@@ -40,24 +44,14 @@ async function GETHandler(request: NextRequest) {
       const relatedBuyer = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       const buyer = relatedBuyer && typeof relatedBuyer === "object" ? relatedBuyer as Record<string, unknown> : null;
       return {
-        id: String(row.id),
-        buyerId: String(row.buyer_profile_id),
+        id: String(row.id), buyerId: String(row.buyer_profile_id),
         buyerName: buyer ? (buyer.username ? `@${String(buyer.username)}` : buyer.first_name ? String(buyer.first_name) : null) : null,
-        baseName: String(row.base_name),
-        scopeType: row.scope_type as "collection" | "model" | "backdrop" | "symbol",
-        traitValue: row.trait_value == null ? null : String(row.trait_value),
-        amount: Number(row.amount),
-        maxFills: Number(row.max_fills),
-        filledCount: Number(row.filled_count),
-        status: String(row.status),
-        expiresAt: String(row.expires_at),
-        createdAt: String(row.created_at),
+        baseName: String(row.base_name), scopeType: row.scope_type as "collection" | "model" | "backdrop" | "symbol",
+        traitValue: row.trait_value == null ? null : String(row.trait_value), amount: Number(row.amount), maxFills: Number(row.max_fills),
+        filledCount: Number(row.filled_count), status: String(row.status), expiresAt: String(row.expires_at), createdAt: String(row.created_at),
       };
     };
-    return NextResponse.json({
-      outgoing: ((outgoing.data || []) as Record<string, unknown>[]).map(map),
-      market: ((market.data || []) as Record<string, unknown>[]).map(map),
-    }, { headers: { "cache-control": "private, no-store" } });
+    return NextResponse.json({ outgoing: ((outgoing.data || []) as Record<string, unknown>[]).map(map), market: ((market.data || []) as Record<string, unknown>[]).map(map) }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("advanced offers", error);
     await recordAppError("/api/market/offers", error, String(profile.id), { method: "GET" });
@@ -75,24 +69,20 @@ async function POSTHandler(request: Request) {
   try {
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-    const baseName = cleanText(body.baseName);
+    const baseName = strictText(body.baseName);
     const scopeType = typeof body.scopeType === "string" && ["collection", "model", "backdrop", "symbol"].includes(body.scopeType) ? body.scopeType : null;
-    const traitValue = cleanText(body.traitValue) || null;
+    const traitValue = body.traitValue == null ? null : strictText(body.traitValue);
     const amount = parseEconomyAmount(body.amount);
     const maxFills = parseEconomyAmount(body.maxFills ?? 1);
     const durationHours = parseEconomyAmount(body.durationHours ?? 72);
-    if (!baseName || !scopeType || amount == null || amount <= 0 || amount > 1_000_000_000 || maxFills == null || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || durationHours == null || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
+    const traitValid = scopeType === "collection" ? body.traitValue == null || body.traitValue === "" : Boolean(traitValue);
+    if (!baseName || !scopeType || !traitValid || amount == null || amount <= 0 || amount > 1_000_000_000 || maxFills == null || !Number.isInteger(maxFills) || maxFills < 1 || maxFills > 50 || durationHours == null || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 720) {
       return NextResponse.json({ error: "Некорректные параметры предложения" }, { status: 400 });
     }
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.rpc("create_advanced_gift_offer_v056", {
-      p_buyer_id: profile.id,
-      p_base_name: baseName,
-      p_scope_type: scopeType,
-      p_trait_value: scopeType === "collection" ? null : traitValue,
-      p_amount: amount,
-      p_max_fills: maxFills,
-      p_duration_hours: durationHours,
+      p_buyer_id: profile.id, p_base_name: baseName, p_scope_type: scopeType,
+      p_trait_value: scopeType === "collection" ? null : traitValue, p_amount: amount, p_max_fills: maxFills, p_duration_hours: durationHours,
     });
     if (error) return apiFailure(error, "Не удалось создать предложение", 400);
     return NextResponse.json({ offer: data }, { status: 201 });
