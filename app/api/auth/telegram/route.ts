@@ -24,7 +24,9 @@ async function POSTHandler(request: Request) {
     // Telegram user. The old anonymous key accidentally pooled every player
     // into one global bucket and caused random 429 screens.
     const validated = validateTelegramInitData(initData, botToken, 60 * 15);
-    if (!validated.ok) return NextResponse.json({ error: validated.reason }, { status: 401 });
+    if (!validated.ok) {
+      return NextResponse.json({ error: "Не удалось подтвердить данные Telegram. Откройте MXM заново." }, { status: 401 });
+    }
     const { user, startParam } = validated;
 
     if (!(await enforceRateLimit(request, "telegram-auth", user.id, 60, 300))) {
@@ -46,8 +48,15 @@ async function POSTHandler(request: Request) {
     if (startParam?.startsWith("ref_")) {
       const code = startParam.slice(4);
       if (/^[A-Za-z0-9_-]{6,32}$/.test(code)) {
-        const referral = await supabase.rpc("attach_referrer_v046", { p_profile_id: data.id, p_referral_code: code });
-        if (referral.error) return apiFailure(referral.error, "Не удалось применить реферальный код");
+        // Referral attribution is useful, but it is not part of authentication.
+        // A stale referral migration or transient DB error must never prevent a
+        // valid Telegram user from entering the app.
+        try {
+          const referral = await supabase.rpc("attach_referrer_v046", { p_profile_id: data.id, p_referral_code: code });
+          if (referral.error) console.warn("referral attach skipped", referral.error);
+        } catch (referralError) {
+          console.warn("referral attach skipped", referralError);
+        }
       }
     }
     const bannedUntil = data.banned_until ? new Date(String(data.banned_until)).getTime() : null;
