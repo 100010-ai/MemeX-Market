@@ -47,6 +47,13 @@ function clampInt(value: unknown, fallback: number, min: number, max: number) {
   return Number.isInteger(numeric) ? Math.min(max, Math.max(min, numeric)) : fallback;
 }
 
+function requireInt(value: unknown, min: number, max: number, label: string) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${label}: допустимо целое число от ${min} до ${max}`);
+  }
+  return value;
+}
+
 export function normalizeRuntimeConfig(row: Record<string, unknown>): RuntimeConfig {
   const flags = boolRecord(row.feature_flags);
   const remote = boolRecord(row.remote_config);
@@ -110,26 +117,38 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 export function validateRuntimeConfigInput(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Некорректная конфигурация");
   const input = value as Record<string, unknown>;
-  const currentFlags = boolRecord(input.featureFlags);
-  const currentRemote = boolRecord(input.remoteConfig);
+  if (typeof input.maintenanceMode !== "boolean") throw new Error("maintenanceMode должен быть boolean");
   const message = typeof input.maintenanceMessage === "string" ? input.maintenanceMessage.trim() : "";
   if (!message || message.length > 240) throw new Error("Сообщение техработ должно содержать от 1 до 240 символов");
+
+  if (!input.featureFlags || typeof input.featureFlags !== "object" || Array.isArray(input.featureFlags)) {
+    throw new Error("Некорректные Feature Flags");
+  }
+  const currentFlags = input.featureFlags as Record<string, unknown>;
+  if (["gifts", "memecoins", "referrals", "stars"].some((key) => typeof currentFlags[key] !== "boolean")) {
+    throw new Error("Все Feature Flags должны быть boolean");
+  }
+
+  if (!input.remoteConfig || typeof input.remoteConfig !== "object" || Array.isArray(input.remoteConfig)) {
+    throw new Error("Некорректный Remote Config");
+  }
+  const currentRemote = input.remoteConfig as Record<string, unknown>;
+
   const flags: RuntimeFeatureFlags = {
-    gifts: currentFlags.gifts === true,
-    memecoins: currentFlags.memecoins === true,
-    referrals: currentFlags.referrals === true,
-    stars: currentFlags.stars === true,
+    gifts: currentFlags.gifts as boolean,
+    memecoins: currentFlags.memecoins as boolean,
+    referrals: currentFlags.referrals as boolean,
+    stars: currentFlags.stars as boolean,
   };
   const remoteConfig: RuntimeRemoteConfig = {
-    maxPriceAlerts: clampInt(currentRemote.maxPriceAlerts, NaN, 1, 100),
-    maxWatchlistItems: clampInt(currentRemote.maxWatchlistItems, NaN, 10, 500),
-    marketPageSize: clampInt(currentRemote.marketPageSize, NaN, 12, 72),
-    coinOrderMaxOpen: clampInt(currentRemote.coinOrderMaxOpen, NaN, 1, 100),
-    coinOrderMaxDays: clampInt(currentRemote.coinOrderMaxDays, NaN, 1, 30),
+    maxPriceAlerts: requireInt(currentRemote.maxPriceAlerts, 1, 100, "maxPriceAlerts"),
+    maxWatchlistItems: requireInt(currentRemote.maxWatchlistItems, 10, 500, "maxWatchlistItems"),
+    marketPageSize: requireInt(currentRemote.marketPageSize, 12, 72, "marketPageSize"),
+    coinOrderMaxOpen: requireInt(currentRemote.coinOrderMaxOpen, 1, 100, "coinOrderMaxOpen"),
+    coinOrderMaxDays: requireInt(currentRemote.coinOrderMaxDays, 1, 30, "coinOrderMaxDays"),
   };
-  if (Object.values(remoteConfig).some((item) => !Number.isFinite(item))) throw new Error("Проверьте числовые лимиты Remote Config");
   return {
-    maintenanceMode: input.maintenanceMode === true,
+    maintenanceMode: input.maintenanceMode,
     maintenanceMessage: message,
     featureFlags: flags,
     remoteConfig,

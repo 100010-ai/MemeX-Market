@@ -121,13 +121,17 @@ async function POSTHandler(request: Request) {
         .eq("id", purchaseId)
         .eq("invoice_payload", refunded.invoice_payload)
         .maybeSingle();
+      if (purchase.error) {
+        console.error("refunded Stars purchase lookup", purchase.error);
+        return await failed(purchase.error, "Не удалось проверить возврат Stars");
+      }
       const purchaseData = purchase.data;
-      const matches = !purchase.error && purchaseData
+      const matches = purchaseData
         && Number(purchaseData.stars) === refunded.total_amount
         && String(purchaseData.telegram_payment_charge_id || "") === refunded.telegram_payment_charge_id
         && String(purchaseData.payer_telegram_id || "") === String(update.message?.from?.id || "");
       if (!matches || !purchaseData) {
-        console.error("refunded Stars payment mismatch", purchase.error || { purchaseId });
+        console.error("refunded Stars payment mismatch", { purchaseId });
         return await done(NextResponse.json({ error: "Не удалось подтвердить возврат платежа" }, { status: 409 }));
       }
       const transition = await supabase.rpc("mark_star_purchase_refunded_v200", {

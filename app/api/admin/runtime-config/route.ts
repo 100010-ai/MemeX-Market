@@ -27,23 +27,38 @@ async function POSTHandler(request: Request) {
     if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
     const input = validateRuntimeConfigInput(body);
     const supabase = getSupabaseAdmin();
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase.from("runtime_config_v056").update({
       maintenance_mode: input.maintenanceMode,
       maintenance_message: input.maintenanceMessage,
       feature_flags: input.featureFlags,
       remote_config: input.remoteConfig,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     }).eq("singleton", true);
     if (error) throw error;
+
+    // The configuration write is already committed at this point. Invalidate
+    // process-local state immediately so an unrelated audit failure can never
+    // leave the app serving stale flags after a successful mutation.
+    invalidateRuntimeConfigCache();
+
+    let auditLogged = true;
     const audit = await supabase.from("admin_audit_log").insert({
       actor: `admin:${admin.telegram_id}`,
       action: "runtime_config.update",
       target_type: "runtime_config",
       payload: input,
     });
-    if (audit.error) throw audit.error;
-    invalidateRuntimeConfigCache();
-    return NextResponse.json({ config: await getRuntimeConfig() });
+    if (audit.error) {
+      auditLogged = false;
+      console.error("runtime config audit log", audit.error);
+    }
+
+    return NextResponse.json({
+      config: { ...input, updatedAt },
+      auditLogged,
+      ...(auditLogged ? {} : { warning: "Runtime Config сохранён, но запись аудита не создалась" }),
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return apiFailure(error, "Не удалось сохранить Runtime Config", 400);
   }
