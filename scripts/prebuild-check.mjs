@@ -8,6 +8,10 @@ function exists(relative) {
   return fs.existsSync(path.join(root, relative));
 }
 
+function read(relative) {
+  return exists(relative) ? fs.readFileSync(path.join(root, relative), "utf8") : "";
+}
+
 function check(label, condition, detail = "") {
   const ok = Boolean(condition);
   console.log(`${ok ? "OK  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
@@ -42,8 +46,17 @@ check("Retired runtime source is absent", retiredStillPresent.length === 0, reti
 const trackedDebugArtifacts = fs.readdirSync(root).filter((name) => /^\.codex-browser.*\.log$/i.test(name));
 check("Browser debug logs are not in release tree", trackedDebugArtifacts.length === 0, trackedDebugArtifacts.join(", "));
 
-const gamesPage = exists("app/games/page.tsx") ? fs.readFileSync(path.join(root, "app/games/page.tsx"), "utf8") : "";
+const gamesPage = read("app/games/page.tsx");
 check("Retired Games page cannot expose gameplay", !gamesPage || gamesPage.includes('redirect("/market")'));
+
+const giftMediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
+check(
+  "Gift previews recover from Fragment CDN misses",
+  giftMediaRoute.includes("liveTonApiPreviewUrls")
+    && giftMediaRoute.includes("chain_nft_address")
+    && giftMediaRoute.includes("/v2/nfts/")
+    && giftMediaRoute.includes("if (response) return response"),
+);
 
 console.log(`\n${failed ? "PREBUILD SOURCE GATE FAILED" : "PREBUILD SOURCE GATE PASSED"}`);
 process.exit(failed ? 1 : 0);
