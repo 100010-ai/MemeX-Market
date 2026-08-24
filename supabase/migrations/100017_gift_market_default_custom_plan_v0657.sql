@@ -36,7 +36,6 @@ begin
         and g.status='listed'
         and g.is_burned=false
         and g.telegram_name is not null
-        and g.listing_price is not null
         and (g.listing_expires_at is null or g.listing_expires_at>now())
         and (policy.mode<>'player_only' or coalesce(owner_profile.is_system,false)=false)
     ), ranked as (
