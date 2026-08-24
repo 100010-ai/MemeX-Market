@@ -164,6 +164,17 @@ async function POSTHandler(request: Request) {
     if (uploadedPath && data && typeof data === "object" && "alreadyCreated" in data && (data as { alreadyCreated?: unknown }).alreadyCreated === true) {
       await removeCoinImage(uploadedPath);
     }
+
+    const visibility = await supabase.from("market_overview").select("id,status").eq("id", coinId).maybeSingle();
+    if (visibility.error || !visibility.data || String(visibility.data.id) !== coinId || visibility.data.status !== "active") {
+      console.error("coin create: market visibility postcondition failed", { coinId, code: visibility.error?.code, message: visibility.error?.message });
+      return NextResponse.json({
+        error: "Мемкоин создан, но рынок ещё не подтвердил его отображение. Повторите запрос с теми же параметрами.",
+        code: "COIN_VISIBILITY_PENDING",
+        coinId,
+      }, { status: 502, headers: { "cache-control": "no-store" } });
+    }
+
     return NextResponse.json({ coin: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     await removeCoinImage(uploadedPath);
