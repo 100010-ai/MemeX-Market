@@ -29,6 +29,15 @@ async function GETHandler() {
   ]);
   const firstError = meResult.error || referredResult.error || rewardsResult.error || settingsResult.error || partnerResult.error;
   if (firstError) return apiFailure(firstError, "Не удалось загрузить реферальную систему");
+  if (!partnerResult.data || typeof partnerResult.data !== "object" || Array.isArray(partnerResult.data)) {
+    return NextResponse.json({ error: "Реферальные данные повреждены", code: "DATA_INTEGRITY" }, { status: 500 });
+  }
+
+  const partner = partnerResult.data as Record<string, unknown>;
+  const partnerInvited = Math.max(0, Math.floor(finiteNumber(partner.invited)));
+  const partnerQualified = Math.max(0, Math.floor(finiteNumber(partner.qualified)));
+  const partnerEarnedVirtualTon = Math.max(0, finiteNumber(partner.earnedVirtualTon));
+  const partnerEarnedMxmCoins = Math.max(0, finiteNumber(partner.earnedMxmCoins));
   const referred = referredResult.data || [];
   const people = new Map(referred.map((row) => [String(row.id), row]));
   const rewards = (rewardsResult.data || []).map((row) => ({
@@ -39,13 +48,8 @@ async function GETHandler() {
     createdAt: safeIsoDate(row.created_at),
     referred: people.get(String(row.referred_profile_id)) || null,
   }));
-  const totalEarned = rewards.reduce((sum, row) => sum + row.rewardAmount, 0);
   const code = String(meResult.data?.referral_code || "");
   const bot = String(process.env.NEXT_PUBLIC_BOT_USERNAME || "MemeXMarketBot").replace(/^@/, "");
-  if (!partnerResult.data || typeof partnerResult.data !== "object" || Array.isArray(partnerResult.data)) {
-    return NextResponse.json({ error: "Реферальные данные повреждены", code: "DATA_INTEGRITY" }, { status: 500 });
-  }
-  const partner = partnerResult.data as Record<string, unknown>;
   return NextResponse.json({
     code,
     inviteLink: code ? `https://t.me/${bot}?startapp=ref_${encodeURIComponent(code)}` : null,
@@ -53,14 +57,16 @@ async function GETHandler() {
     partner: {
       level: partnerLevelLabel(partner.level),
       bonusBps: Math.max(0, finiteNumber(partner.bonusBps ?? settingsResult.data?.referral_bonus_bps)),
-      invited: Math.max(0, Math.floor(finiteNumber(partner.invited, referred.length))),
-      qualified: Math.max(0, Math.floor(finiteNumber(partner.qualified))),
+      invited: partnerInvited,
+      qualified: partnerQualified,
       nextQualified: partner.nextQualified == null ? null : Math.max(0, Math.floor(finiteNumber(partner.nextQualified))),
-      earnedVirtualTon: Math.max(0, finiteNumber(partner.earnedVirtualTon)),
-      earnedMxmCoins: Math.max(0, finiteNumber(partner.earnedMxmCoins)),
+      earnedVirtualTon: partnerEarnedVirtualTon,
+      earnedMxmCoins: partnerEarnedMxmCoins,
     },
-    invitedCount: referred.length,
-    totalEarned,
+    // These legacy top-level fields must describe the full account history, not
+    // the deliberately bounded recent lists below.
+    invitedCount: partnerInvited,
+    totalEarned: partnerEarnedVirtualTon,
     referred: referred.flatMap((row) => {
       const id = text(row.id, "", 80);
       if (!id) return [];

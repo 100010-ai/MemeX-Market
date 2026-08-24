@@ -5,12 +5,15 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { calculateCoinQuote } from "@/lib/amm";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { MAX_COIN_TRADE_INPUT, MIN_COIN_BUY_TON, parseEconomyAmount } from "@/lib/economy";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "coin-quote", String(profile.id), 180, 60))) return NextResponse.json({ error: "Слишком много запросов котировки" }, { status: 429 });
+  const runtimeConfig = await getRuntimeConfig();
+  if (!runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
   const { id } = await params;
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный coin ID" }, { status: 400 });
   const body = await readJsonObject(request);
