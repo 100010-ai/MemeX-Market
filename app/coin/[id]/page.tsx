@@ -299,9 +299,9 @@ export default function CoinPage() {
   const publicTradeCount = Math.max(0, data.economy.publicTradeCount ?? coin.tradeCount24h);
   const pristineMarket = publicTradeCount === 0 && coin.allTimeVolume <= 0;
   const chartCandles = pristineMarket ? [] : data.candles;
-  const chartReady = chartCandles.length >= 2;
+  const chartReady = chartCandles.length >= 1;
   const renderedCandles = chartReady ? chartCandles : [];
-  const chartEmptyLabel = pristineMarket ? "Первая свеча появится после сделки" : chartCandles.length === 1 ? "График появится после второй сделки" : undefined;
+  const chartEmptyLabel = pristineMarket ? "Первая свеча появится после сделки" : "История цены обновляется…";
   const visibleChange = pristineMarket ? 0 : coin.change24h;
 
   const tradePanel = (

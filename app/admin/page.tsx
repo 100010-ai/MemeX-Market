@@ -115,7 +115,7 @@ function GiftControlRow({row,profiles,act,disabled}:{row:GiftRow;profiles:Profil
 
 function CatalogMetric({label,value}:{label:string;value:number}){return <div className="min-w-[112px] rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2"><p className="text-[9px] text-[var(--muted)]">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>}
 
-const ECONOMY_DEFAULTS={coinLaunchFee:150,coinLaunchCooldownHours:12,coinMaxActive:2,giftFeeBps:250};
+const ECONOMY_DEFAULTS={coinLaunchFee:50,coinLaunchCooldownHours:12,coinMaxActive:2,giftFeeBps:250};
 function economyForm(value:EconomySettings|null){return value?{coinLaunchFee:Number(value.coin_launch_fee),coinLaunchCooldownHours:Number(value.coin_launch_cooldown_hours),coinMaxActive:Number(value.coin_max_active),giftFeeBps:Number(value.gift_fee_bps)}:ECONOMY_DEFAULTS;}
 
 function EconomyPanel({settings,metrics,act,busy}:{settings:EconomySettings|null;metrics:Metrics;act:(a:string,p?:Record<string,unknown>)=>Promise<void>;busy:string|null}){
