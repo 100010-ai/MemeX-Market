@@ -1,5 +1,5 @@
 import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
@@ -7,6 +7,7 @@ import type { GiftAsset } from "@/lib/types";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { getGiftMarketLiquidityState } from "@/lib/npc-market";
+import { getCleanMarketCartIds, MARKET_CART_LIMIT } from "@/lib/cart-state";
 
 export const runtime = "nodejs";
 
@@ -16,27 +17,30 @@ async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  const nowIso = new Date().toISOString();
-  const cart = await supabase.from("market_cart_items").select("virtual_gift_id,added_at").eq("profile_id", profile.id).order("added_at", { ascending: false }).limit(21);
-  if (cart.error) return apiFailure(cart.error, "Не удалось загрузить корзину");
-  const ids = (cart.data || []).map((row) => String(row.virtual_gift_id));
-  if (!ids.length) return NextResponse.json({ items: [], total: 0, count: 0 });
-  const gifts = await supabase.from("gift_market_overview").select(giftMarketSelect).in("virtual_gift_id", ids).eq("status", "listed").eq("is_burned", false).or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`);
-  if (gifts.error) return apiFailure(gifts.error, "Не удалось загрузить подарки из корзины");
-  const byId = new Map(((gifts.data || []) as Record<string, unknown>[]).map((row) => [String(row.virtual_gift_id), mapGift(row)]));
-  const items = ids.map((id) => byId.get(id)).filter((gift): gift is GiftAsset => Boolean(gift));
-  const stale = ids.filter((id) => !byId.has(id));
-  if (stale.length) {
-    const profileId = String(profile.id);
-    after(async () => {
-      try {
-        const staleCleanup = await getSupabaseAdmin().from("market_cart_items").delete().eq("profile_id", profileId).in("virtual_gift_id", stale);
-        if (staleCleanup.error) console.error("cart stale cleanup", staleCleanup.error);
-      } catch (error) { console.error("cart stale cleanup", error); }
-    });
+  try {
+    const liquidity = await getGiftMarketLiquidityState();
+    const cartState = await getCleanMarketCartIds(String(profile.id), { playerOnly: liquidity.playerOnly });
+    const ids = [...cartState.ids].reverse();
+    if (!ids.length) return NextResponse.json({ items: [], total: 0, count: 0 });
+
+    const nowIso = new Date().toISOString();
+    const gifts = await supabase
+      .from("gift_market_overview")
+      .select(giftMarketSelect)
+      .in("virtual_gift_id", ids)
+      .eq("status", "listed")
+      .eq("is_burned", false)
+      .not("listing_price", "is", null)
+      .or(`listing_expires_at.is.null,listing_expires_at.gt.${nowIso}`);
+    if (gifts.error) throw gifts.error;
+
+    const byId = new Map(((gifts.data || []) as Record<string, unknown>[]).map((row) => [String(row.virtual_gift_id), mapGift(row)]));
+    const items = ids.map((id) => byId.get(id)).filter((gift): gift is GiftAsset => Boolean(gift));
+    const total = items.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0);
+    return NextResponse.json({ items, total, count: items.length });
+  } catch (error) {
+    return apiFailure(error, "Не удалось загрузить корзину");
   }
-  const total = items.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0);
-  return NextResponse.json({ items, total, count: items.length });
 }
 
 async function POSTHandler(request: NextRequest) {
@@ -81,13 +85,17 @@ async function POSTHandler(request: NextRequest) {
   if (!gift.data || gift.data.status !== "listed" || gift.data.listing_price == null || (gift.data.listing_expires_at && new Date(gift.data.listing_expires_at).getTime() <= Date.now())) return NextResponse.json({ error: "Подарок больше не выставлен на продажу" }, { status: 409 });
   if (gift.data.owner_profile_id === profile.id) return NextResponse.json({ error: "Этот подарок уже принадлежит вам" }, { status: 409 });
 
-  const existing = await supabase.from("market_cart_items").select("virtual_gift_id", { count: "exact", head: true }).eq("profile_id", profile.id);
-  if (existing.error) return apiFailure(existing.error, "Не удалось проверить корзину");
-  if ((existing.count || 0) >= 20) return NextResponse.json({ error: "В корзине может быть максимум 20 подарков" }, { status: 409 });
+  try {
+    const cartState = await getCleanMarketCartIds(String(profile.id), { playerOnly: liquidity.playerOnly });
+    if (cartState.ids.includes(id)) return NextResponse.json({ ok: true, alreadyInCart: true, count: cartState.ids.length });
+    if (cartState.ids.length >= MARKET_CART_LIMIT) return NextResponse.json({ error: `В корзине может быть максимум ${MARKET_CART_LIMIT} подарков` }, { status: 409 });
 
-  const added = await supabase.from("market_cart_items").upsert({ profile_id: profile.id, virtual_gift_id: id }, { onConflict: "profile_id,virtual_gift_id", ignoreDuplicates: true });
-  if (added.error) return apiFailure(added.error, "Не удалось добавить подарок в корзину");
-  return NextResponse.json({ ok: true });
+    const added = await supabase.from("market_cart_items").upsert({ profile_id: profile.id, virtual_gift_id: id }, { onConflict: "profile_id,virtual_gift_id", ignoreDuplicates: true });
+    if (added.error) throw added.error;
+    return NextResponse.json({ ok: true, count: cartState.ids.length + 1 });
+  } catch (error) {
+    return apiFailure(error, "Не удалось добавить подарок в корзину");
+  }
 }
 export const GET = withApiErrors("app/api/cart/route.ts:GET", GETHandler);
 export const POST = withApiErrors("app/api/cart/route.ts:POST", POSTHandler);
