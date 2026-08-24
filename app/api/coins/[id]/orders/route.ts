@@ -1,4 +1,4 @@
-import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, isDatabaseSchemaError, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -23,8 +23,13 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     const kind = typeof body.kind === "string" && orderKinds.has(body.kind) ? body.kind : ""; const triggerPrice = parseEconomyAmount(body.triggerPrice); const inputAmount = parseEconomyAmount(body.inputAmount); const requestKey = typeof body.requestKey === "string" ? body.requestKey.trim() : ""; const durationDays = Number(body.durationDays ?? 7);
     if (!kind || triggerPrice == null || triggerPrice <= 0 || triggerPrice > MAX_COIN_TRADE_INPUT || inputAmount == null || inputAmount <= 0 || inputAmount > MAX_COIN_TRADE_INPUT || !/^[A-Za-z0-9._:-]{8,120}$/.test(requestKey) || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > config.remoteConfig.coinOrderMaxDays) return NextResponse.json({ error: "Некорректные параметры ордера" }, { status: 400 });
     if (kind === "limit_buy" && inputAmount < MIN_COIN_BUY_TON) return NextResponse.json({ error: `Минимальная сумма покупки — ${MIN_COIN_BUY_TON} TON` }, { status: 400 });
-    const supabase = getSupabaseAdmin(); const { count, error: countError } = await supabase.from("coin_conditional_orders_v056").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).eq("status", "active"); if (countError) throw countError; if (Number(count || 0) >= config.remoteConfig.coinOrderMaxOpen) return NextResponse.json({ error: `Лимит активных ордеров: ${config.remoteConfig.coinOrderMaxOpen}` }, { status: 409 });
-    const { data, error } = await supabase.rpc("create_coin_conditional_order_v056", { p_profile_id: profile.id, p_coin_id: id, p_kind: kind, p_trigger_price: triggerPrice, p_input_amount: inputAmount, p_request_key: requestKey, p_duration_days: durationDays }); if (error) return apiFailure(error, "Не удалось создать ордер", 400); return NextResponse.json({ order: data }, { status: 201 });
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.rpc("create_coin_conditional_order_v056", { p_profile_id: profile.id, p_coin_id: id, p_kind: kind, p_trigger_price: triggerPrice, p_input_amount: inputAmount, p_request_key: requestKey, p_duration_days: durationDays });
+    if (error) {
+      if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема условных ордеров требует актуальной миграции");
+      return NextResponse.json({ error: publicBusinessError(error, "Не удалось создать ордер") }, { status: 400 });
+    }
+    return NextResponse.json({ order: data }, { status: 201 });
   } catch (error) { console.error("create conditional order", error); await recordAppError(`/api/coins/${id}/orders`, error, String(profile.id)); return apiFailure(error, "Не удалось создать ордер"); }
 }
 export const GET = withApiErrors("app/api/coins/[id]/orders/route.ts:GET", GETHandler);
