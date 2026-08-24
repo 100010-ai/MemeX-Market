@@ -47,7 +47,6 @@ export type NpcLiquidityResult = {
   completed: boolean;
 };
 
-
 function parseLiquidityState(value: unknown): GiftMarketLiquidityState {
   const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
@@ -115,9 +114,9 @@ function isPlayerOnlyListingError(error: unknown) {
 function parseGenesisState(value: unknown): GenesisState {
   const row = (value || {}) as Record<string, unknown>;
   return {
-    total: Number(row.total || 0),
-    released: Number(row.released || 0),
-    remaining: Number(row.remaining || 0),
+    total: Math.max(0, Number(row.total) || 0),
+    released: Math.max(0, Number(row.released) || 0),
+    remaining: Math.max(0, Number(row.remaining) || 0),
     completed: Boolean(row.completed),
     seed: String(row.seed || "mxm-genesis"),
   };
@@ -143,18 +142,17 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
     };
   }
 
-  // Reconcile old v0.13 synthetic NPC prices before publishing anything. This
-  const reconcile = await supabase.rpc("reconcile_npc_external_prices");
-  if (reconcile.error) throw reconcile.error;
-
-  const initialized = await supabase.rpc("initialize_gift_genesis_pool");
-  if (initialized.error) throw initialized.error;
-  let state = parseGenesisState(initialized.data);
-
-  const countResult = await supabase.rpc("npc_market_listing_count");
+  // Reads that do not mutate the Genesis catalogue happen before the lock. If a
+  // different worker already owns the maintenance lease, this path stays cheap.
+  const [stateResult, countResult] = await Promise.all([
+    supabase.rpc("gift_genesis_counter_state_v0655"),
+    supabase.rpc("npc_market_listing_count"),
+  ]);
+  if (stateResult.error) throw stateResult.error;
   if (countResult.error) throw countResult.error;
-  const currentListings = Number(countResult.data || 0);
-  if (state.completed || state.remaining <= 0 || state.total <= 0) {
+  let state = parseGenesisState(stateResult.data);
+  const currentListings = Math.max(0, Number(countResult.data) || 0);
+  if (state.completed && state.total > 0) {
     return { skipped: true, currentListings, created: 0, rareDeals: 0, ...state };
   }
 
@@ -167,6 +165,20 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
   if (lock.data !== true) return { skipped: true, currentListings, created: 0, rareDeals: 0, ...state };
 
   try {
+    // These mutations can touch thousands of catalogue rows. They run only for
+    // the worker that acquired the lease, never concurrently in every request.
+    const reconcile = await supabase.rpc("reconcile_npc_external_prices");
+    if (reconcile.error) throw reconcile.error;
+
+    const initialized = await supabase.rpc("initialize_gift_genesis_pool");
+    if (initialized.error) throw initialized.error;
+    state = parseGenesisState(initialized.data);
+    if (state.completed || state.remaining <= 0 || state.total <= 0) {
+      const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
+      if (release.error) throw release.error;
+      return { skipped: true, currentListings, created: 0, rareDeals: 0, ...state };
+    }
+
     const candidateResult = await supabase.rpc("genesis_market_candidates", { p_limit: batchSize });
     if (candidateResult.error) throw candidateResult.error;
     const candidates = (candidateResult.data || []) as Candidate[];
@@ -179,8 +191,9 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
       const prices = new Map<string, number>(((priceResult.data || []) as Array<{ id: unknown; telegram_resale_price_ton: unknown }>).map((row) => [String(row.id), Number(row.telegram_resale_price_ton)] as [string, number]));
       for (const candidate of candidates) candidate.observed_price_ton = prices.get(candidate.asset_id);
     }
+
     if (!candidates.length) {
-      const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
+      const refreshed = await supabase.rpc("gift_genesis_counter_state_v0655");
       if (refreshed.error) throw refreshed.error;
       state = parseGenesisState(refreshed.data);
       const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
@@ -220,7 +233,10 @@ export async function ensureGenesisGiftMarket(options: { batchSize?: number; for
       }
     }
 
-    const refreshed = await supabase.rpc("initialize_gift_genesis_pool");
+    // npc_seed_virtual_gift increments Genesis state exactly once per newly
+    // released asset, so the final status is a single-row read rather than a
+    // second full catalogue/pool reconciliation.
+    const refreshed = await supabase.rpc("gift_genesis_counter_state_v0655");
     if (refreshed.error) throw refreshed.error;
     state = parseGenesisState(refreshed.data);
     const release = await supabase.rpc("release_npc_market_lock", { p_success: true, p_error: null });
