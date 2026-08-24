@@ -13,6 +13,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { Maximize2, RotateCcw, X } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import type { Candle } from "@/lib/types";
 
 const timeframes = [
@@ -26,6 +27,7 @@ const timeframes = [
 
 type Frame = (typeof timeframes)[number];
 type InspectCandle = Candle | null;
+type CandlePayload = { frame: Frame["key"]; candles: Candle[] };
 
 function aggregate(candles: Candle[], seconds: number) {
   const buckets = new Map<number, Candle>();
@@ -82,6 +84,13 @@ function eventTimestamp(time: Time | undefined) {
   return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000);
 }
 
+function currentCoinId() {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(/^\/coin\/([^/?#]+)/);
+  if (!match?.[1]) return "";
+  try { return decodeURIComponent(match[1]); } catch { return match[1]; }
+}
+
 export function CoinChart({ candles, height = 330, showTimeframes = true, baseFrame = "15m", compact = false, emptyLabel = "Недостаточно сделок для свечного графика." }: { candles: Candle[]; height?: number; showTimeframes?: boolean; baseFrame?: Frame["key"]; compact?: boolean; emptyLabel?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -92,12 +101,45 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
   const [inspect, setInspect] = useState<InspectCandle>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(() => typeof window === "undefined" ? 800 : window.innerHeight);
-  const display = useMemo(() => aggregate(candles, frame.seconds), [candles, frame.seconds]);
+  const [historyByFrame, setHistoryByFrame] = useState<Partial<Record<Frame["key"], Candle[]>>>({});
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const coinId = useMemo(currentCoinId, []);
+  const candleVersion = useMemo(() => {
+    const last = candles.at(-1);
+    return `${candles.length}:${last?.time ?? 0}:${last?.close ?? 0}:${last?.volume ?? 0}`;
+  }, [candles]);
+  const fallbackCandles = frame.seconds <= 900 ? candles : [];
+  const sourceCandles = historyByFrame[frame.key] ?? fallbackCandles;
+  const display = useMemo(() => aggregate(sourceCandles, frame.seconds), [sourceCandles, frame.seconds]);
   const format = useMemo(() => precisionFor(display), [display]);
   const current = inspect || display.at(-1) || null;
   const delta = current && current.open > 0 ? ((current.close / current.open) - 1) * 100 : 0;
   const chartHeight = fullscreen ? Math.max(320, viewportHeight - (showTimeframes ? 148 : 112)) : height;
   const hasData = display.length > 0;
+
+  useEffect(() => {
+    if (!coinId || !showTimeframes) return;
+    let cancelled = false;
+    setInspect(null);
+    setHistoryLoading(true);
+    setHistoryByFrame((previous) => {
+      if (!(frame.key in previous)) return previous;
+      const next = { ...previous };
+      delete next[frame.key];
+      return next;
+    });
+    void apiFetch<CandlePayload>(`/api/coins/${encodeURIComponent(coinId)}/candles?frame=${frame.key}`, { cacheMs: 5_000 })
+      .then((payload) => {
+        if (cancelled) return;
+        setHistoryByFrame((previous) => ({ ...previous, [frame.key]: Array.isArray(payload.candles) ? payload.candles : [] }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHistoryByFrame((previous) => ({ ...previous, [frame.key]: frame.seconds <= 900 ? candles : [] }));
+      })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [coinId, frame.key, frame.seconds, candleVersion, showTimeframes]);
 
   useEffect(() => {
     byTimeRef.current = new Map(display.map((candle) => [Number(candle.time), candle]));
@@ -272,9 +314,10 @@ export function CoinChart({ candles, height = 330, showTimeframes = true, baseFr
 
       {showTimeframes ? <div className={`mxm-hscroll ${compact ? "mb-1 gap-3" : "mb-2 gap-4 border-b border-[var(--border-soft)]"} pb-1`}>
         {timeframes.map((item) => <button key={item.key} type="button" onClick={() => { setFrame(item); setInspect(null); }} className={`relative shrink-0 py-1.5 text-[10px] transition ${frame.key === item.key ? "text-white" : "text-[var(--muted)] hover:text-white"}`}>{item.key}{frame.key === item.key ? <span className="absolute inset-x-0 -bottom-[5px] h-px bg-[var(--accent)]" /> : null}</button>)}
+        {historyLoading ? <span className="shrink-0 self-center text-[8px] text-[var(--muted-2)]">обновляем</span> : null}
       </div> : null}
 
-      {display.length ? <div ref={containerRef} className="w-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: chartHeight }} /> : <div style={{ height: chartHeight }} className="grid place-items-center rounded-[12px] bg-white/[.012] text-[9px] text-[var(--muted)]">{emptyLabel}</div>}
+      {display.length ? <div ref={containerRef} className="w-full min-h-0 flex-1 overflow-hidden" style={{ minHeight: chartHeight }} /> : <div style={{ height: chartHeight }} className="grid place-items-center rounded-[12px] bg-white/[.012] text-[9px] text-[var(--muted)]">{historyLoading ? "Загружаем историю…" : emptyLabel}</div>}
     </div>
   );
 
