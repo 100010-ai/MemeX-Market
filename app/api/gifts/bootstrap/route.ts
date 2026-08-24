@@ -10,14 +10,14 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 function friendlyBootstrapError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Не удалось загрузить подарки Telegram";
+  const message = error instanceof Error ? error.message : "";
   if (/TonAPI (401|403)/i.test(message)) {
     return "TonAPI отклонил TONAPI_KEY. MX Market попробует публичный режим автоматически; если ошибка повторяется, удалите невалидный TONAPI_KEY или выпустите новый ключ в TonConsole.";
   }
   if (/fetch|network|timeout|abort|TonAPI 429|TonAPI 5\d\d/i.test(message)) {
     return "TonAPI временно недоступен или ограничил запросы. Повторите загрузку через несколько секунд.";
   }
-  return message;
+  return "Не удалось обновить каталог подарков. Повторите позже.";
 }
 
 async function listedCount() {
@@ -88,14 +88,15 @@ async function POSTHandler(request: Request) {
       maxCollections: hasTonApiKey ? 6 : 3,
       itemsPerCollection: hasTonApiKey ? 240 : 120,
     });
+    const { errors: catalogErrors, ...publicCatalog } = catalog;
 
     // Another request may already own the global TonAPI lock. Do not race it
     // with an empty Genesis initialization; briefly wait for that bootstrap to
     // publish listings and then return the shared result.
     if (catalog.skipped) {
       const concurrentListed = await waitForConcurrentBootstrap();
-      if (concurrentListed > 0) return NextResponse.json({ ok: true, skipped: true, listed: concurrentListed, catalog });
-      return NextResponse.json({ ok: true, pending: true, skipped: true, listed: 0, catalog, retryAfterMs: 5000 }, { status: 202, headers: { "retry-after": "5" } });
+      if (concurrentListed > 0) return NextResponse.json({ ok: true, skipped: true, listed: concurrentListed, catalog: publicCatalog });
+      return NextResponse.json({ ok: true, pending: true, skipped: true, listed: 0, catalog: publicCatalog, retryAfterMs: 5000 }, { status: 202, headers: { "retry-after": "5" } });
     }
 
     // Genesis is incremental too. Avoid making the same request perform a
@@ -104,11 +105,11 @@ async function POSTHandler(request: Request) {
     const listed = await listedCount();
 
     if (listed <= 0) {
-      const detail = catalog.errors?.[0] || "TonAPI не вернул подходящие Telegram Gift NFT";
-      return NextResponse.json({ error: detail, catalog, genesis, listed }, { status: 502 });
+      const firstCatalogError = catalogErrors?.[0];
+      return NextResponse.json({ error: friendlyBootstrapError(firstCatalogError ? new Error(firstCatalogError) : null), catalog: publicCatalog, genesis, listed }, { status: 502 });
     }
 
-    return NextResponse.json({ ok: true, skipped: false, listed, catalog, genesis });
+    return NextResponse.json({ ok: true, skipped: false, listed, catalog: publicCatalog, genesis });
   } catch (error) {
     if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема подарков требует актуальной production-миграции");
     console.error("gift market bootstrap", error);
