@@ -47,9 +47,13 @@ async function POSTHandler(request: NextRequest) {
   const rawBody = await readJsonObject(request);
   if (!rawBody) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const body = rawBody as CartBody;
+  const action = body.action;
+  if (action !== "add" && action !== "remove" && action !== "clear") {
+    return NextResponse.json({ error: "Некорректное действие с корзиной" }, { status: 400 });
+  }
   const supabase = getSupabaseAdmin();
 
-  if (body.action === "clear") {
+  if (action === "clear") {
     const cleared = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id);
     if (cleared.error) return apiFailure(cleared.error, "Не удалось очистить корзину");
     return NextResponse.json({ ok: true, count: 0 });
@@ -57,7 +61,7 @@ async function POSTHandler(request: NextRequest) {
 
   const id = String(body.virtualGiftId || "");
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный идентификатор подарка" }, { status: 400 });
-  if (body.action === "remove") {
+  if (action === "remove") {
     const removed = await supabase.from("market_cart_items").delete().eq("profile_id", profile.id).eq("virtual_gift_id", id);
     if (removed.error) return apiFailure(removed.error, "Не удалось удалить подарок из корзины");
     return NextResponse.json({ ok: true });

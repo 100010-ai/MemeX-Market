@@ -58,5 +58,50 @@ check(
     && giftMediaRoute.includes("if (response) return response"),
 );
 
+const marketHealthRoute = read("app/api/system/market-health/route.ts");
+check(
+  "Operational market health is admin-only",
+  marketHealthRoute.includes('requireAdminProfile')
+    && !marketHealthRoute.includes('requireSession()')
+    && !marketHealthRoute.includes('databaseErrors: errors.map'),
+);
+
+const cartRoute = read("app/api/cart/route.ts");
+check(
+  "Cart mutations reject unknown actions",
+  cartRoute.includes('action !== "add" && action !== "remove" && action !== "clear"'),
+);
+
+const alertsRoute = read("app/api/alerts/route.ts");
+check(
+  "Alert mutations validate action and boolean state",
+  alertsRoute.includes('const actions = new Set(["create", "delete", "toggle"])')
+    && alertsRoute.includes('typeof body.enabled !== "boolean"'),
+);
+
+const watchlistRoute = read("app/api/watchlist/route.ts");
+check(
+  "Watchlist rejects ambiguous state and cleans stale items",
+  watchlistRoute.includes('typeof body.enabled !== "boolean"')
+    && watchlistRoute.includes('watchlist stale cleanup')
+    && watchlistRoute.includes('cleanCoinIds.length + cleanCollections.length + cleanGiftIds.length'),
+);
+
+const notificationsRoute = read("app/api/system/notifications-dispatch/route.ts");
+check(
+  "Notification workers isolate item failures and protect sent claims",
+  notificationsRoute.includes('price alert evaluation item failed')
+    && notificationsRoute.includes('notification sent but completion state failed')
+    && notificationsRoute.includes('.select("id")')
+    && notificationsRoute.includes('alertFailures'),
+);
+
+const coinOrdersRoute = read("app/api/system/coin-orders/route.ts");
+check(
+  "System cron endpoints share hardened secret handling",
+  coinOrdersRoute.includes('String(process.env.CRON_SECRET || "").trim()')
+    && coinOrdersRoute.includes('x-mxm-cron-secret'),
+);
+
 console.log(`\n${failed ? "PREBUILD SOURCE GATE FAILED" : "PREBUILD SOURCE GATE PASSED"}`);
 process.exit(failed ? 1 : 0);

@@ -9,6 +9,7 @@ import { parseEconomyAmount } from "@/lib/economy";
 
 const kinds = new Set(["coin", "gift", "gift_collection"]);
 const directions = new Set(["below", "above"]);
+const actions = new Set(["create", "delete", "toggle"]);
 
 async function GETHandler() {
   const profile = await requireProfile();
@@ -42,7 +43,9 @@ async function POSTHandler(request: Request) {
   if (!(await enforceRateLimit(request, "price-alert", String(profile.id), 40, 60))) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  const action = typeof body.action === "string" ? body.action : "create";
+  const requestedAction = body.action == null ? "create" : typeof body.action === "string" ? body.action : "";
+  if (!actions.has(requestedAction)) return NextResponse.json({ error: "Некорректное действие с алертом" }, { status: 400 });
+  const action = requestedAction as "create" | "delete" | "toggle";
   const supabase = getSupabaseAdmin();
 
   if (action === "delete") {
@@ -55,8 +58,9 @@ async function POSTHandler(request: Request) {
 
   if (action === "toggle") {
     const id = typeof body.id === "string" ? body.id : "";
-    const enabled = body.enabled === true;
     if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID алерта" }, { status: 400 });
+    if (typeof body.enabled !== "boolean") return NextResponse.json({ error: "Некорректное состояние алерта" }, { status: 400 });
+    const enabled = body.enabled;
     const { error } = await supabase.from("price_alerts").update({ enabled, updated_at: new Date().toISOString() }).eq("id", id).eq("profile_id", profile.id);
     if (error) return apiFailure(error, "Не удалось изменить алерт");
     return NextResponse.json({ ok: true, enabled });
@@ -73,7 +77,6 @@ async function POSTHandler(request: Request) {
   if (kind === "gift_collection") { const value = typeof body.giftCollection === "string" ? body.giftCollection.trim() : ""; row.gift_collection = value && value.length <= 120 ? value : null; }
   if ((kind === "coin" && !row.coin_id) || (kind === "gift" && !row.virtual_gift_id) || (kind === "gift_collection" && !row.gift_collection)) return NextResponse.json({ error: "Не выбран объект алерта" }, { status: 400 });
 
-  // Reject alerts for stale/non-existent objects before consuming a slot.
   if (kind === "coin") {
     const { data: coin, error } = await supabase.from("coins").select("id").eq("id", String(row.coin_id)).eq("status", "active").maybeSingle();
     if (error) return apiFailure(error, "Не удалось выполнить запрос");
@@ -88,9 +91,6 @@ async function POSTHandler(request: Request) {
     if (!collection) return NextResponse.json({ error: "Коллекция не найдена" }, { status: 404 });
   }
 
-  // Creating the same alert twice is idempotent and must not consume the limit.
-  // Avoid mutating/reassigning Supabase builders: long generic chains can hit
-  // TypeScript's recursive-instantiation limit during `next build`.
   const duplicateBase = () => supabase
     .from("price_alerts")
     .select("id,enabled")

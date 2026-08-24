@@ -46,7 +46,7 @@ async function evaluatePriceAlerts() {
   if (alerts.error) throw alerts.error;
 
   const rows = (alerts.data || []) as DbRow[];
-  if (!rows.length) return 0;
+  if (!rows.length) return { triggered: 0, failed: 0 };
 
   const coinIds = [...new Set(rows.filter((row) => row.kind === "coin" && row.coin_id).map((row) => String(row.coin_id)))];
   const giftIds = [...new Set(rows.filter((row) => row.kind === "gift" && row.virtual_gift_id).map((row) => String(row.virtual_gift_id)))];
@@ -86,52 +86,58 @@ async function evaluatePriceAlerts() {
   };
 
   let triggered = 0;
+  let failed = 0;
   const queue = [...rows];
   const worker = async () => {
     while (queue.length) {
       const row = queue.shift();
       if (!row) return;
-      const kind = String(row.kind || "");
-      const id = kind === "coin"
-        ? String(row.coin_id || "")
-        : kind === "gift"
-          ? String(row.virtual_gift_id || "")
-          : null;
-      const collection = row.gift_collection ? String(row.gift_collection) : null;
-      const price = currentPrice(kind, id, collection, maps);
-      const target = finiteNumber(row.target_price);
-      if (price == null || target == null) continue;
+      try {
+        const kind = String(row.kind || "");
+        const id = kind === "coin"
+          ? String(row.coin_id || "")
+          : kind === "gift"
+            ? String(row.virtual_gift_id || "")
+            : null;
+        const collection = row.gift_collection ? String(row.gift_collection) : null;
+        const price = currentPrice(kind, id, collection, maps);
+        const target = finiteNumber(row.target_price);
+        if (price == null || target == null) continue;
 
-      const hit = row.direction === "below" ? price <= target : price >= target;
-      if (!((hit && !row.is_triggered) || (!hit && row.is_triggered))) continue;
+        const hit = row.direction === "below" ? price <= target : price >= target;
+        if (!((hit && !row.is_triggered) || (!hit && row.is_triggered))) continue;
 
-      const label = kind === "gift_collection"
-        ? String(row.gift_collection || "Коллекция")
-        : kind === "coin"
-          ? `Мемкоин ${String(row.coin_id || "").slice(0, 8)}`
-          : `Подарок ${String(row.virtual_gift_id || "").slice(0, 8)}`;
-      const href = kind === "gift_collection"
-        ? `/collections/${encodeURIComponent(String(row.gift_collection || ""))}`
-        : kind === "coin"
-          ? `/coin/${String(row.coin_id || "")}`
-          : `/gifts/${String(row.virtual_gift_id || "")}`;
+        const label = kind === "gift_collection"
+          ? String(row.gift_collection || "Коллекция")
+          : kind === "coin"
+            ? `Мемкоин ${String(row.coin_id || "").slice(0, 8)}`
+            : `Подарок ${String(row.virtual_gift_id || "").slice(0, 8)}`;
+        const href = kind === "gift_collection"
+          ? `/collections/${encodeURIComponent(String(row.gift_collection || ""))}`
+          : kind === "coin"
+            ? `/coin/${String(row.coin_id || "")}`
+            : `/gifts/${String(row.virtual_gift_id || "")}`;
 
-      const transition = await supabase.rpc("process_price_alert_transition_v300", {
-        p_alert_id: row.id,
-        p_price: price,
-        p_hit: hit,
-        p_title: "Ценовое уведомление сработало",
-        p_body: `${label} · ${price.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`,
-        p_href: href,
-        p_metadata: { source: "notifications_dispatch" },
-      });
-      if (transition.error) throw transition.error;
-      if (transition.data === "triggered") triggered += 1;
+        const transition = await supabase.rpc("process_price_alert_transition_v300", {
+          p_alert_id: row.id,
+          p_price: price,
+          p_hit: hit,
+          p_title: "Ценовое уведомление сработало",
+          p_body: `${label} · ${price.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} TON`,
+          p_href: href,
+          p_metadata: { source: "notifications_dispatch" },
+        });
+        if (transition.error) throw transition.error;
+        if (transition.data === "triggered") triggered += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn("price alert evaluation item failed", { alertId: row.id, error });
+      }
     }
   };
 
   await Promise.all(Array.from({ length: Math.min(8, queue.length) }, () => worker()));
-  return triggered;
+  return { triggered, failed };
 }
 
 async function dispatchTelegram() {
@@ -157,12 +163,20 @@ async function dispatchTelegram() {
   let failed = 0;
 
   const complete = async (id: string, values: Record<string, unknown>) => {
-    const result = await supabase
-      .from("user_notifications")
-      .update({ ...values, telegram_claim_token: null, telegram_claimed_at: null })
-      .eq("id", id)
-      .eq("telegram_claim_token", claimToken);
-    if (result.error) throw result.error;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await supabase
+        .from("user_notifications")
+        .update({ ...values, telegram_claim_token: null, telegram_claimed_at: null })
+        .eq("id", id)
+        .eq("telegram_claim_token", claimToken)
+        .select("id")
+        .maybeSingle();
+      if (!result.error && result.data) return;
+      lastError = result.error || new Error("Notification claim was lost before completion");
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 80 * (attempt + 1)));
+    }
+    throw lastError instanceof Error ? lastError : new Error("Notification delivery state could not be saved");
   };
 
   const escapeMarkdownV2 = (value: unknown) => String(value || "").replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
@@ -174,43 +188,60 @@ async function dispatchTelegram() {
       const profileId = String(row.profile_id);
 
       if (allowed.get(profileId) === false) {
-        await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "disabled" });
+        try {
+          await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "disabled" });
+        } catch (error) {
+          failed += 1;
+          console.error("notification disabled state update failed", { notificationId: row.id, error });
+        }
         continue;
       }
       const chatId = chats.get(profileId);
       if (!Number.isSafeInteger(chatId) || Number(chatId) <= 0) {
-        await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "missing_chat_id" });
+        try {
+          await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: "missing_chat_id" });
+        } catch (error) {
+          failed += 1;
+          console.error("notification missing chat state update failed", { notificationId: row.id, error });
+        }
         continue;
       }
 
       const text = `*${escapeMarkdownV2(row.title)}*${row.body ? `\n${escapeMarkdownV2(row.body)}` : ""}`;
-      try {
-        const payload: Record<string, unknown> = {
-          chat_id: chatId,
-          text,
-          parse_mode: "MarkdownV2",
-          disable_web_page_preview: true,
+      const payload: Record<string, unknown> = {
+        chat_id: chatId,
+        text,
+        parse_mode: "MarkdownV2",
+        disable_web_page_preview: true,
+      };
+      if (appUrl && row.href?.startsWith("/")) {
+        payload.reply_markup = {
+          inline_keyboard: [[{ text: "Открыть в MXM", web_app: { url: `${appUrl}${row.href}` } }]],
         };
-        if (appUrl && row.href?.startsWith("/")) {
-          payload.reply_markup = {
-            inline_keyboard: [[{ text: "Открыть в MXM", web_app: { url: `${appUrl}${row.href}` } }]],
-          };
-        }
+      }
+
+      try {
         await telegramBotApi("sendMessage", payload);
+      } catch (error) {
+        failed += 1;
+        try {
+          await complete(row.id, { telegram_error: error instanceof Error ? error.message.slice(0, 500) : "telegram error" });
+        } catch (stateError) {
+          console.error("notification delivery failure state", { notificationId: row.id, stateError });
+        }
+        continue;
+      }
+
+      try {
         await complete(row.id, { telegram_sent_at: new Date().toISOString(), telegram_error: null });
         sent += 1;
       } catch (error) {
+        // Telegram already accepted this message. Never release the claim on a
+        // state-write failure, otherwise the next cron run could immediately
+        // send the same notification a second time. The claim remains visible
+        // for operational recovery and completion is retried above.
         failed += 1;
-        const failedUpdate = await supabase
-          .from("user_notifications")
-          .update({
-            telegram_error: error instanceof Error ? error.message.slice(0, 500) : "telegram error",
-            telegram_claim_token: null,
-            telegram_claimed_at: null,
-          })
-          .eq("id", row.id)
-          .eq("telegram_claim_token", claimToken);
-        if (failedUpdate.error) console.error("notification delivery failure state", failedUpdate.error);
+        console.error("notification sent but completion state failed", { notificationId: row.id, error });
       }
     }
   };
@@ -224,7 +255,7 @@ async function handler(request: Request) {
   try {
     const priceAlerts = await evaluatePriceAlerts();
     const telegram = await dispatchTelegram();
-    return NextResponse.json({ ok: true, priceAlerts, ...telegram, checkedAt: new Date().toISOString() });
+    return NextResponse.json({ ok: true, priceAlerts: priceAlerts.triggered, alertFailures: priceAlerts.failed, ...telegram, checkedAt: new Date().toISOString() });
   } catch (error) {
     console.error("notifications dispatch", error);
     return apiFailure(error, "Не удалось обработать уведомления");
