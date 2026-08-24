@@ -23,7 +23,7 @@ async function GETHandler() {
   const supabase = getSupabaseAdmin();
   const [coinsResult, settingsResult, monetizationResult] = await Promise.all([
     supabase.from("coins").select("id,status,created_at").eq("creator_profile_id", profile.id).order("created_at", { ascending: false }).limit(100),
-    supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost,coin_total_fee_bps").eq("singleton", true).maybeSingle(),
+    supabase.from("economy_settings").select("schema_version,coin_launch_fee,coin_launch_cooldown_hours,coin_max_active,coin_initial_buy_min,coin_initial_buy_max,coin_start_price_min,coin_start_price_max,coin_floor_max_bps,coin_launch_energy_cost,coin_total_fee_bps,creator_lock_bps,creator_lock_days").eq("singleton", true).maybeSingle(),
     supabase.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
   ]);
   const firstError = coinsResult.error || settingsResult.error || monetizationResult.error;
@@ -54,6 +54,8 @@ async function GETHandler() {
     startPriceMin: Math.max(0, finiteNumber(settingsResult.data.coin_start_price_min)),
     startPriceMax: Math.max(0, finiteNumber(settingsResult.data.coin_start_price_max)),
     floorMaxBps: Math.max(0, finiteNumber(settingsResult.data.coin_floor_max_bps)),
+    creatorLockBps: Math.max(0, finiteNumber(settingsResult.data.creator_lock_bps)),
+    creatorLockDays: Math.max(0, Math.floor(finiteNumber(settingsResult.data.creator_lock_days))),
     energyCost: Math.max(0, finiteNumber(settingsResult.data.coin_launch_energy_cost)),
     tradeFeePercent,
     energy: Math.max(0, finiteNumber(wallet?.energy)),
@@ -125,7 +127,8 @@ async function POSTHandler(request: Request) {
     const initialBuyMax = Number(readiness.data.coin_initial_buy_max);
     const startPriceMin = Number(readiness.data.coin_start_price_min);
     const startPriceMax = Number(readiness.data.coin_start_price_max);
-    const floorMax = startPrice * Number(readiness.data.coin_floor_max_bps) / 10_000;
+    const floorMaxBps = Number(readiness.data.coin_floor_max_bps);
+    const floorMax = startPrice * floorMaxBps / 10_000;
     if (!Number.isFinite(initialBuy) || initialBuy < initialBuyMin || initialBuy > initialBuyMax) {
       return NextResponse.json({ error: `Стартовый резерв: от ${initialBuyMin} до ${initialBuyMax} виртуальных TON` }, { status: 400 });
     }
@@ -133,7 +136,7 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ error: `Стартовая цена: от ${startPriceMin} до ${startPriceMax}` }, { status: 400 });
     }
     if (!Number.isFinite(floorPrice) || floorPrice < 0 || floorPrice > floorMax) {
-      return NextResponse.json({ error: "Минимальная цена не может превышать 50% стартовой цены" }, { status: 400 });
+      return NextResponse.json({ error: `Минимальная цена не может превышать ${floorMaxBps / 100}% стартовой цены` }, { status: 400 });
     }
     if (imageFile) {
       const uploaded = await uploadCoinImage(imageFile, String(profile.id));
