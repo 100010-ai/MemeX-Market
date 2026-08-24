@@ -1,4 +1,4 @@
-import { apiFailure, isDatabaseSchemaError, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
+import { apiFailure, errorMessage, isDatabaseSchemaError, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -10,10 +10,24 @@ const orderKinds = new Set(["limit_buy", "limit_sell", "take_profit", "stop_loss
 const orderStatuses = new Set(["active", "executing", "filled", "cancelled", "expired", "failed"]);
 function finite(value: unknown) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
 function safeIso(value: unknown) { const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN; return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null; }
+function orderBusinessError(error: unknown) {
+  const message = errorMessage(error);
+  if (/too many open orders/i.test(message)) return "Достигнут лимит активных ордеров.";
+  if (/limit buy trigger must be at or below current price/i.test(message)) return "Лимитную покупку нужно ставить не выше текущей цены.";
+  if (/sell\/take profit trigger must be at or above current price/i.test(message)) return "Продажу и фиксацию прибыли нужно ставить не ниже текущей цены.";
+  if (/stop loss trigger must be at or below current price/i.test(message)) return "Stop Loss нужно ставить не выше текущей цены.";
+  if (/invalid order duration/i.test(message)) return "Недопустимый срок действия ордера.";
+  if (/request key already used/i.test(message)) return "Этот запрос уже использован для другого ордера.";
+  return publicBusinessError(error, "Не удалось создать ордер");
+}
+function publicFailureReason(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return publicBusinessError({ message: value }, "Ордер не удалось исполнить.");
+}
 async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile(); if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 }); const { id } = await params; if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный coin ID" }, { status: 400 });
   const supabase = getSupabaseAdmin(); const { data, error } = await supabase.from("coin_conditional_orders_v056").select("id,kind,trigger_price,input_amount,status,expires_at,result,failure_reason,created_at,executed_at").eq("profile_id", profile.id).eq("coin_id", id).order("created_at", { ascending: false }).limit(100); if (error) return apiFailure(error, "Не удалось выполнить запрос");
-  return NextResponse.json({ orders: (data || []).flatMap((row) => { const id = typeof row.id === "string" ? row.id : ""; const kind = String(row.kind || ""); const status = String(row.status || ""); const createdAt = safeIso(row.created_at); const expiresAt = safeIso(row.expires_at); if (!id || !orderKinds.has(kind) || !orderStatuses.has(status) || !createdAt || !expiresAt) return []; return [{ id, kind, triggerPrice: Math.max(0, finite(row.trigger_price)), inputAmount: Math.max(0, finite(row.input_amount)), status, expiresAt, result: row.result || null, failureReason: typeof row.failure_reason === "string" ? row.failure_reason : null, createdAt, executedAt: safeIso(row.executed_at) }]; }) }, { headers: { "cache-control": "private, no-store" } });
+  return NextResponse.json({ orders: (data || []).flatMap((row) => { const id = typeof row.id === "string" ? row.id : ""; const kind = String(row.kind || ""); const status = String(row.status || ""); const createdAt = safeIso(row.created_at); const expiresAt = safeIso(row.expires_at); if (!id || !orderKinds.has(kind) || !orderStatuses.has(status) || !createdAt || !expiresAt) return []; return [{ id, kind, triggerPrice: Math.max(0, finite(row.trigger_price)), inputAmount: Math.max(0, finite(row.input_amount)), status, expiresAt, result: row.result || null, failureReason: publicFailureReason(row.failure_reason), createdAt, executedAt: safeIso(row.executed_at) }]; }) }, { headers: { "cache-control": "private, no-store" } });
 }
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const profile = await requireProfile(); if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 }); if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 }); if (!(await enforceRateLimit(request, "coin-conditional-order", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов ордеров" }, { status: 429 }); const { id } = await params; if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный coin ID" }, { status: 400 });
@@ -27,7 +41,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
     const { data, error } = await supabase.rpc("create_coin_conditional_order_v056", { p_profile_id: profile.id, p_coin_id: id, p_kind: kind, p_trigger_price: triggerPrice, p_input_amount: inputAmount, p_request_key: requestKey, p_duration_days: durationDays });
     if (error) {
       if (isDatabaseSchemaError(error)) return apiFailure(error, "Схема условных ордеров требует актуальной миграции");
-      return NextResponse.json({ error: publicBusinessError(error, "Не удалось создать ордер") }, { status: 400 });
+      return NextResponse.json({ error: orderBusinessError(error) }, { status: 400 });
     }
     return NextResponse.json({ order: data }, { status: 201 });
   } catch (error) { console.error("create conditional order", error); await recordAppError(`/api/coins/${id}/orders`, error, String(profile.id)); return apiFailure(error, "Не удалось создать ордер"); }
