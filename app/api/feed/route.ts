@@ -1,6 +1,6 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getMarketActivity } from "@/lib/feed";
 
@@ -8,8 +8,8 @@ const feedCache = new Map<number, { expiresAt: number; activity: Awaited<ReturnT
 const feedInFlight = new Map<number, Promise<Awaited<ReturnType<typeof getMarketActivity>>>>();
 
 async function GETHandler(request: NextRequest) {
-  const session = await requireSession();
-  if (!session) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  const profile = await requireProfile();
+  if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   const requested = Number(request.nextUrl.searchParams.get("limit") || 30);
   const limit = Number.isFinite(requested) ? Math.min(50, Math.max(1, Math.floor(requested))) : 30;
   try {
