@@ -34,7 +34,7 @@ async function GETHandler() {
   const supabase = getSupabaseAdmin();
   const [reputation, achievements, presentation, verifiedEntitlement, badgeInventory] = await Promise.all([
     supabase.from("profile_reputation").select("score,trade_score,age_score,activity_score,trust_score,updated_at").eq("profile_id", profile.id).maybeSingle(),
-    supabase.from("user_achievements").select("achievement_key,unlocked_at,achievements(title,description,icon,xp_reward,sort_order)").eq("profile_id", profile.id).order("unlocked_at", { ascending: false }),
+    supabase.from("user_achievements").select("achievement_key,unlocked_at,achievements(title,description,icon,xp_reward,sort_order)").eq("profile_id", profile.id).order("unlocked_at", { ascending: false }).limit(100),
     supabase.from("profiles").select("equipped_profile_frame").eq("id", profile.id).maybeSingle(),
     supabase.from("profile_entitlements").select("expires_at").eq("profile_id", profile.id).eq("entitlement_key", "creator_verified").maybeSingle(),
     supabase.from("profile_item_inventory").select("item_key,acquired_at,profile_items!inner(title,rarity,item_type,active)").eq("profile_id", profile.id).eq("profile_items.item_type", "badge").eq("profile_items.active", true).order("acquired_at", { ascending: false }).limit(12),
