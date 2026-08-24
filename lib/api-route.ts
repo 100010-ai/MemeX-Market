@@ -25,7 +25,10 @@ export function errorCode(error: unknown) { if (!error || typeof error !== "obje
 export function publicBusinessError(error: unknown, fallback: string) {
   const message = errorMessage(error);
   if (/insufficient.*balance|not enough.*balance|недостаточно.*баланс/i.test(message)) return "Недостаточно доступного баланса.";
+  if (/insufficient unreserved token|no unlocked tokens available/i.test(message)) return "Недостаточно свободных мемкоинов: часть позиции заблокирована или зарезервирована заявками.";
   if (/insufficient.*token/i.test(message)) return "Недостаточно мемкоинов для этой операции.";
+  if (/trade would move price below active floor|below active floor/i.test(message)) return "Продажа опустит цену ниже активной минимальной цены мемкоина.";
+  if (/coin is not tradeable/i.test(message)) return "Торговля этим мемкоином недоступна.";
   if (/insufficient.*energy|not enough.*energy/i.test(message)) return "Недостаточно энергии для этой операции.";
   if (/symbol.*already|duplicate.*symbol|coins_symbol/i.test(message)) return "Этот тикер уже занят.";
   if (/launch.*cooldown|cooldown.*launch|too soon.*launch/i.test(message)) return "До следующего запуска мемкоина нужно немного подождать.";
