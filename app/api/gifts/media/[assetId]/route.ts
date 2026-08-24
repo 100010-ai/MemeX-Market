@@ -5,6 +5,7 @@ import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/auth";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
+import { tonApiGet } from "@/lib/providers/tonapi-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -22,6 +23,14 @@ type GiftMediaRow = {
   telegram_name: string | null;
   base_name: string | null;
   gift_number: number | string | null;
+  chain_nft_address: string | null;
+};
+
+type TonApiPreview = { resolution?: string; url?: string };
+type TonApiNftItem = {
+  previews?: TonApiPreview[];
+  trust?: string;
+  verified?: boolean;
 };
 
 function trustedMediaHost(hostname: string) {
@@ -52,13 +61,39 @@ function trustedUrl(source: unknown) {
   }
 }
 
+function previewScore(resolution: unknown) {
+  const match = String(resolution || "").match(/(\d+)x(\d+)/i);
+  return match ? Number(match[1]) * Number(match[2]) : 0;
+}
+
+async function liveTonApiPreviewUrls(chainAddress: string | null) {
+  const address = String(chainAddress || "").trim();
+  if (!address) return [] as URL[];
+  try {
+    const item = await tonApiGet<TonApiNftItem>(`/v2/nfts/${encodeURIComponent(address)}`, {
+      timeoutMs: 5_000,
+      attempts: 2,
+      cacheTtlMs: 60_000,
+      allowStaleOnFailure: true,
+    });
+    if (item.verified === false || String(item.trust || "").toLowerCase() === "blacklist") return [];
+    return [...(item.previews || [])]
+      .sort((a, b) => previewScore(b.resolution) - previewScore(a.resolution))
+      .map((preview) => trustedUrl(preview.url))
+      .filter((url): url is URL => Boolean(url));
+  } catch (error) {
+    console.warn("gift media TonAPI preview fallback skipped", { chainAddress: address, error });
+    return [];
+  }
+}
+
 async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
   const response = await fetch(url, {
     signal,
     cache: "force-cache",
     headers: {
       accept,
-      "user-agent": "MXM-Market/0.17",
+      "user-agent": "MXM-Market/0.64.9",
       referer: "https://fragment.com/",
     },
   });
@@ -70,8 +105,10 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
 }
 
 async function previewResponse(candidates: Array<URL | null>, signal: AbortSignal) {
+  const seen = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate) continue;
+    if (!candidate || seen.has(candidate.href)) continue;
+    seen.add(candidate.href);
     const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
     const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
@@ -94,8 +131,10 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
 }
 
 async function animationResponse(candidates: Array<URL | null>, signal: AbortSignal) {
+  const seen = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate) continue;
+    if (!candidate || seen.has(candidate.href)) continue;
+    seen.add(candidate.href);
     const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
     const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
@@ -136,80 +175,77 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   const suppliedFragment = suppliedSlug ? fragmentGiftMedia(suppliedSlug) : null;
   const variant = requestUrl.searchParams.get("variant") === "preview" ? "preview" : "animation";
   const size = requestUrl.searchParams.get("size") === "medium" ? "medium" : "large";
-
-  // Current clients already know the normalized Telegram collectible slug.
-  // Using it avoids two server round-trips (profile + asset lookup) for every
-  // visible animated card while still restricting the proxy to Fragment URLs.
-  if (suppliedFragment) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
-    try {
-      if (variant === "preview") {
-        const candidates = size === "medium"
-          ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
-          : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
-        const response = await previewResponse(candidates, controller.signal);
-        return response || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
-      }
-      const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
-      return response || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
-    } catch (error) {
-      const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
-      return NextResponse.json({ error: message }, { status: 502 });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  const supabase = getSupabaseAdmin();
-  const primary = await supabase
-    .from("gift_assets")
-    .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number")
-    .eq("id", assetId)
-    .maybeSingle();
-
-  const queryError = primary.error;
-  const row = primary.data as unknown as GiftMediaRow | null;
-
-  if (queryError) return apiFailure(queryError, "Не удалось получить медиа подарка");
-  if (!row || row.is_burned || row.catalog_source !== "tonapi") {
-    return NextResponse.json({ error: "Медиа подарка не найдено" }, { status: 404 });
-  }
-
-  const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
-  const fragment = slug ? fragmentGiftMedia(slug) : null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
+    // Use a client-supplied canonical Fragment slug first because it is the
+    // cheapest path for already-indexed Telegram collectibles. Crucially, a
+    // Fragment miss no longer ends the request: newly minted/exported gifts
+    // can lag behind Fragment CDN while TonAPI already has a valid preview.
+    if (suppliedFragment) {
+      if (variant === "preview") {
+        const fragmentCandidates = size === "medium"
+          ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
+          : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
+        const response = await previewResponse(fragmentCandidates, controller.signal);
+        if (response) return response;
+      } else {
+        const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
+        if (response) return response;
+      }
+    }
+
+    const supabase = getSupabaseAdmin();
+    const primary = await supabase
+      .from("gift_assets")
+      .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number,chain_nft_address")
+      .eq("id", assetId)
+      .maybeSingle();
+
+    const queryError = primary.error;
+    const row = primary.data as unknown as GiftMediaRow | null;
+
+    if (queryError) return apiFailure(queryError, "Не удалось получить медиа подарка");
+    if (!row || row.is_burned || row.catalog_source !== "tonapi") {
+      return NextResponse.json({ error: "Медиа подарка не найдено" }, { status: 404 });
+    }
+
+    const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
+    const fragment = slug ? fragmentGiftMedia(slug) : null;
+
     if (variant === "preview") {
-      // Fragment's JPG is the complete collectible render, including the exact
-      // Telegram backdrop and symbol pattern. TonAPI's preview can be only the
-      // transparent model, which is what caused the black cards in v0.14.
-      const response = await previewResponse(size === "medium" ? [
+      const storedCandidates = size === "medium" ? [
         trustedUrl(fragment?.medium),
         trustedUrl(fragment?.small),
         trustedUrl(fragment?.large),
         trustedUrl(row.model_preview_url),
+        row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ] : [
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
         trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
-      ], controller.signal);
-      return response || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
+      ];
+      const storedResponse = await previewResponse(storedCandidates, controller.signal);
+      if (storedResponse) return storedResponse;
+
+      // Older catalogue rows may already contain an optimistic Fragment URL in
+      // model_preview_url. Recover from that stale data by asking TonAPI for
+      // the current verified NFT previews using the immutable chain address.
+      const liveTonApiCandidates = await liveTonApiPreviewUrls(row.chain_nft_address);
+      const liveResponse = await previewResponse(liveTonApiCandidates, controller.signal);
+      return liveResponse || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
     }
 
-    // Prefer Fragment's full collectible Lottie. Unlike the TGS extracted from
-    // t.me/nft, it is the composed NFT presentation rather than only the model
-    // sticker layer, so the backdrop does not disappear when animation starts.
-    const response = await animationResponse([
+    const animation = await animationResponse([
       trustedUrl(fragment?.animation),
       row.model_is_animated ? trustedUrl(row.model_media_url) : null,
     ], controller.signal);
-    return response || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
+    return animation || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
   } catch (error) {
     const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
+    console.warn("gift media proxy", { assetId, variant, error });
     return NextResponse.json({ error: message }, { status: 502 });
   } finally {
     clearTimeout(timeout);
