@@ -1,6 +1,6 @@
 {
   "name": "mxm-telegram-miniapp",
-  "version": "0.64.7",
+  "version": "0.64.9",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,12 +10,12 @@
     "typecheck": "tsc --noEmit",
     "admin": "next dev -H 127.0.0.1 -p 3000",
     "env:check": "node scripts/check-env.mjs",
-    "release:check": "node scripts/release-check.mjs",
+    "release:check": "node scripts/check-version.mjs && node scripts/release-check.mjs",
     "cleanup:retired": "node scripts/cleanup-retired-source.mjs",
-    "prebuild": "node scripts/cleanup-retired-source.mjs",
+    "prebuild": "node scripts/check-version.mjs && node scripts/cleanup-retired-source.mjs",
     "telegram:webhook": "node scripts/configure-telegram-webhook.mjs",
-    "verify": "node scripts/verify.mjs",
-    "verify:static": "node scripts/verify.mjs --static"
+    "verify": "node scripts/check-version.mjs && node scripts/verify.mjs",
+    "verify:static": "node scripts/check-version.mjs && node scripts/verify.mjs --static"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
