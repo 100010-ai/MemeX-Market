@@ -12,10 +12,10 @@
     "env:check": "node scripts/check-env.mjs",
     "release:check": "node scripts/check-version.mjs && node scripts/release-check.mjs",
     "cleanup:retired": "node scripts/cleanup-retired-source.mjs",
-    "prebuild": "node scripts/check-version.mjs && node scripts/cleanup-retired-source.mjs && node scripts/release-check.mjs",
+    "prebuild": "node scripts/check-version.mjs && node scripts/cleanup-retired-source.mjs && node scripts/prebuild-check.mjs",
     "telegram:webhook": "node scripts/configure-telegram-webhook.mjs",
-    "verify": "node scripts/check-version.mjs && node scripts/verify.mjs",
-    "verify:static": "node scripts/check-version.mjs && node scripts/verify.mjs --static"
+    "verify": "node scripts/verify.mjs",
+    "verify:static": "node scripts/verify.mjs --static"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
