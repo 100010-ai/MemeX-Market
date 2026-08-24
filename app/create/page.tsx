@@ -13,10 +13,11 @@ import { COIN_LAUNCH_COOLDOWN_HOURS, COIN_LAUNCH_FEE_TON, COIN_MAX_ACTIVE_PER_CR
 
 const MAX_IMAGE = 2 * 1024 * 1024;
 const ACCEPTED = new Set(["image/png", "image/jpeg", "image/webp"]);
+const MARKET_UI_STATE_KEY = "mxm-market-ui-v0642";
 type Rules = {
   launchFee:number; cooldownHours:number; maxActiveCoins:number; activeCoins:number; nextLaunchAt:string|null; economyReady:boolean;
   initialBuyMin:number; initialBuyMax:number; startPriceMin:number; startPriceMax:number; floorMaxBps:number;
-  energyCost:number; energy:number; maxEnergy:number;
+  energyCost:number; energy:number; maxEnergy:number; tradeFeePercent:number;
 };
 
 function makeLaunchRequestId() {
@@ -38,7 +39,7 @@ export default function CreatePage() {
   const [floorPrice, setFloorPrice] = useState("0.00000005");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS, maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR, activeCoins: 0, nextLaunchAt: null, economyReady: false, initialBuyMin: 1, initialBuyMax: 1_000, startPriceMin: 0.00000001, startPriceMax: 0.000001, floorMaxBps: 5_000, energyCost: 20, energy: 0, maxEnergy: 100 });
+  const [rules, setRules] = useState<Rules>({ launchFee: COIN_LAUNCH_FEE_TON, cooldownHours: COIN_LAUNCH_COOLDOWN_HOURS, maxActiveCoins: COIN_MAX_ACTIVE_PER_CREATOR, activeCoins: 0, nextLaunchAt: null, economyReady: false, initialBuyMin: 1, initialBuyMax: 1_000, startPriceMin: 0.00000001, startPriceMax: 0.000001, floorMaxBps: 5_000, energyCost: 20, energy: 0, maxEnergy: 100, tradeFeePercent: COIN_TRADE_FEE_PERCENT });
   const [rulesLoaded, setRulesLoaded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
@@ -48,7 +49,7 @@ export default function CreatePage() {
 
   useEffect(() => {
     void apiFetch<Rules>("/api/coins", { cacheMs: 15_000 })
-      .then(setRules)
+      .then((next) => setRules({ ...next, tradeFeePercent: Number.isFinite(next.tradeFeePercent) ? next.tradeFeePercent : COIN_TRADE_FEE_PERCENT }))
       .catch(() => setError("Не удалось загрузить параметры запуска"))
       .finally(() => setRulesLoaded(true));
   }, []);
@@ -97,7 +98,7 @@ export default function CreatePage() {
     const supply = 1_000_000_000;
     const initialQuoteReserve = supply * startPriceValue;
     const initialTokenReserve = supply;
-    const netSeed = initialBuyValue * (1 - COIN_TRADE_FEE_PERCENT / 100);
+    const netSeed = initialBuyValue * (1 - rules.tradeFeePercent / 100);
     const invariant = initialTokenReserve * initialQuoteReserve;
     const quoteReserve = initialQuoteReserve + netSeed;
     const tokenReserve = invariant / quoteReserve;
@@ -121,8 +122,14 @@ export default function CreatePage() {
       if (image) form.set("image", image);
       const result = await apiFetch<{ coin: { id: string } }>("/api/coins", { method: "POST", body: form });
       sessionStorage.setItem("mxm-market-dirty", "1");
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(MARKET_UI_STATE_KEY) || "{}") as Record<string, unknown>;
+        sessionStorage.setItem(MARKET_UI_STATE_KEY, JSON.stringify({ ...saved, tab: "coins", coinSort: "newest", query: "", watchOnly: false, scrollY: 0 }));
+      } catch {
+        sessionStorage.setItem(MARKET_UI_STATE_KEY, JSON.stringify({ tab: "coins", coinSort: "newest", query: "", watchOnly: false, scrollY: 0 }));
+      }
       await refreshProfile();
-      router.push(`/coin/${result.coin.id}`);
+      router.push(`/coin/${result.coin.id}?created=1`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось создать мемкоин"); }
     finally { setBusy(false); }
   }
@@ -165,7 +172,7 @@ export default function CreatePage() {
           <div className="grid grid-cols-2 gap-x-5 gap-y-3">
             <Info icon={<Sparkles size={12} />} label="Цена открытия" value={launchPreview ? launchPreview.openingPrice.toExponential(3).replace("e+", "e") : "—"} />
             <Info icon={<ShieldCheck size={12} />} label="Ликвидность AMM" value={launchPreview ? money(launchPreview.liquidity) : "—"} />
-            <Info icon={<Rocket size={12} />} label="Комиссия сделки" value={`${COIN_TRADE_FEE_PERCENT.toLocaleString("ru-RU")}%`} />
+            <Info icon={<Rocket size={12} />} label="Комиссия сделки" value={`${rules.tradeFeePercent.toLocaleString("ru-RU")}%`} />
             <Info icon={<WalletCards size={12} />} label="Доступный баланс" value={profile ? money(profile.availableBalance) : "—"} />
             <Info icon={<Sparkles size={12} />} label="Энергия запуска" value={`${rules.energyCost} · доступно ${rules.energy}/${rules.maxEnergy}`} />
           </div>

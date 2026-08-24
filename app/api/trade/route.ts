@@ -1,5 +1,5 @@
 import { apiFailure, publicBusinessError, readJsonObject, withApiErrors } from "@/lib/api-route";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
@@ -47,6 +47,18 @@ async function POSTHandler(request: Request) {
       if (/schema cache|does not exist|could not find the function/i.test(error.message || "")) return apiFailure(error, "Торговая схема требует актуальной миграции");
       return NextResponse.json({ error: publicBusinessError(error, "Сделку не удалось выполнить. Обновите данные и повторите попытку.") }, { status: 400 });
     }
+
+    // A price-changing trade can activate conditional orders immediately.
+    // Supabase Cron remains the durable fallback for expiry and retry handling.
+    after(async () => {
+      try {
+        const processed = await getSupabaseAdmin().rpc("process_coin_conditional_orders_v056", { p_limit: 100 });
+        if (processed.error) console.error("post-trade coin order processor", processed.error);
+      } catch (cause) {
+        console.error("post-trade coin order processor", cause);
+      }
+    });
+
     return NextResponse.json({ trade: data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("trade", error);
