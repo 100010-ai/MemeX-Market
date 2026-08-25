@@ -134,7 +134,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.67.0 package version", packageJson.includes('"version": "0.67.0"'));
+check("v0.68.0 package version", packageJson.includes('"version": "0.68.0"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
@@ -144,6 +144,11 @@ check("Migration 100025 keeps conversion stages nested", migration100025.include
 check("v0.67 admin dashboard uses real charts and periods", exists("components/admin/admin-dashboard.tsx") && read("components/admin/admin-trend-chart.tsx").includes("lightweight-charts") && adminPage.includes("AdminDashboard") && adminPage.includes("AdminTeamPanel"));
 check("v0.67 admin permissions guard operations", read("lib/admin.ts").includes("ADMIN_ROLE_PERMISSIONS") && adminAction.includes("permissionForAction") && adminAction.includes('action === "admin.member.upsert"'));
 check("v0.67 presence is authenticated and rate-limited", read("app/api/analytics/presence/route.ts").includes("requireProfile") && read("app/api/analytics/presence/route.ts").includes("sameOriginMutation") && read("app/api/analytics/presence/route.ts").includes("enforceRateLimit"));
+check("v0.68 launch studio exposes real readiness and budget", createPage.includes("mxm-launch-studio") && createPage.includes("launchBudget") && createPage.includes("LaunchCheck") && createPage.includes("economyReady"));
+check("v0.68 trade ticket exposes recovery and minimum received", read("app/coin/[id]/page.tsx").includes("mxm-coin-load-error") && read("app/coin/[id]/page.tsx").includes("Мин. к получению") && read("app/coin/[id]/page.tsx").includes("Котировка подтверждается сервером"));
+check("v0.68 portfolio has search-aware empty states", read("app/vault/page.tsx").includes("activeGiftRows.length") && read("app/vault/page.tsx").includes("sortedHoldings.length") && read("app/vault/page.tsx").includes("messageTone"));
+check("v0.68 operations center summarizes live exposure", read("app/orders/page.tsx").includes("mxm-orders-summary") && read("app/orders/page.tsx").includes("incomingValue") && read("app/orders/page.tsx").includes("listingValue"));
+check("v0.68 home exposes commercial command center", read("app/hub/page.tsx").includes("mxm-home-command") && read("app/hub/page.tsx").includes("Launch studio") && read("app/hub/page.tsx").includes("availableBalance"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")

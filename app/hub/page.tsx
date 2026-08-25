@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, Flame, Gift, ListChecks, Trophy } from "lucide-react";
+import { Activity, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, Flame, Gift, ListChecks, Rocket, Trophy, WalletCards } from "lucide-react";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { CoinAvatar } from "@/components/ui";
@@ -77,7 +77,7 @@ export default function HubPage() {
       <header className="mxm-home-hero mb-3">
         <div className="min-w-0">
           <p className="text-[9px] uppercase tracking-[.13em] text-[var(--muted-2)]">MXM сегодня</p>
-          <h1 className="mt-1 truncate text-[18px] font-semibold tracking-[-.035em]">{profile?.firstName || "Рынок"}</h1>
+          <h1 className="mt-1 truncate text-[18px] font-semibold tracking-[-.035em]">{profile?.firstName ? `${profile.firstName}, всё под контролем` : "Обзор рынка"}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {data.season ? <Link href="/season" className="mxm-home-status"><Flame size={11} /><span>BP {data.season.level}</span></Link> : null}
@@ -87,7 +87,14 @@ export default function HubPage() {
 
       {error ? <div className="mxm-alert mxm-alert-error mb-3 flex items-center justify-between gap-3"><span className="truncate">{error}</span><button type="button" onClick={() => void load()} className="shrink-0 text-[9px] underline">Повторить</button></div> : null}
 
-      <section className="mxm-home-grid mb-3">
+      <section className="mxm-home-command mb-3" aria-label="Сводка аккаунта">
+        <div><small>Капитал</small><strong>{profile ? money(profile.netWorth) : "—"}</strong><span>Все активы</span></div>
+        <div><small>Доступно</small><strong>{profile ? money(profile.availableBalance) : "—"}</strong><span>{profile?.reservedBalance ? `${money(profile.reservedBalance)} в резерве` : "Свободный баланс"}</span></div>
+        <div><small>Фокус</small><strong>{readyMissions.length ? `${readyMissions.length} награды` : `${activeMissions.length} задания`}</strong><span>{readyMissions.length ? "Можно забрать" : "Активно сегодня"}</span></div>
+        <Link href="/create"><span><Rocket size={14} /></span><div><small>Launch studio</small><strong>Новый мемкоин</strong><em>Создать рынок</em></div><ArrowUpRight size={12} /></Link>
+      </section>
+
+      <section className="mxm-home-grid is-four mb-3">
         <Link href="/market" className="mxm-home-tile is-market">
           <span className="mxm-home-tile-icon"><BarChart3 size={16} /></span>
           <div className="min-w-0"><small>Рынок</small><p>{hotCoins.length ? `${hotCoins.length} в тренде` : "Открыть"}</p></div>
@@ -99,8 +106,13 @@ export default function HubPage() {
           <ChevronRight size={14} />
         </Link>
         <Link href="/vault" className="mxm-home-tile">
-          <span className="mxm-home-tile-icon"><Gift size={16} /></span>
+          <span className="mxm-home-tile-icon"><WalletCards size={16} /></span>
           <div className="min-w-0"><small>Портфель</small><p>{profile ? money(profile.netWorth) : "—"}</p></div>
+          <ChevronRight size={14} />
+        </Link>
+        <Link href="/orders" className="mxm-home-tile">
+          <span className="mxm-home-tile-icon"><Gift size={16} /></span>
+          <div className="min-w-0"><small>Операции</small><p>Заявки и лоты</p></div>
           <ChevronRight size={14} />
         </Link>
       </section>
