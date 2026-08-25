@@ -105,6 +105,8 @@ const sweepRoute = read("app/api/collections/[name]/sweep/route.ts");
 const marketSearchRoute = read("app/api/market/search/route.ts");
 const looseQuery = read("lib/supabase/loose-query.ts");
 const giftMediaRoute = read("app/api/gifts/media/[assetId]/route.ts");
+const giftMediaComponent = read("components/gifts/gift-media.tsx");
+const mappers = read("lib/mappers.ts");
 const httpBody = read("lib/http-body.ts");
 const telegramAvatarRoute = read("app/api/telegram/avatar/route.ts");
 const telegramFileRoute = read("app/api/telegram/file/[fileId]/route.ts");
@@ -134,7 +136,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.69.0 package version", packageJson.includes('"version": "0.69.0"'));
+check("v0.69.1 package version", packageJson.includes('"version": "0.69.1"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
@@ -154,6 +156,9 @@ check("v0.69 gift purchase refresh cannot mask a completed mutation", read("comp
 check("v0.69 collection sweep uses in-app confirmation", read("app/collections/[name]/page.tsx").includes("sweepArmed") && !read("app/collections/[name]/page.tsx").includes("window.confirm"));
 check("v0.69 collection offers expose reserve and execution state", read("components/gifts/advanced-offers-panel.tsx").includes("estimatedReserve") && read("components/gifts/advanced-offers-panel.tsx").includes("activeReserve") && read("components/gifts/advanced-offers-panel.tsx").includes("Исполнение и резерв контролирует сервер"));
 check("v0.69 commercial Gift cards surface listing trust", read("components/gifts/gift-card.tsx").includes("mxm-gift-cover-state") && read("components/gifts/gift-card.tsx").includes("TON"));
+check("v0.69.1 Gift previews never pass animation files to img", giftMediaComponent.includes("staticImageSource") && giftMediaComponent.includes('gift.mediaKind === "static"') && mappers.includes("safeImageMediaUrl") && mappers.includes("modelIsStatic ? telegramFileUrl(row.model_file_id)"));
+check("v0.69.1 Gift preview failures advance through real sources", giftMediaComponent.includes("previewAttempt") && giftMediaComponent.includes("previewSources[previewIndex]") && giftMediaComponent.includes("Медиа недоступно"));
+check("v0.69.1 media proxy isolates provider timeouts", giftMediaRoute.includes("requestSignal.addEventListener") && giftMediaRoute.includes("1_800") && giftMediaRoute.includes("gift media sources exhausted"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")
@@ -516,7 +521,7 @@ check("TGS decompression bound", gifts.includes("MAX_TGS_JSON_BYTES") && gifts.i
 check("Binary media response bodies use exact ArrayBuffer bodies",
   httpBody.includes("toBodyArrayBuffer")
   && telegramAvatarRoute.includes("new NextResponse(toBodyArrayBuffer(bytes)")
-  && giftMediaRoute.includes("new Response(toBodyArrayBuffer(limited)")
+  && giftMediaRoute.includes("new Response(toBodyArrayBuffer(upstream.bytes)")
   && telegramFileRoute.includes("new NextResponse(toBodyArrayBuffer(bytes)")
   && telegramFileRoute.includes("readResponseBytesLimited(response, MAX_TELEGRAM_GIFT_FILE_BYTES)")
   && !telegramAvatarRoute.includes("new NextResponse(bytes,")
