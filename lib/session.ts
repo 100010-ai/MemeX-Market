@@ -77,8 +77,7 @@ export async function readSession(): Promise<SessionPayload | null> {
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as SessionPayload;
     const now = Math.floor(Date.now() / 1000);
-    if (!Number.isSafeInteger(payload.telegramId) || payload.telegramId === 0) return null;
-    if (payload.telegramId < 0 && payload.inspector !== true) return null;
+    if (!Number.isSafeInteger(payload.telegramId) || payload.telegramId <= 0) return null;
     if (!Number.isFinite(payload.issuedAt) || payload.issuedAt <= 0 || payload.issuedAt > now + 300) return null;
     const maxLifetime = payload.inspector ? 60 * 60 * 2 : 60 * 60 * 24 * 7;
     if (now - payload.issuedAt > maxLifetime) return null;

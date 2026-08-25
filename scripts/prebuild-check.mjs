@@ -53,7 +53,7 @@ const sessionLib = read("lib/session.ts");
 const adminAuthRoute = read("app/api/admin/auth/route.ts");
 const adminSessionLib = read("lib/admin-session.ts");
 const adminAccessGate = read("components/admin/admin-access-gate.tsx");
-check("Preview inspector never opens production authentication", inspectorRoute.includes('process.env.VERCEL_ENV === "preview"') && sessionLib.includes('process.env.VERCEL_ENV !== "preview"') && inspectorRoute.includes('is_system", true'));
+check("Preview inspector never opens production authentication", inspectorRoute.includes('process.env.VERCEL_ENV === "preview"') && sessionLib.includes('process.env.VERCEL_ENV !== "preview"') && inspectorRoute.includes('INSPECTOR_TELEGRAM_ID') && inspectorRoute.includes('.eq("telegram_id", INSPECTOR_TELEGRAM_ID)'));
 check("Preview inspector is centrally read-only", apiRoute.includes("inspectorMutationBlocked") && apiRoute.includes("INSPECTOR_READ_ONLY") && apiRoute.includes('["GET", "HEAD", "OPTIONS"]'));
 check("Preview inspector skips read-triggered writes", ["app/api/tasks/route.ts", "app/api/store/route.ts", "app/api/portfolio/route.ts", "app/api/profile/meta/route.ts", "app/api/users/[id]/route.ts", "app/api/watchlist/route.ts"].every((file) => read(file).includes("isInspectionSession")));
 check("Owner admin access is server-only and revocable", adminAuthRoute.includes("ADMIN_OWNER_KEY") && adminSessionLib.includes("ADMIN_OWNER_TELEGRAM_ID") && adminSessionLib.includes("keyVersion") && adminSessionLib.includes('sameSite: "strict"') && !adminAccessGate.includes("ADMIN_OWNER_KEY"));

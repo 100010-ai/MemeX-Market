@@ -5,6 +5,8 @@ import { sameOriginMutation } from "@/lib/security";
 import { setSession } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
+const INSPECTOR_TELEGRAM_ID = 900_000_001;
+
 function inspectorAvailable() {
   return process.env.VERCEL_ENV === "preview" || process.env.NODE_ENV === "development";
 }
@@ -17,14 +19,12 @@ async function POSTHandler(request: Request) {
   const result = await supabase
     .from("profiles")
     .select("id,telegram_id,username,first_name,last_name,photo_url,balance,xp,last_gift_sync_at,is_banned,banned_until,created_at")
-    .eq("is_system", true)
+    .eq("telegram_id", INSPECTOR_TELEGRAM_ID)
     .eq("is_banned", false)
-    .order("created_at", { ascending: true })
-    .limit(1)
     .maybeSingle();
   if (result.error) return apiFailure(result.error, "Не удалось открыть режим инспектора");
-  if (!result.data || !Number.isSafeInteger(Number(result.data.telegram_id)) || Number(result.data.telegram_id) >= 0) {
-    return NextResponse.json({ error: "Системный профиль для инспектора не найден" }, { status: 503 });
+  if (!result.data || Number(result.data.telegram_id) !== INSPECTOR_TELEGRAM_ID) {
+    return NextResponse.json({ error: "Профиль инспектора не найден" }, { status: 503 });
   }
 
   await setSession(Number(result.data.telegram_id), { inspector: true, maxAgeSeconds: 60 * 60 * 2 });
