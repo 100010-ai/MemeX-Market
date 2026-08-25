@@ -4,6 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapProfileBadges } from "@/lib/profile-presentation";
 import { finiteNumber, safeIsoDate, text } from "@/lib/safe-data";
+import { isInspectionSession } from "@/lib/session";
 
 type AchievementRow = {
   achievement_key: string;
@@ -31,6 +32,7 @@ function mapAchievement(raw: unknown) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  const inspection = await isInspectionSession();
   const supabase = getSupabaseAdmin();
   const [reputation, achievements, presentation, verifiedEntitlement, badgeInventory] = await Promise.all([
     supabase.from("profile_reputation").select("score,trade_score,age_score,activity_score,trust_score,updated_at").eq("profile_id", profile.id).maybeSingle(),
@@ -43,7 +45,7 @@ async function GETHandler() {
   if (error) return apiFailure(error, "Не удалось выполнить запрос");
   const reputationUpdatedAt = reputation.data?.updated_at ? Date.parse(String(reputation.data.updated_at)) : 0;
   const reputationStale = !Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000;
-  if (reputationStale) {
+  if (reputationStale && !inspection) {
     after(async () => {
       try {
         const refreshed = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: profile.id });

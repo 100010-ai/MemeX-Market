@@ -4,6 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { finiteNumber, nonEmptyId, nullableText, text } from "@/lib/safe-data";
 import { getMainChannelTaskState, MAIN_CHANNEL_MISSION_KEY, MAIN_CHANNEL_URL } from "@/lib/telegram-membership";
+import { isInspectionSession } from "@/lib/session";
 
 const missionEnsureCache = new Map<string, number>();
 
@@ -25,7 +26,8 @@ async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  const ensureError = await ensureMissions(String(profile.id));
+  const inspection = await isInspectionSession();
+  const ensureError = inspection ? null : await ensureMissions(String(profile.id));
   if (ensureError) return apiFailure(ensureError, "Не удалось подготовить задания");
 
   // Task list loading must not wait on Telegram Bot API. The membership

@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
 import { getRuntimeConfig } from "@/lib/runtime-config";
+import { isInspectionSession } from "@/lib/session";
 import { finiteNumber, nullableNumber, text } from "@/lib/safe-data";
 
 function mapCollection(row: Record<string, unknown>) {
@@ -33,6 +34,7 @@ function mapCollection(row: Record<string, unknown>) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  const inspection = await isInspectionSession();
   const profileId = String(profile.id);
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id,created_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(500);
@@ -73,7 +75,7 @@ async function GETHandler() {
   const staleCollections = giftCollections.filter((name) => !validCollections.has(name));
   const staleGiftIds = giftIds.filter((id) => !validGiftIds.has(id));
 
-  if (staleCoinIds.length || staleCollections.length || staleGiftIds.length) {
+  if (!inspection && (staleCoinIds.length || staleCollections.length || staleGiftIds.length)) {
     after(async () => {
       const cleanup = getSupabaseAdmin();
       try {

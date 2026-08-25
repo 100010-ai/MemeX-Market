@@ -7,6 +7,12 @@ type SessionPayload = {
   version?: number;
   telegramId: number;
   issuedAt: number;
+  inspector?: boolean;
+};
+
+type SessionOptions = {
+  inspector?: boolean;
+  maxAgeSeconds?: number;
 };
 
 export function getSessionConfigStatus() {
@@ -24,8 +30,14 @@ function sign(input: string) {
   return crypto.createHmac("sha256", secret()).update(input).digest("base64url");
 }
 
-export async function setSession(telegramId: number) {
-  const payload: SessionPayload = { version: 2, telegramId, issuedAt: Math.floor(Date.now() / 1000) };
+export async function setSession(telegramId: number, options: SessionOptions = {}) {
+  const maxAge = Math.max(300, Math.min(60 * 60 * 24 * 7, Math.floor(options.maxAgeSeconds ?? 60 * 60 * 24 * 7)));
+  const payload: SessionPayload = {
+    version: 2,
+    telegramId,
+    issuedAt: Math.floor(Date.now() / 1000),
+    inspector: options.inspector === true || undefined,
+  };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const value = `${encoded}.${sign(encoded)}`;
   const store = await cookies();
@@ -34,7 +46,7 @@ export async function setSession(telegramId: number) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge,
   });
 }
 
@@ -67,9 +79,15 @@ export async function readSession(): Promise<SessionPayload | null> {
     const now = Math.floor(Date.now() / 1000);
     if (!Number.isSafeInteger(payload.telegramId) || payload.telegramId <= 0) return null;
     if (!Number.isFinite(payload.issuedAt) || payload.issuedAt <= 0 || payload.issuedAt > now + 300) return null;
-    if (now - payload.issuedAt > 60 * 60 * 24 * 7) return null;
+    const maxLifetime = payload.inspector ? 60 * 60 * 2 : 60 * 60 * 24 * 7;
+    if (now - payload.issuedAt > maxLifetime) return null;
+    if (payload.inspector && process.env.VERCEL_ENV !== "preview" && process.env.NODE_ENV !== "development") return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+export async function isInspectionSession() {
+  return (await readSession())?.inspector === true;
 }

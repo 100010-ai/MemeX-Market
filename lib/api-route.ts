@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { API_VERSION } from "@/lib/app-version";
 import { readRequestBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
+import { readSession } from "@/lib/session";
 
 type RouteHandler<Args extends unknown[] = unknown[]> = (...args: Args) => Response | Promise<Response>;
 type ErrorLike = { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
@@ -15,6 +16,13 @@ function requestId() {
 function requestFromArgs(args: unknown[]) { const candidate = args[0]; return candidate instanceof Request ? candidate : null; }
 function safeRoutePath(request: Request | null) { if (!request) return null; try { return new URL(request.url).pathname; } catch { return null; } }
 function structuredApiLog(level: "info" | "warn" | "error", payload: Record<string, unknown>) { const message = `[mxm-api] ${JSON.stringify(payload)}`; if (level === "error") console.error(message); else if (level === "warn") console.warn(message); else console.info(message); }
+
+async function inspectorMutationBlocked(request: Request | null, path: string | null) {
+  if (!request || ["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) return false;
+  if (path === "/api/auth/logout" || path === "/api/inspect/session" || path === "/api/admin/auth" || path === "/api/admin/logout") return false;
+  const session = await readSession();
+  return session?.inspector === true;
+}
 
 export function errorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
@@ -53,6 +61,11 @@ export function withApiErrors<Args extends unknown[]>(label: string, handler: Ro
   return async (...args: Args) => {
     const request = requestFromArgs(args); const inboundId = request?.headers.get("x-mxm-request-id")?.trim(); const id = inboundId && /^[A-Za-z0-9._:-]{8,128}$/.test(inboundId) ? inboundId : requestId(); const startedAt = Date.now(); const method = request?.method || "UNKNOWN"; const path = safeRoutePath(request);
     try {
+      if (await inspectorMutationBlocked(request, path)) {
+        const response = NextResponse.json({ error: "Режим инспектора: изменения отключены", code: "INSPECTOR_READ_ONLY" }, { status: 403, headers: { "cache-control": "no-store" } });
+        structuredApiLog("warn", { event: "route.inspector_block", id, label, method, path, status: 403, durationMs: Math.max(0, Date.now() - startedAt) });
+        return decorateResponse(response, id, startedAt);
+      }
       const response = await handler(...args); const duration = Math.max(0, Date.now() - startedAt);
       if (response.status >= 500) structuredApiLog("error", { event: "route.response", id, label, method, path, status: response.status, durationMs: duration });
       else if (response.status >= 400) structuredApiLog("warn", { event: "route.response", id, label, method, path, status: response.status, durationMs: duration });

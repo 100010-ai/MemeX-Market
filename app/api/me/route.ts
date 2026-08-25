@@ -1,7 +1,7 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getSessionProfileSnapshot } from "@/lib/auth";
-import { getSessionConfigStatus } from "@/lib/session";
+import { getSessionConfigStatus, readSession } from "@/lib/session";
 import { auditMainChannelRewardIfNeeded } from "@/lib/telegram-membership";
 
 async function GETHandler(_request: Request) {
@@ -11,9 +11,12 @@ async function GETHandler(_request: Request) {
     // x-mxm-telegram-id request header. Keep GET /api/me side-effect free with
     // respect to query parameters so a cross-site navigation cannot clear a
     // valid Telegram session by supplying an arbitrary expected ID.
+    const session = await readSession();
+    const inspectionMode = session?.inspector === true;
     let profile = await getSessionProfileSnapshot();
     if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
     try {
+      if (inspectionMode) return NextResponse.json({ profile, inspectionMode }, { headers: { "cache-control": "private, no-store" } });
       const audit = await auditMainChannelRewardIfNeeded(profile);
       // A clawback changes balance. Refresh the snapshot so the client never
       // sees the pre-revocation balance from the same /api/me request.
@@ -23,7 +26,7 @@ async function GETHandler(_request: Request) {
       // requires a successful, fresh getChatMember verification.
       console.warn("main channel reward audit skipped", auditError);
     }
-    return NextResponse.json({ profile }, { headers: { "cache-control": "private, no-store" } });
+    return NextResponse.json({ profile, inspectionMode: false }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     console.error("me", error);
     return apiFailure(error, "Не удалось загрузить профиль");

@@ -6,6 +6,7 @@ import { giftMarketSelect, mapCoin, mapGift } from "@/lib/mappers";
 import { validUuidLike } from "@/lib/security";
 import { mapProfileBadges } from "@/lib/profile-presentation";
 import { finiteNumber, nonEmptyId, nullableText, safeIsoDate, text } from "@/lib/safe-data";
+import { isInspectionSession } from "@/lib/session";
 
 type AchievementRow = {
   achievement_key: string;
@@ -22,6 +23,7 @@ function mapAchievement(raw: unknown) {
 async function GETHandler(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireProfile();
   if (!viewer) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  const inspection = await isInspectionSession();
   const { id } = await params;
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный ID игрока" }, { status: 400 });
   const supabase = getSupabaseAdmin();
@@ -45,7 +47,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     // when the materialized profile metadata is absent or older than 5 minutes.
     const reputationUpdatedAt = reputationResult.data?.updated_at ? Date.parse(String(reputationResult.data.updated_at)) : 0;
     const reputationStale = !Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000;
-    if (reputationStale) {
+    if (reputationStale && !inspection) {
       after(async () => {
         try {
           const refresh = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: id });

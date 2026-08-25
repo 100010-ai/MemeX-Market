@@ -139,7 +139,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.70.0 package version", packageJson.includes('"version": "0.70.0"'));
+check("v0.70.1 package version", packageJson.includes('"version": "0.70.1"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
@@ -172,6 +172,9 @@ check("v0.70 trade retries preserve their idempotent contract", read("app/coin/[
 check("v0.70 rate limits use one atomic RPC", read("lib/security.ts").includes('rpc("consume_rate_limits_v070"') && read("lib/security.ts").includes("p_keys"));
 check("v0.70 security headers cover Telegram-safe framing and transport", read("next.config.ts").includes("Strict-Transport-Security") && read("next.config.ts").includes("frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"));
 check("v0.70 compact visual system is present", read("app/globals.css").includes("v0.70 — compact commercial system") && read("app/globals.css").includes("contain-intrinsic-size"));
+check("v0.70.1 preview inspector is isolated and read-only", read("app/api/inspect/session/route.ts").includes('process.env.VERCEL_ENV === "preview"') && read("lib/session.ts").includes("payload.inspector") && read("lib/api-route.ts").includes("INSPECTOR_READ_ONLY") && read("components/telegram-provider.tsx").includes('get("inspect") === "1"'));
+check("v0.70.1 inspector prevents read-triggered background writes", ["app/api/tasks/route.ts", "app/api/store/route.ts", "app/api/portfolio/route.ts", "app/api/profile/meta/route.ts", "app/api/users/[id]/route.ts", "app/api/watchlist/route.ts"].every((file) => read(file).includes("isInspectionSession")));
+check("v0.70.1 owner admin gate uses an isolated rotating secret", read("app/api/admin/auth/route.ts").includes("ADMIN_OWNER_KEY") && read("lib/admin-session.ts").includes("ADMIN_OWNER_TELEGRAM_ID") && read("lib/admin-session.ts").includes("keyVersion") && read("components/admin/admin-access-gate.tsx").includes("/api/admin/auth"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")

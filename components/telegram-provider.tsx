@@ -9,6 +9,7 @@ import { getClientPerformanceProfile } from "@/lib/client-performance";
 
 type TelegramContextValue = {
   profile: Profile | null;
+  inspectionMode: boolean;
   loading: boolean;
   appReady: boolean;
   error: string | null;
@@ -16,6 +17,11 @@ type TelegramContextValue = {
   retryAuth: () => void;
   patchProfile: (patch: Partial<Profile>) => void;
   haptic: (style?: "light" | "medium" | "heavy") => void;
+};
+
+type SessionProfilePayload = {
+  profile: Profile;
+  inspectionMode?: boolean;
 };
 
 const TelegramContext = createContext<TelegramContextValue | null>(null);
@@ -33,7 +39,7 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function existingSession(attempts = 3, expectedTelegramId?: number | null): Promise<Profile | null> {
+async function existingSession(attempts = 3, expectedTelegramId?: number | null): Promise<SessionProfilePayload | null> {
   let lastError: SessionCheckError | null = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -42,7 +48,10 @@ async function existingSession(attempts = 3, expectedTelegramId?: number | null)
       if (response.status === 401) return null;
       const payload = await response.json().catch(() => ({}));
       if (response.status === 409 && payload?.code === "SESSION_ACCOUNT_MISMATCH") return null;
-      if (response.ok && payload?.profile) return payload.profile as Profile;
+      if (response.ok && payload?.profile) return {
+        profile: payload.profile as Profile,
+        inspectionMode: payload.inspectionMode === true,
+      };
       const message = typeof payload?.error === "string" ? payload.error : "Не удалось проверить сессию";
       lastError = new SessionCheckError(message, response.status);
       // 4xx other than 401 is authoritative and should not be hammered.
@@ -114,9 +123,10 @@ function warmCurrentRoute(pathname: string) {
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isControl = pathname.startsWith("/control");
+  const isControl = pathname.startsWith("/control") || pathname.startsWith("/admin");
   const isPublic = pathname === "/about" || pathname === "/terms" || pathname === "/paysupport";
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [inspectionMode, setInspectionMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [appReady, setAppReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,15 +140,17 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       if (activeTelegramId && profile && profile.telegramId !== activeTelegramId) {
         setApiCacheNamespace(`tg:${activeTelegramId}`);
         setProfile(null);
+        setInspectionMode(false);
         setAppReady(false);
         setLoading(true);
         setAuthNonce((value) => value + 1);
         return;
       }
       const meUrl = activeTelegramId ? `/api/me?expectedTelegramId=${encodeURIComponent(String(activeTelegramId))}` : "/api/me";
-      const result = await apiFetch<{ profile: Profile }>(meUrl, { cacheMs: 0, dedupe: false });
-      setApiCacheNamespace(`tg:${result.profile.telegramId}`);
+      const result = await apiFetch<SessionProfilePayload>(meUrl, { cacheMs: 0, dedupe: false });
+      setApiCacheNamespace(result.inspectionMode ? "inspector" : `tg:${result.profile.telegramId}`);
       setProfile(result.profile);
+      setInspectionMode(result.inspectionMode === true);
       setError(null);
     } catch (cause) {
       // A transient profile refresh must never wipe an already authenticated UI.
@@ -189,14 +201,15 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           forcedIdentitySwitch = true;
           setApiCacheNamespace(`tg:${currentTelegramId}`);
           setProfile(null);
+          setInspectionMode(false);
           setAppReady(false);
           setLoading(true);
         }
-        let sessionProfile: Profile | null = null;
+        let sessionPayload: SessionProfilePayload | null = null;
         let sessionError: unknown = null;
 
         if (immediateWebApp?.initData) {
-          try { sessionProfile = await existingSession(3, currentTelegramId); }
+          try { sessionPayload = await existingSession(3, currentTelegramId); }
           catch (cause) { sessionError = cause; }
         } else {
           const [webAppResult, sessionResult] = await Promise.allSettled([
@@ -205,40 +218,64 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           ]);
           webApp = webAppResult.status === "fulfilled" ? webAppResult.value : null;
           currentTelegramId = telegramUserIdFromInitData(webApp?.initData);
-          sessionProfile = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+          sessionPayload = sessionResult.status === "fulfilled" ? sessionResult.value : null;
           sessionError = sessionResult.status === "rejected" ? sessionResult.reason : null;
 
           // In the rare case Telegram injected initData after the session read,
           // validate the already loaded profile against the now-known account.
-          if (sessionProfile && currentTelegramId && sessionProfile.telegramId !== currentTelegramId) {
+          if (sessionPayload && currentTelegramId && sessionPayload.profile.telegramId !== currentTelegramId) {
             forcedIdentitySwitch = true;
             setApiCacheNamespace(`tg:${currentTelegramId}`);
             setProfile(null);
+            setInspectionMode(false);
             setAppReady(false);
-            sessionProfile = null;
+            sessionPayload = null;
           }
         }
 
-        if (sessionProfile && (!currentTelegramId || sessionProfile.telegramId === currentTelegramId)) {
-          setApiCacheNamespace(`tg:${sessionProfile.telegramId}`);
+        if (sessionPayload && (!currentTelegramId || sessionPayload.profile.telegramId === currentTelegramId)) {
+          setApiCacheNamespace(sessionPayload.inspectionMode ? "inspector" : `tg:${sessionPayload.profile.telegramId}`);
           warmCurrentRoute(pathname);
-          if (!cancelled && run === authRun.current) setProfile(sessionProfile);
+          if (!cancelled && run === authRun.current) {
+            setProfile(sessionPayload.profile);
+            setInspectionMode(sessionPayload.inspectionMode === true);
+          }
           return;
         }
 
         // A different Telegram account is active in the WebApp than the one
         // stored in our cookie. Never render or prefetch with the old identity.
-        if (sessionProfile && currentTelegramId && sessionProfile.telegramId !== currentTelegramId) {
+        if (sessionPayload && currentTelegramId && sessionPayload.profile.telegramId !== currentTelegramId) {
           forcedIdentitySwitch = true;
           setApiCacheNamespace(`tg:${currentTelegramId}`);
           setProfile(null);
+          setInspectionMode(false);
           setAppReady(false);
         }
 
         if (!webApp?.initData) {
-          if (sessionProfile) {
-            setApiCacheNamespace(`tg:${sessionProfile.telegramId}`);
-            if (!cancelled && run === authRun.current) setProfile(sessionProfile);
+          if (sessionPayload) {
+            setApiCacheNamespace(sessionPayload.inspectionMode ? "inspector" : `tg:${sessionPayload.profile.telegramId}`);
+            if (!cancelled && run === authRun.current) {
+              setProfile(sessionPayload.profile);
+              setInspectionMode(sessionPayload.inspectionMode === true);
+            }
+            return;
+          }
+          const inspectRequested = new URLSearchParams(window.location.search).get("inspect") === "1";
+          if (inspectRequested) {
+            const inspected = await apiFetch<SessionProfilePayload>("/api/inspect/session", {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+            setApiCacheNamespace("inspector");
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete("inspect");
+            window.history.replaceState(window.history.state, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+            if (!cancelled && run === authRun.current) {
+              setProfile(inspected.profile);
+              setInspectionMode(true);
+            }
             return;
           }
           throw sessionError instanceof Error
@@ -248,17 +285,19 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         prepareWebApp();
 
         if (currentTelegramId) setApiCacheNamespace(`tg:${currentTelegramId}`);
-        const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
+        const result = await apiFetch<SessionProfilePayload>("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),
         });
         setApiCacheNamespace(`tg:${result.profile.telegramId}`);
+        setInspectionMode(false);
         warmCurrentRoute(pathname);
         if (!cancelled && run === authRun.current) setProfile(result.profile);
       } catch (cause) {
         if (!cancelled && run === authRun.current && (!profile || forcedIdentitySwitch)) {
           setApiCacheNamespace("anon");
           if (forcedIdentitySwitch) setProfile(null);
+          if (forcedIdentitySwitch) setInspectionMode(false);
           setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
         }
       } finally {
@@ -282,6 +321,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       const nextTelegramId = telegramUserIdFromInitData(window.Telegram?.WebApp?.initData);
       setApiCacheNamespace(nextTelegramId ? `tg:${nextTelegramId}` : "anon");
       setProfile(null);
+      setInspectionMode(false);
       setAppReady(false);
       setLoading(true);
       setAuthNonce((value) => value + 1);
@@ -301,6 +341,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         lastTelegramId = nextTelegramId;
         setApiCacheNamespace(`tg:${nextTelegramId}`);
         setProfile(null);
+        setInspectionMode(false);
         setAppReady(false);
         setLoading(true);
         setAuthNonce((value) => value + 1);
@@ -412,7 +453,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     return () => { root.classList.remove("mxm-device-constrained"); };
   }, [profileId, isControl, isPublic]);
 
-  const value = useMemo(() => ({ profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
+  const value = useMemo(() => ({ profile, inspectionMode, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, inspectionMode, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
 }
 
