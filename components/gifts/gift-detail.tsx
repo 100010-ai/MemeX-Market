@@ -334,8 +334,16 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 listingDays={listingDays}
                 setListingDays={setListingDays}
                 busy={busy}
-                onList={(price) => run("list", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price, durationDays: listingDays }) })), gift.status === "listed" ? `Цена лота обновлена: ${money(price)}` : `Лот выставлен за ${money(price)}`)}
-                onUnlist={() => run("unlist", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price: null }) })), "Лот снят с продажи")}
+                onList={(price) => run(
+                  "list",
+                  () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price, durationDays: listingDays }) }),
+                  gift.status === "listed" ? `Цена лота обновлена: ${money(price)}` : `Лот выставлен за ${money(price)}`,
+                )}
+                onUnlist={() => run(
+                  "unlist",
+                  () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price: null }) }),
+                  "Лот снят с продажи",
+                )}
               />
             ) : (
               <BuyerTradePanel
@@ -356,9 +364,21 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                     buyRequestKey.current = null;
                   }, `Подарок куплен за ${money(gift.listingPrice || 0)} и добавлен в портфель`);
                 }}
-                onCart={() => run("cart", () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: canonicalGiftId }) })), data.inCart ? "Подарок убран из корзины" : "Подарок добавлен в корзину")}
-                onOffer={(amount) => run("offer", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/offer`, { method: "POST", body: JSON.stringify({ amount, durationHours: offerHours }) })), `Предложение ${money(amount)} создано, сумма зарезервирована`)}
-                onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })), "Предложение отменено, резерв освобождён") : undefined}
+                onCart={() => run(
+                  "cart",
+                  () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: canonicalGiftId }) }),
+                  data.inCart ? "Подарок убран из корзины" : "Подарок добавлен в корзину",
+                )}
+                onOffer={(amount) => run(
+                  "offer",
+                  () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/offer`, { method: "POST", body: JSON.stringify({ amount, durationHours: offerHours }) }),
+                  `Предложение ${money(amount)} создано, сумма зарезервирована`,
+                )}
+                onCancelOffer={myOffer ? () => run(
+                  "cancel-offer",
+                  () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) }),
+                  "Предложение отменено, резерв освобождён",
+                ) : undefined}
               />
             )}
             
