@@ -6,6 +6,10 @@ const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "off" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
   { key: "Cross-Origin-Resource-Policy", value: "same-site" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Content-Security-Policy", value: "base-uri 'self'; object-src 'none'; frame-ancestors 'self' https://web.telegram.org https://*.telegram.org; form-action 'self'; upgrade-insecure-requests" },
 ];
 
 const nextConfig: NextConfig = {

@@ -54,6 +54,13 @@ type Payload = {
   watched: boolean;
   topHolders: { id: string; name: string; quantity: number; genesisOrdinal: number | null }[];
 };
+type TradeIntent = {
+  requestId: string;
+  side: "buy" | "sell";
+  inputAmount: number;
+  sellAll: boolean;
+  minOutput: number;
+};
 
 function amountText(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "";
@@ -89,7 +96,7 @@ export default function CoinPage() {
   const [error, setError] = useState<string | null>(null);
   const loadSeq = useRef(0);
   const tradeInFlight = useRef(false);
-  const tradeRequestId = useRef<string | null>(null);
+  const pendingTradeIntent = useRef<TradeIntent | null>(null);
   const { refreshProfile, patchProfile, haptic } = useTelegramProfile();
 
   const load = useCallback(async (silent = false) => {
@@ -150,7 +157,7 @@ export default function CoinPage() {
     setSide(next);
     setAmount("");
     setSellAll(false);
-    tradeRequestId.current = null;
+    pendingTradeIntent.current = null;
     setError(null);
     setTradeNotice(null);
     setImpactArmed(false);
@@ -158,7 +165,7 @@ export default function CoinPage() {
 
   function applyFraction(fraction: number) {
     if (!data) return;
-    tradeRequestId.current = null;
+    pendingTradeIntent.current = null;
     setImpactArmed(false);
     if (side === "sell" && fraction === 1) {
       setSellAll(true);
@@ -248,15 +255,21 @@ export default function CoinPage() {
     haptic("medium");
 
     try {
-      const minOutput = Math.max(0, authoritativeQuote.outputAmount * (1 - slippage / 100));
-      const requestId = tradeRequestId.current || makeTradeRequestId();
-      tradeRequestId.current = requestId;
+      const nextMinOutput = Math.max(0, authoritativeQuote.outputAmount * (1 - slippage / 100));
+      const previousIntent = pendingTradeIntent.current;
+      const intent = previousIntent
+        && previousIntent.side === side
+        && previousIntent.inputAmount === inputAmount
+        && previousIntent.sellAll === wasSellAll
+        ? previousIntent
+        : { requestId: makeTradeRequestId(), side, inputAmount, sellAll: wasSellAll, minOutput: nextMinOutput };
+      pendingTradeIntent.current = intent;
       await apiFetch("/api/trade", {
         method: "POST",
-        body: JSON.stringify({ requestId, coinId: id, side, amount: inputAmount, sellAll: wasSellAll, minOutput }),
+        body: JSON.stringify({ requestId: intent.requestId, coinId: id, side: intent.side, amount: intent.inputAmount, sellAll: intent.sellAll, minOutput: intent.minOutput }),
       });
       haptic("light");
-      tradeRequestId.current = null;
+      pendingTradeIntent.current = null;
       tradeInFlight.current = false;
       setBusy(false);
       setTradeNotice(side === "buy" ? `+${compact(authoritativeQuote.outputAmount)} ${data.coin.symbol}` : `+${money(authoritativeQuote.outputAmount)}`);
@@ -313,19 +326,19 @@ export default function CoinPage() {
 
   const tradePanel = (
     <section className="mxm-trade-panel mxm-coin-trade-panel">
-      <div className="mb-2 flex items-center justify-between"><div><p className="text-[10px] font-semibold">Торговый тикет</p><p className="mt-0.5 text-[7px] text-[var(--muted-2)]">Рыночное исполнение через AMM</p></div><span className="mxm-market-live"><span />LIVE</span></div>
+      <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-semibold">Сделка</p><span className="mxm-market-live"><span />LIVE</span></div>
       <div className="grid grid-cols-2 border-b border-[var(--border-soft)]">
         <button type="button" disabled={busy} onClick={() => switchSide("buy")} aria-pressed={side === "buy"} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
         <button type="button" disabled={busy} onClick={() => switchSide("sell")} aria-pressed={side === "sell"} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
       <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
-        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" autoComplete="off" aria-label={side === "buy" ? "Сумма покупки в TON" : `Количество ${coin.symbol} для продажи`} placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
+        <input value={amount} onChange={(event) => { pendingTradeIntent.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" autoComplete="off" aria-label={side === "buy" ? "Сумма покупки в TON" : `Количество ${coin.symbol} для продажи`} placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
         <span className="text-[10px] text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span>
       </div>
       <div className="mxm-trade-options mt-2">
         <div className="mxm-trade-fractions" aria-label="Быстрый выбор суммы">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)}>{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
-        <div className="mxm-slippage-options" aria-label="Допустимое проскальзывание"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" aria-pressed={slippage === value} onClick={() => { setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "is-active" : ""}>{value}%</button>)}</div>
+        <div className="mxm-slippage-options" aria-label="Допустимое проскальзывание"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" aria-pressed={slippage === value} onClick={() => { pendingTradeIntent.current = null; setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "is-active" : ""}>{value}%</button>)}</div>
       </div>
 
       {quote ? <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-[var(--border-soft)] pt-2.5">
@@ -344,7 +357,7 @@ export default function CoinPage() {
       {error ? <div className="mxm-inline-notice is-error mt-2" role="alert">{error}</div> : null}
       <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-2.5 w-full !min-h-9 !py-2 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : impactArmed ? "Подтвердить сделку" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
       {data.holding.quantity > 0 ? <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[var(--border-soft)] pt-2"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Результат" value={money(holdingPnl)} tone={holdingPnl} /></div> : null}
-      <div className="mt-2 flex items-start gap-1.5 border-t border-[var(--border-soft)] pt-2 text-[7px] leading-3.5 text-[var(--muted-2)]"><ShieldCheck size={10} className="mt-0.5 shrink-0" /><span>Котировка подтверждается сервером перед сделкой. При влиянии от 10% потребуется повторное подтверждение.</span></div>
+      <div className="mt-2 flex items-start gap-1.5 border-t border-[var(--border-soft)] pt-2 text-[7px] leading-3.5 text-[var(--muted-2)]"><ShieldCheck size={10} className="mt-0.5 shrink-0" /><span>Серверная котировка · защита от влияния ≥10%</span></div>
     </section>
   );
 
@@ -369,7 +382,7 @@ export default function CoinPage() {
         </div>
       </section>
 
-      {launchNotice ? <div className="mxm-coin-launch-notice" role="status"><CircleCheck size={13} /><span>Рынок запущен. Первая публичная сделка создаст историю цены.</span><button type="button" onClick={() => setLaunchNotice(false)} aria-label="Закрыть уведомление"><X size={12} /></button></div> : null}
+      {launchNotice ? <div className="mxm-coin-launch-notice" role="status"><CircleCheck size={13} /><span>Рынок запущен</span><button type="button" onClick={() => setLaunchNotice(false)} aria-label="Закрыть уведомление"><X size={12} /></button></div> : null}
 
       <div className="mxm-coin-ticker-strip" aria-label="Ключевые показатели рынка">
         <MiniStat label="Капитализация" value={money(coin.marketCap)} />

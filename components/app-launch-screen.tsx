@@ -7,8 +7,8 @@ let sharedLaunchProgress = 0;
 let sharedLaunchStartedAt = 0;
 
 function nextPendingProgress(elapsedMs: number) {
-  // Monotonic, deliberately slows down near completion while the app finishes
-  // authentication/preloading. It never loops or moves backwards.
+  // Monotonic progress while the Telegram session is being authenticated. It
+  // never loops or moves backwards.
   const normalized = 1 - Math.exp(-elapsedMs / 1100);
   return Math.min(MAX_PENDING_PROGRESS, Math.max(4, Math.round(normalized * MAX_PENDING_PROGRESS)));
 }
@@ -25,8 +25,8 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
       sharedLaunchProgress = 100;
       setProgress(100);
 
-      const leaveTimer = window.setTimeout(() => setLeaving(true), 190);
-      const unmountTimer = window.setTimeout(() => setMounted(false), 850);
+      const leaveTimer = window.setTimeout(() => setLeaving(true), 80);
+      const unmountTimer = window.setTimeout(() => setMounted(false), 360);
       return () => {
         window.clearTimeout(leaveTimer);
         window.clearTimeout(unmountTimer);

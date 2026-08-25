@@ -98,14 +98,17 @@ function prepareWebApp() {
 }
 
 function warmCurrentRoute(pathname: string) {
-  if (pathname === "/" || pathname.startsWith("/market")) {
+  if (pathname === "/" || pathname.startsWith("/hub")) {
+    void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
+    return;
+  }
+  if (pathname.startsWith("/market")) {
     void prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 12_000, timeoutMs: 18_000 });
     return;
   }
   if (pathname.startsWith("/orders")) void prefetchApi("/api/orders", { cacheMs: 8_000 });
   else if (pathname.startsWith("/vault") || pathname.startsWith("/portfolio")) void prefetchApi("/api/portfolio", { cacheMs: 8_000 });
   else if (pathname.startsWith("/tasks")) void prefetchApi("/api/tasks", { cacheMs: 8_000 });
-  else if (pathname.startsWith("/hub")) void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
 }
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
@@ -120,7 +123,6 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const [authNonce, setAuthNonce] = useState(0);
   const authInFlight = useRef(false);
   const authRun = useRef(0);
-  const appWarmRun = useRef(0);
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -401,66 +403,14 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const run = ++appWarmRun.current;
-    let cancelled = false;
-    const startedAt = performance.now();
-    setAppReady(false);
+    setAppReady(true);
 
-    const primaryRoutes = ["/hub", "/market", "/orders", "/tasks", "/vault"];
-    const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/progression", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
     const performanceProfile = getClientPerformanceProfile();
     const constrainedDevice = performanceProfile.constrained;
     const root = document.documentElement;
     root.classList.toggle("mxm-device-constrained", constrainedDevice);
-    for (const href of primaryRoutes) router.prefetch(href);
-
-    const criticalRequests = [
-      prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 30_000, timeoutMs: 14_000 }),
-      prefetchApi("/api/orders", { cacheMs: 20_000, timeoutMs: 12_000 }),
-      prefetchApi("/api/portfolio", { cacheMs: 20_000, timeoutMs: 14_000 }),
-      prefetchApi("/api/tasks", { cacheMs: 20_000, timeoutMs: 12_000 }),
-      prefetchApi("/api/runtime-config", { cacheMs: 30_000, timeoutMs: 10_000 }),
-      ...(!constrainedDevice ? [
-        prefetchApi("/api/market/collections?limit=40", { cacheMs: 30_000, timeoutMs: 14_000 }),
-        prefetchApi("/api/feed?limit=12", { cacheMs: 20_000, timeoutMs: 12_000 }),
-        prefetchApi("/api/leaderboard?board=overall&limit=8", { cacheMs: 20_000, timeoutMs: 12_000 }),
-      ] : []),
-    ];
-
-    const preload = Promise.allSettled(criticalRequests);
-    const timeout = sleep(3_200);
-    void Promise.race([preload, timeout]).then(async () => {
-      const elapsed = performance.now() - startedAt;
-      if (elapsed < 780) await sleep(780 - elapsed);
-      if (cancelled || run !== appWarmRun.current) return;
-      setAppReady(true);
-
-      const warmSecondary = () => {
-        const routes = constrainedDevice ? secondaryRoutes.slice(0, 6) : secondaryRoutes;
-        for (const href of routes) router.prefetch(href);
-        if (constrainedDevice) return;
-        void Promise.allSettled([
-          prefetchApi("/api/watchlist", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/notifications", { cacheMs: 15_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/profile/meta", { cacheMs: 25_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/cart", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/referrals", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/store", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/season", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/cases", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/collections/progress", { cacheMs: 20_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/coins", { cacheMs: 15_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/creator", { cacheMs: 15_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/profile/customize", { cacheMs: 15_000, timeoutMs: 12_000 }),
-          prefetchApi("/api/market?scope=coins&limit=48&t=0", { cacheMs: 25_000, timeoutMs: 14_000 }),
-        ]);
-      };
-      if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(warmSecondary, { timeout: 1_200 });
-      else window.setTimeout(warmSecondary, 180);
-    });
-
-    return () => { cancelled = true; root.classList.remove("mxm-device-constrained"); };
-  }, [profileId, isControl, isPublic, router]);
+    return () => { root.classList.remove("mxm-device-constrained"); };
+  }, [profileId, isControl, isPublic]);
 
   const value = useMemo(() => ({ profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;

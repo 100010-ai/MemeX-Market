@@ -32,26 +32,23 @@ export default function HubPage() {
   const { profile } = useTelegramProfile();
   const [data, setData] = useState<Dashboard>(emptyDashboard);
   const [loading, setLoading] = useState(true);
+  const [extrasLoading, setExtrasLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (silent = false) => {
+  const loadCore = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [feed, leaderboard, market, tasks, season] = await Promise.all([
+      const [feed, market, tasks] = await Promise.all([
         apiFetch<FeedPayload>("/api/feed?limit=12", { cacheMs: 8_000 }),
-        apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall&limit=5", { cacheMs: 10_000 }),
         apiFetch<CoinPayload>("/api/market?scope=coins&limit=6&compact=1&t=0", { cacheMs: 12_000 }),
         apiFetch<TasksPayload>("/api/tasks", { cacheMs: 8_000 }),
-        apiFetch<SeasonPayload>("/api/season", { cacheMs: 15_000 }).catch(() => null),
       ]);
-      setData({
+      setData((current) => ({
+        ...current,
         activity: feed.activity.slice(0, 8),
-        leaders: leaderboard.players.slice(0, 5),
-        meRank: Number.isFinite(leaderboard.meRank) ? leaderboard.meRank : null,
         coins: market.coins.slice(0, 6),
         missions: tasks.missions,
-        season,
-      });
+      }));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось обновить обзор");
@@ -60,12 +57,33 @@ export default function HubPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
+  const loadExtras = useCallback(async () => {
+    setExtrasLoading(true);
+    try {
+      const [leaderboard, season] = await Promise.all([
+        apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall&limit=5", { cacheMs: 20_000 }),
+        apiFetch<SeasonPayload>("/api/season", { cacheMs: 30_000 }).catch(() => null),
+      ]);
+      setData((current) => ({
+        ...current,
+        leaders: leaderboard.players.slice(0, 5),
+        meRank: Number.isFinite(leaderboard.meRank) ? leaderboard.meRank : null,
+        season,
+      }));
+    } finally {
+      setExtrasLoading(false);
+    }
+  }, []);
 
-  const realtimeReload = useCallback(() => { void load(true); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadCore();
+      void loadExtras().catch((cause) => console.error("hub extras", cause));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadCore, loadExtras]);
+
+  const realtimeReload = useCallback(() => { void loadCore(true); }, [loadCore]);
   const readyMissions = useMemo(() => data.missions.filter((mission) => !mission.claimed && !mission.rewardRevoked && mission.progress >= mission.target), [data.missions]);
   const activeMissions = useMemo(() => data.missions.filter((mission) => !mission.claimed && !mission.rewardRevoked).slice(0, 3), [data.missions]);
   const hotCoins = useMemo(() => [...data.coins].sort((a, b) => (b.volume24h + Math.max(0, b.change24h) * 2) - (a.volume24h + Math.max(0, a.change24h) * 2)).slice(0, 3), [data.coins]);
@@ -76,8 +94,8 @@ export default function HubPage() {
 
       <header className="mxm-home-hero mb-3">
         <div className="min-w-0">
-          <p className="text-[9px] uppercase tracking-[.13em] text-[var(--muted-2)]">MXM сегодня</p>
-          <h1 className="mt-1 truncate text-[18px] font-semibold tracking-[-.035em]">{profile?.firstName ? `${profile.firstName}, всё под контролем` : "Обзор рынка"}</h1>
+          <h1 className="truncate text-[17px] font-semibold tracking-[-.035em]">Обзор</h1>
+          <p className="mt-1 text-[8px] text-[var(--muted-2)]">{profile?.firstName || "MXM"} · рынок и аккаунт</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {data.season ? <Link href="/season" className="mxm-home-status"><Flame size={11} /><span>BP {data.season.level}</span></Link> : null}
@@ -85,13 +103,13 @@ export default function HubPage() {
         </div>
       </header>
 
-      {error ? <div className="mxm-alert mxm-alert-error mb-3 flex items-center justify-between gap-3"><span className="truncate">{error}</span><button type="button" onClick={() => void load()} className="shrink-0 text-[9px] underline">Повторить</button></div> : null}
+      {error ? <div className="mxm-alert mxm-alert-error mb-3 flex items-center justify-between gap-3"><span className="truncate">{error}</span><button type="button" onClick={() => void loadCore()} className="shrink-0 text-[9px] underline">Повторить</button></div> : null}
 
       <section className="mxm-home-command mb-3" aria-label="Сводка аккаунта">
-        <div><small>Капитал</small><strong>{profile ? money(profile.netWorth) : "—"}</strong><span>Все активы</span></div>
-        <div><small>Доступно</small><strong>{profile ? money(profile.availableBalance) : "—"}</strong><span>{profile?.reservedBalance ? `${money(profile.reservedBalance)} в резерве` : "Свободный баланс"}</span></div>
-        <div><small>Фокус</small><strong>{readyMissions.length ? `${readyMissions.length} награды` : `${activeMissions.length} задания`}</strong><span>{readyMissions.length ? "Можно забрать" : "Активно сегодня"}</span></div>
-        <Link href="/create"><span><Rocket size={14} /></span><div><small>Launch studio</small><strong>Новый мемкоин</strong><em>Создать рынок</em></div><ArrowUpRight size={12} /></Link>
+        <div><small>Капитал</small><strong>{profile ? money(profile.netWorth) : "—"}</strong></div>
+        <div><small>Доступно</small><strong>{profile ? money(profile.availableBalance) : "—"}</strong></div>
+        <div><small>Задания</small><strong>{readyMissions.length ? `${readyMissions.length} готово` : `${activeMissions.length} активно`}</strong></div>
+        <Link href="/create"><span><Rocket size={14} /></span><div><small>Launch</small><strong>Новый мемкоин</strong></div><ArrowUpRight size={12} /></Link>
       </section>
 
       <section className="mxm-home-grid is-four mb-3">
@@ -149,7 +167,7 @@ export default function HubPage() {
 
           <section className="mxm-card overflow-hidden">
             <div className="mxm-section-head"><div className="flex items-center gap-2"><Trophy size={14} className="text-[var(--accent)]" /><span>Топ рынка</span></div><Link href="/leaderboard" className="text-[8px] text-[var(--muted)]">Все</Link></div>
-            {loading ? <RowsSkeleton count={4} /> : data.leaders.length ? <div className="divide-y divide-[var(--border-soft)] px-3">{data.leaders.slice(0, 4).map((player) => <Link href={`/u/${player.id}`} key={player.id} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 py-2.5"><span className={`text-center text-[9px] font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{player.rank}</span><p className="truncate text-[10px] font-medium">{player.name}</p><span className="text-[9px] font-semibold">{money(player.netWorth)}</span></Link>)}</div> : <CompactEmpty text="Рейтинг пуст" />}
+            {extrasLoading ? <RowsSkeleton count={4} /> : data.leaders.length ? <div className="divide-y divide-[var(--border-soft)] px-3">{data.leaders.slice(0, 4).map((player) => <Link href={`/u/${player.id}`} key={player.id} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 py-2.5"><span className={`text-center text-[9px] font-semibold ${player.rank <= 3 ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}>#{player.rank}</span><p className="truncate text-[10px] font-medium">{player.name}</p><span className="text-[9px] font-semibold">{money(player.netWorth)}</span></Link>)}</div> : <CompactEmpty text="Рейтинг пуст" />}
           </section>
         </div>
       </div>

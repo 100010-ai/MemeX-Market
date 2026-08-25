@@ -24,6 +24,7 @@ type GiftMediaRow = {
   base_name: string | null;
   gift_number: number | string | null;
   chain_nft_address: string | null;
+  chain_metadata: unknown;
 };
 
 type TonApiPreview = { resolution?: string; url?: string };
@@ -46,6 +47,10 @@ function trustedMediaHost(hostname: string) {
     || host.endsWith(".cdn-telegram.org")
     || host === "telesco.pe"
     || host.endsWith(".telesco.pe")
+    || host === "getgems.io"
+    || host.endsWith(".getgems.io")
+    || host === "headgun.org"
+    || host === "chat-mafia.com"
     || host === "ipfs.io";
 }
 
@@ -64,6 +69,16 @@ function trustedUrl(source: unknown) {
 function previewScore(resolution: unknown) {
   const match = String(resolution || "").match(/(\d+)x(\d+)/i);
   return match ? Number(match[1]) * Number(match[2]) : 0;
+}
+
+function metadataUrl(metadata: unknown, keys: string[]) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const record = metadata as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = trustedUrl(record[key]);
+    if (candidate) return candidate;
+  }
+  return null;
 }
 
 async function liveTonApiPreviewUrls(chainAddress: string | null) {
@@ -102,15 +117,28 @@ async function fetchCandidate(
   requestSignal.addEventListener("abort", abort, { once: true });
 
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      cache: "force-cache",
-      headers: {
-        accept,
-        "user-agent": "MXM-Market/0.69.1",
-        referer: "https://fragment.com/",
-      },
-    });
+    let current = url;
+    let response: Response | null = null;
+    for (let redirects = 0; redirects <= 2; redirects += 1) {
+      response = await fetch(current, {
+        signal: controller.signal,
+        cache: "force-cache",
+        redirect: "manual",
+        headers: {
+          accept,
+          "user-agent": "MXM-Market/0.70.0",
+          referer: "https://fragment.com/",
+        },
+      });
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers.get("location");
+      await response.body?.cancel().catch(() => undefined);
+      const next = location ? trustedUrl(new URL(location, current).href) : null;
+      if (!next || redirects === 2) return null;
+      current = next;
+      response = null;
+    }
+    if (!response) return null;
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
       return null;
@@ -213,7 +241,7 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     const supabase = getSupabaseAdmin();
     const primary = await supabase
       .from("gift_assets")
-      .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number,chain_nft_address")
+      .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number,chain_nft_address,chain_metadata")
       .eq("id", assetId)
       .maybeSingle();
 
@@ -230,19 +258,23 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     const alternateFragment = suppliedSlug && suppliedSlug.toLowerCase() !== slug?.toLowerCase()
       ? suppliedFragment
       : null;
+    const metadataPreview = metadataUrl(row.chain_metadata, ["image", "image_url", "preview", "thumbnail", "thumbnail_url"]);
+    const metadataAnimation = metadataUrl(row.chain_metadata, ["animation_url", "animation", "video_url", "video", "content_url"]);
 
     if (variant === "preview") {
       const storedCandidates = size === "medium" ? [
-        trustedUrl(fragment?.medium),
         trustedUrl(row.model_preview_url),
+        metadataPreview,
+        trustedUrl(fragment?.medium),
         trustedUrl(fragment?.small),
         trustedUrl(fragment?.large),
         trustedUrl(alternateFragment?.medium),
         trustedUrl(alternateFragment?.large),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ] : [
-        trustedUrl(fragment?.large),
         trustedUrl(row.model_preview_url),
+        metadataPreview,
+        trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
         trustedUrl(alternateFragment?.large),
         trustedUrl(alternateFragment?.medium),
@@ -262,9 +294,10 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     }
 
     const animation = await animationResponse([
+      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
+      row.model_is_animated ? metadataAnimation : null,
       trustedUrl(fragment?.animation),
       trustedUrl(alternateFragment?.animation),
-      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
     ], request.signal);
     if (animation) return animation;
     console.warn("gift media sources exhausted", { assetId, variant, size, hasChainAddress: Boolean(row.chain_nft_address) });

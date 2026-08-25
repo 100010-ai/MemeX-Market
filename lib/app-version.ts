@@ -1,3 +1,3 @@
-export const APP_VERSION = "0.69.1";
+export const APP_VERSION = "0.70.0";
 export const API_VERSION = "1";
 export const REQUIRED_SCHEMA_VERSION = 201;

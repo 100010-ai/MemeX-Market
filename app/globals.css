@@ -3846,3 +3846,83 @@ button:disabled { -webkit-text-fill-color: currentColor; }
   .mxm-cart-clear:not(.is-armed) { font-size:0; }
   .mxm-sweep-option { padding-inline:8px; }
 }
+
+/* v0.70 — compact commercial system, predictable focus and cheaper paint. */
+:root {
+  --radius-sm:12px;
+  --radius-md:16px;
+  --radius-lg:20px;
+}
+body {
+  background:
+    radial-gradient(75% 28% at 50% -10%,rgba(139,164,255,.045),transparent 72%),
+    var(--bg);
+}
+button,a,input,textarea,select { -webkit-tap-highlight-color:transparent; }
+input,textarea,select,.tabular-nums,
+.mxm-balance-pill,.mxm-market-result-count,.admin-dashboard-v067 { font-variant-numeric:tabular-nums; }
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,
+input:focus-visible,textarea:focus-visible,select:focus-visible {
+  outline:2px solid rgba(166,181,255,.68);
+  outline-offset:2px;
+}
+.mxm-shell-content { padding-top:calc(52px + max(env(safe-area-inset-top),var(--mxm-safe-area-top,0px))); }
+.mxm-topbar { min-height:52px; box-shadow:0 7px 22px rgba(0,0,0,.14); }
+.mxm-topbar-fixed { background:rgba(7,9,12,.975); }
+.mxm-bottom-nav { min-height:60px; }
+.mxm-bottom-link { min-height:53px; font-size:8px; }
+.mxm-bottom-icon { width:34px; height:25px; }
+.mxm-balance-pill { min-height:32px; border-radius:11px; }
+.mxm-top-plus,.header-action { width:32px; height:32px; border-radius:11px; }
+.mxm-shell-content article.mxm-card,
+.mxm-shell-content section.mxm-card,
+.mxm-shell-content div.mxm-card {
+  border-radius:14px;
+  box-shadow:inset 0 1px rgba(255,255,255,.015),0 10px 26px rgba(0,0,0,.08);
+}
+.mxm-home-hero { min-height:48px; padding-bottom:8px; }
+.mxm-home-command { border-radius:13px; }
+.mxm-home-command>div,.mxm-home-command>a { min-height:56px; padding:9px 11px; }
+.mxm-home-command>a>span { width:28px; height:28px; border-radius:9px; }
+.mxm-home-tile { min-height:52px; border-radius:12px; padding:8px; }
+.mxm-home-tile-icon { width:29px; height:29px; border-radius:9px; }
+.mxm-market-searchbar { height:40px; border-radius:12px; }
+.mxm-segment,.mxm-hscroll { border-radius:12px; }
+.mxm-market-pulse .mxm-hscroll { border-radius:0; }
+.mxm-launch-section,.mxm-launch-preview-card,.mxm-launch-checklist,.mxm-launch-budget { border-radius:14px; }
+.mxm-launch-section-head { align-items:center; padding:10px 13px; }
+.mxm-launch-section-body { padding:12px 13px; }
+.mxm-launch-upload { width:74px; height:74px; border-radius:13px; }
+.mxm-launch-policy { border-radius:10px; padding:8px 9px; }
+.mxm-auth-card { border-radius:17px; padding:22px; }
+.mxm-auth-icon { margin-top:27px; }
+.mxm-sidebar-cta { min-height:45px; border-radius:11px; }
+.mxm-sidebar-cta small,.mxm-brand-copy small { display:none; }
+.mxm-commerce-gift-card,
+.mxm-collection-card {
+  content-visibility:auto;
+  contain-intrinsic-size:auto 220px;
+}
+.mxm-home-activity-row,.mxm-home-coin-row,.mxm-coin-list-row {
+  content-visibility:auto;
+  contain-intrinsic-size:auto 52px;
+}
+.admin-main { padding-top:18px; }
+.admin-topbar { min-height:60px; margin-top:-18px; }
+.admin-dashboard-hero,.admin-chart-panel,.admin-insight-panel,.admin-team-members,.admin-access-editor { border-radius:13px; }
+.admin-dashboard-intro { padding-block:14px 12px; }
+.admin-hero-kpi { padding-block:13px 14px; }
+.admin-hero-kpi strong { margin-top:9px; font-size:20px; }
+
+@media (max-width:640px) {
+  .mxm-shell-content>main { padding-top:10px; padding-bottom:72px; }
+  .mxm-home-command>div,.mxm-home-command>a { min-height:50px; padding:8px; }
+  .mxm-home-tile { min-height:49px; }
+  .mxm-market-head,.mxm-market-searchbar { margin-bottom:10px; }
+  .mxm-launch-section-body { padding:11px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .mxm-page-enter,.mxm-success-pop,.mxm-skeleton::after { animation:none!important; }
+  * { scroll-behavior:auto!important; }
+}

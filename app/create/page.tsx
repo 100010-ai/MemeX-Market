@@ -156,9 +156,7 @@ export default function CreatePage() {
       <header className="mxm-compact-page-head">
         <div className="min-w-0">
           <Link href="/market?tab=coins" className="mxm-compact-link"><ArrowLeft size={12} />Мемкоины</Link>
-          <p className="mxm-eyebrow mt-1.5">Launch studio</p>
           <h1 className="mxm-page-title mt-1">Запуск нового рынка</h1>
-          <p className="mt-1 max-w-xl text-[9px] leading-4 text-[var(--muted)]">Соберите идентичность, настройте стартовую ликвидность и проверьте экономику до публикации.</p>
         </div>
         <span className={`mxm-studio-status ${canLaunch ? "is-ready" : ""}`}><span />{canLaunch ? "Готов к запуску" : "Черновик"}</span>
       </header>
@@ -166,7 +164,7 @@ export default function CreatePage() {
       <div className="mxm-launch-studio">
         <div className="min-w-0 space-y-3">
           <section className="mxm-launch-section">
-            <SectionHead step="01" title="Идентичность" text="То, что пользователи увидят в рынке и портфеле." ready={identityReady} />
+            <SectionHead step="01" title="Идентичность" ready={identityReady} />
             <div className="mxm-launch-section-body">
               <div className="flex items-center gap-3.5 border-b border-[var(--border-soft)] pb-4">
                 <button type="button" onClick={() => inputRef.current?.click()} className="mxm-launch-upload" aria-label="Выбрать изображение мемкоина">
@@ -175,7 +173,7 @@ export default function CreatePage() {
                 <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} className="hidden" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium">Визуальный знак</p>
-                  <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">Квадратный PNG, JPG или WebP до 2 МБ. Изображение будет оптимизировано перед загрузкой.</p>
+                  <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">PNG, JPG или WebP · до 2 МБ</p>
                   <div className="mt-2 flex gap-4"><button type="button" onClick={() => inputRef.current?.click()} className="inline-flex min-h-7 items-center gap-1.5 text-[9px] text-[#cdd1d6]"><Upload size={11} />{imageBusy ? "Обрабатываем…" : image ? "Заменить" : "Выбрать"}</button>{image ? <button type="button" onClick={() => { replaceImage(null); if (inputRef.current) inputRef.current.value = ""; }} className="inline-flex min-h-7 items-center gap-1 text-[9px] text-[var(--muted)]"><X size={11} />Убрать</button> : null}</div>
                 </div>
               </div>
@@ -189,14 +187,14 @@ export default function CreatePage() {
           </section>
 
           <section className="mxm-launch-section">
-            <SectionHead step="02" title="Экономика старта" text="Параметры первой позиции и защиты рынка." ready={validEconomy} />
+            <SectionHead step="02" title="Экономика старта" ready={validEconomy} />
             <div className="mxm-launch-section-body">
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Первичная покупка" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><div className="mxm-input flex items-center gap-2"><input value={initialBuy} onChange={(event) => setInitialBuy(event.target.value)} inputMode="decimal" aria-label="Первичная покупка в TON" className="min-w-0 flex-1 bg-transparent outline-none" /><span className="text-[9px] text-[var(--muted)]">TON</span></div></Field>
                 <Field label="Стартовая цена" hint={`${rules.startPriceMin}–${rules.startPriceMax}`}><input value={startPrice} onChange={(event) => setStartPrice(event.target.value)} inputMode="decimal" aria-label="Стартовая цена" className="mxm-input" /></Field>
                 <Field label={`Floor на ${rules.creatorLockDays} дней`} hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(event) => setFloorPrice(event.target.value)} inputMode="decimal" aria-label="Минимальная цена" className="mxm-input" /></Field>
               </div>
-              <div className="mxm-launch-policy mt-3"><LockKeyhole size={13} /><p><strong>{rules.creatorLockBps / 100}% позиции автора</strong> разблокируются линейно за {rules.creatorLockDays} дней. Floor действует в тот же стартовый период и ограничивает резкий слив ликвидности.</p></div>
+              <div className="mxm-launch-policy mt-3"><LockKeyhole size={13} /><p><strong>{rules.creatorLockBps / 100}% позиции</strong> · линейный unlock {rules.creatorLockDays} дней · floor на стартовый период</p></div>
             </div>
           </section>
         </div>
@@ -233,7 +231,7 @@ export default function CreatePage() {
           {blocker ? <div className="mxm-inline-notice" aria-live="polite">{blocker}</div> : null}
           {error ? <div className="mxm-inline-notice is-error" role="alert">{error}</div> : null}
           <PrimaryButton onClick={create} disabled={!canLaunch} className="flex w-full items-center justify-center gap-2 !min-h-11 text-[11px]"><Rocket size={15} />{busy ? "Создаём рынок…" : "Запустить мемкоин"}</PrimaryButton>
-          <p className="px-1 text-center text-[7.5px] leading-4 text-[var(--muted-2)]">Внутренняя виртуальная экономика MXM. Запуск не создаёт реальный токен и не обещает стоимость.</p>
+          <p className="px-1 text-center text-[7.5px] leading-4 text-[var(--muted-2)]">Виртуальный рынок MXM, не реальный токен.</p>
         </aside>
       </div>
     </div>
@@ -242,7 +240,7 @@ export default function CreatePage() {
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) { return <label className="block"><span className="mb-1.5 flex items-center justify-between text-[11px] text-[#c9cdd2]"><span>{label}</span>{hint ? <span className="text-[9px] text-[var(--muted-2)]">{hint}</span> : null}</span>{children}</label>; }
 function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div><div className="flex items-center gap-1.5 text-[9px] text-[var(--muted)]">{icon}{label}</div><p className="mt-1 text-xs font-semibold">{value}</p></div>; }
-function SectionHead({ step, title, text, ready }: { step: string; title: string; text: string; ready: boolean }) { return <header className="mxm-launch-section-head"><span>{step}</span><div className="min-w-0 flex-1"><h2>{title}</h2><p>{text}</p></div>{ready ? <BadgeCheck size={16} /> : null}</header>; }
+function SectionHead({ step, title, ready }: { step: string; title: string; ready: boolean }) { return <header className="mxm-launch-section-head"><span>{step}</span><div className="min-w-0 flex-1"><h2>{title}</h2></div>{ready ? <BadgeCheck size={16} /> : null}</header>; }
 function PreviewMetric({ label, value }: { label: string; value: string }) { return <div className="bg-[var(--panel)] px-2.5 py-2"><p className="text-[7px] text-[var(--muted-2)]">{label}</p><p className="mt-1 truncate text-[9px] font-semibold tabular-nums">{value}</p></div>; }
 function LaunchCheck({ ready, label, detail }: { ready: boolean; label: string; detail: string }) { return <div className="mxm-launch-check"><span className={ready ? "is-ready" : ""}>{ready ? <Check size={11} /> : <Circle size={10} />}</span><div className="min-w-0"><p>{label}</p><small>{detail}</small></div></div>; }
 function pricePreview(value: number) { return Number.isFinite(value) && value > 0 ? value.toExponential(3).replace("e+", "e") : "—"; }
