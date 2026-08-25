@@ -98,8 +98,8 @@ export default function CollectionsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
+    <div className="mxm-collection-book mx-auto max-w-5xl">
+      <header className="mxm-collection-book-head mb-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Collection Book</p>
@@ -128,7 +128,7 @@ export default function CollectionsPage() {
       {error ? <div className="mxm-alert mxm-alert-error mb-3">{error}</div> : null}
       {notice ? <div className="mxm-alert mb-3">{notice}</div> : null}
 
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <div className="mxm-collection-book-metrics mb-3 grid grid-cols-3 gap-2">
         <Metric icon={<Gift size={13} />} label="Подарки" value={String(data?.giftCount || 0)} />
         <Metric icon={<Award size={13} />} label="100% серий" value={String(data?.completed || 0)} />
         <Metric icon={<Gem size={13} />} label="Очки" value={String(data?.totalPoints || 0)} />
@@ -144,7 +144,7 @@ export default function CollectionsPage() {
           {visibleCollections.map((item) => {
             const nextMilestone = DEFAULT_MILESTONES.find((milestone) => !item.claimedMilestones.includes(milestone)) || 100;
             return (
-              <article key={item.baseName} className="mxm-card overflow-hidden p-3.5">
+              <article key={item.baseName} className="mxm-card mxm-collection-progress-card overflow-hidden p-3.5">
                 <div className="flex items-start gap-3">
                   <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-[14px] ${item.coverage >= 100 ? "bg-[var(--accent)] text-black" : "bg-white/[.045] text-[var(--accent)]"}`}>
                     {item.coverage >= 100 ? <Sparkles size={18} /> : <Layers3 size={18} />}
@@ -199,7 +199,7 @@ export default function CollectionsPage() {
                     <p className="text-[8px] text-[var(--muted)]">Floor {item.floorPrice == null ? "—" : money(item.floorPrice)} · владельцев {item.holders.toLocaleString("ru-RU")}</p>
                     <p className="mt-0.5 truncate text-[7px] text-[var(--muted-2)]">Следующая награда: {MILESTONE_REWARD[nextMilestone]}</p>
                   </div>
-                  <div className="flex shrink-0 gap-2"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="text-[8px] text-[var(--muted)]">Серия</Link><Link href={`/market?collection=${encodeURIComponent(item.baseName)}`} className="text-[8px] text-[var(--accent)]">Найти на рынке</Link></div>
+                  <div className="flex shrink-0 gap-1.5"><Link href={`/collections/${encodeURIComponent(item.baseName)}`} className="inline-flex min-h-8 items-center rounded-[12px] px-2.5 text-[9px] text-[var(--muted)]">Серия</Link><Link href={`/market?collection=${encodeURIComponent(item.baseName)}`} className="inline-flex min-h-8 items-center rounded-[12px] bg-[var(--panel-2)] px-2.5 text-[9px] text-[var(--accent)]">Найти на рынке</Link></div>
                 </div>
               </article>
             );
