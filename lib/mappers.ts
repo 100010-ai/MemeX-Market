@@ -45,6 +45,17 @@ function safeMediaUrl(value: unknown) {
   return null;
 }
 
+function safeImageMediaUrl(value: unknown) {
+  const url = safeMediaUrl(value);
+  if (!url) return null;
+
+  // Lottie/Telegram animations and video URLs are valid media, but they are
+  // not valid <img> sources. Keeping them out of the canonical preview field
+  // prevents a failed preview from degrading into a browser broken-image icon.
+  if (/\.(?:json|tgs|mp4|webm|mov|m4v|ogv)(?:$|[?#])/i.test(url)) return null;
+  return url;
+}
+
 function telegramFileUrl(value: unknown) {
   if (typeof value !== "string") return null;
   const fileId = value.trim();
@@ -54,13 +65,16 @@ function telegramFileUrl(value: unknown) {
 
 /** Canonical Gift image contract used by every API mapper. */
 export function resolveGiftImageUrl(row: Record<string, unknown>) {
-  return safeMediaUrl(row.model_preview_url)
-    || safeMediaUrl(row.model_media_url)
-    || safeMediaUrl(row.symbol_media_url)
+  const modelIsStatic = row.model_is_animated !== true && row.model_is_video !== true;
+  const symbolIsStatic = row.symbol_is_animated !== true && row.symbol_is_video !== true;
+
+  return safeImageMediaUrl(row.model_preview_url)
+    || (modelIsStatic ? safeImageMediaUrl(row.model_media_url) : null)
+    || (symbolIsStatic ? safeImageMediaUrl(row.symbol_media_url) : null)
     || telegramFileUrl(row.model_thumb_file_id)
-    || telegramFileUrl(row.model_file_id)
+    || (modelIsStatic ? telegramFileUrl(row.model_file_id) : null)
     || telegramFileUrl(row.symbol_thumb_file_id)
-    || telegramFileUrl(row.symbol_file_id);
+    || (symbolIsStatic ? telegramFileUrl(row.symbol_file_id) : null);
 }
 
 function mediaKind(animated: unknown, video: unknown, _label: string): GiftMediaKind {
