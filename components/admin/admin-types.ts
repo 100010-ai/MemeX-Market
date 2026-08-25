@@ -5,7 +5,7 @@ export type AdminContext = {
   role: AdminRole;
   roleLabel: string;
   permissions: string[];
-  source: "environment" | "database";
+  source: "environment" | "database" | "key";
 };
 
 export type AdminMember = {

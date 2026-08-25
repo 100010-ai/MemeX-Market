@@ -68,7 +68,7 @@ function presenceSessionId() {
 
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
-  const { profile, loading, appReady, error, retryAuth } = useTelegramProfile();
+  const { profile, inspectionMode, loading, appReady, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [desktopToolsReady, setDesktopToolsReady] = useState(false);
   const title = currentTitle(pathname);
@@ -76,15 +76,15 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
 
   useEffect(() => {
     let cancelled = false;
-    if (!profileId) return;
+    if (!profileId || inspectionMode) return;
     apiFetch<{ config: RuntimeConfig }>("/api/runtime-config", { cacheMs: 15_000 })
       .then((payload) => { if (!cancelled) setRuntimeConfig(payload.config); })
       .catch((cause) => console.error("runtime config", cause));
     return () => { cancelled = true; };
-  }, [profileId]);
+  }, [profileId, inspectionMode]);
 
   useEffect(() => {
-    if (!profileId) return;
+    if (!profileId || inspectionMode) return;
     const sessionId = presenceSessionId();
     const sendPresence = () => {
       if (document.visibilityState === "hidden") return;
@@ -104,7 +104,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [pathname, profileId]);
+  }, [pathname, profileId, inspectionMode]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
@@ -172,7 +172,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></Link>
             <div className="flex min-w-0 items-center gap-2 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><span className="h-3 w-px bg-white/[.08]" /><p className="truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="mxm-topbar-eyebrow">MXM MARKET</p><p className="truncate text-[13px] font-semibold tracking-[-.02em]">{title}</p></div>
-            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
+            <div className="ml-auto flex items-center gap-1.5">{inspectionMode ? <span className="mxm-inspector-badge">READ ONLY</span> : null}<Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
         <main id="mxm-main" className="mxm-page-enter min-h-0 px-3 py-3 md:px-5 md:py-4">{children}</main>

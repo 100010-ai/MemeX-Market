@@ -3,6 +3,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { requireProfile, getProfileSnapshot } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { giftMarketSelect, mapGift } from "@/lib/mappers";
+import { isInspectionSession } from "@/lib/session";
 
 type DbRow = Record<string, unknown>;
 
@@ -73,6 +74,7 @@ function isoDate(value: unknown) {
 async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  const inspection = await isInspectionSession();
   const supabase = getSupabaseAdmin();
   const giftOffset = boundedInt(request.nextUrl.searchParams.get("giftOffset"), 0, 0, 100_000);
   const giftLimit = boundedInt(request.nextUrl.searchParams.get("giftLimit"), DEFAULT_GIFT_PAGE_SIZE, 30, MAX_GIFT_PAGE_SIZE);
@@ -128,7 +130,7 @@ async function GETHandler(request: NextRequest) {
     const last = portfolioSeries[portfolioSeries.length - 1];
     if (last?.time === bucketStart) portfolioSeries[portfolioSeries.length - 1] = currentPoint; else portfolioSeries.push(currentPoint);
 
-    after(async () => {
+    if (!inspection) after(async () => {
       try {
         const write = await getSupabaseAdmin().from("portfolio_snapshots").upsert({ profile_id: profile.id, bucket_start: bucketStart, balance: currentPoint.balance, coin_value: currentPoint.coinValue, gift_value: currentPoint.giftValue, net_worth: currentPoint.netWorth, realized_pnl: currentPoint.realizedPnl }, { onConflict: "profile_id,bucket_start" });
         if (write.error) console.error("portfolio snapshot write", write.error);

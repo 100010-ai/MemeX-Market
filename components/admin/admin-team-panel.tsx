@@ -63,14 +63,15 @@ export function AdminTeamPanel({ admin, members, profiles, busy, act }: { admin:
     setPermissions((current) => current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]);
   }
 
+  const primaryOwner = admin.source === "environment" || admin.source === "key";
   return <div className="admin-team-layout">
-    <section className="admin-team-summary"><div><span className="admin-dashboard-kicker"><UserCog size={12}/> ACCESS CONTROL</span><h2>Команда и полномочия</h2><p>Роли по умолчанию можно точечно ограничить или расширить. Каждое изменение попадёт в аудит.</p></div><div className="admin-team-count"><strong>{members.filter((member) => member.active).length + (admin.source === "environment" ? 1 : 0)}</strong><span>активных администраторов</span></div></section>
+    <section className="admin-team-summary"><div><span className="admin-dashboard-kicker"><UserCog size={12}/> ACCESS CONTROL</span><h2>Команда и полномочия</h2><p>Роли по умолчанию можно точечно ограничить или расширить. Каждое изменение попадёт в аудит.</p></div><div className="admin-team-count"><strong>{members.filter((member) => member.active).length + (primaryOwner ? 1 : 0)}</strong><span>активных администраторов</span></div></section>
 
     <div className="admin-team-grid">
       <section className="admin-team-members"><header><div><span>TEAM</span><h3>Действующие доступы</h3></div><ShieldCheck size={15}/></header><div className="admin-member-list">
-        {admin.source === "environment" ? <article className="admin-member-card is-owner"><span className="admin-member-avatar"><ShieldCheck size={15}/></span><div><b>Основной владелец</b><small>Защищённый доступ через окружение</small></div><em>Владелец</em><span className="admin-member-status">ENV</span></article> : null}
+        {primaryOwner ? <article className="admin-member-card is-owner"><span className="admin-member-avatar"><ShieldCheck size={15}/></span><div><b>Основной владелец</b><small>{admin.source === "key" ? "Защищённая browser-сессия" : "Telegram ID из окружения"}</small></div><em>Владелец</em><span className="admin-member-status">{admin.source === "key" ? "KEY" : "ENV"}</span></article> : null}
         {members.map((member) => <article key={member.profileId} className={`admin-member-card ${member.active ? "" : "is-disabled"}`}><span className="admin-member-avatar"><Shield size={15}/></span><button type="button" onClick={() => editMember(member)}><b>{memberName(member)}</b><small>TG {member.telegramId} · {member.permissions.length || rolePermissions[member.role].length} прав</small></button><em>{roleLabels[member.role]}</em>{canManage && member.profileId !== admin.profileId ? <button type="button" className="admin-member-remove" disabled={Boolean(busy)} onClick={() => void act("admin.member.revoke", { profileId: member.profileId })} aria-label={`Отозвать доступ у ${memberName(member)}`}><UserMinus size={13}/></button> : <span className="admin-member-status">{member.active ? "ON" : "OFF"}</span>}</article>)}
-        {!members.length && admin.source !== "environment" ? <div className="admin-panel-empty">Администраторы ещё не назначены.</div> : null}
+        {!members.length && !primaryOwner ? <div className="admin-panel-empty">Администраторы ещё не назначены.</div> : null}
       </div></section>
 
       <section className="admin-access-editor"><header><div><span>PERMISSIONS</span><h3>{profileId ? "Изменить доступ" : "Назначить администратора"}</h3></div><KeyRound size={15}/></header>{canManage ? <div className="admin-access-form">

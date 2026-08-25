@@ -1,5 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { configuredOwnerTelegramId, readAdminSession } from "@/lib/admin-session";
 
 export const ADMIN_PERMISSIONS = [
   "analytics.read",
@@ -38,16 +39,19 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
 export type AdminProfile = NonNullable<Awaited<ReturnType<typeof requireProfile>>> & {
   adminRole: AdminRole;
   adminPermissions: AdminPermission[];
-  adminSource: "environment" | "database";
+  adminSource: "environment" | "database" | "key";
 };
 
 function adminTelegramIds() {
-  return new Set(
+  const ids = new Set(
     (process.env.ADMIN_TELEGRAM_IDS || "")
       .split(",")
       .map((value: string) => value.trim())
       .filter(Boolean),
   );
+  const ownerId = configuredOwnerTelegramId();
+  if (ownerId) ids.add(String(ownerId));
+  return ids;
 }
 
 function isAdminRole(value: unknown): value is AdminRole {
@@ -65,15 +69,23 @@ export function adminCan(admin: AdminProfile | null, permission: AdminPermission
 }
 
 export async function requireAdminProfile(permission?: AdminPermission): Promise<AdminProfile | null> {
-  const profile = await requireProfile();
+  const ownerSession = await readAdminSession();
+  const supabase = getSupabaseAdmin();
+  const ownerProfile = ownerSession
+    ? await supabase.from("profiles").select("id,telegram_id,username,first_name,last_name,photo_url,balance,xp,last_gift_sync_at,is_banned,banned_until,created_at").eq("telegram_id", ownerSession.telegramId).maybeSingle()
+    : null;
+  if (ownerProfile?.error) throw ownerProfile.error;
+  const ownerBannedUntil = ownerProfile?.data?.banned_until ? new Date(String(ownerProfile.data.banned_until)).getTime() : null;
+  const ownerBanActive = Boolean(ownerProfile?.data?.is_banned) && (ownerBannedUntil == null || ownerBannedUntil > Date.now());
+  const ownerData = ownerProfile?.data && !ownerBanActive ? ownerProfile.data : null;
+  const profile = ownerData || await requireProfile();
   if (!profile) return null;
   const allowed = adminTelegramIds();
   if (allowed.has(String(profile.telegram_id))) {
-    const admin = { ...profile, adminRole: "owner" as const, adminPermissions: [...ADMIN_PERMISSIONS], adminSource: "environment" as const };
+    const admin = { ...profile, adminRole: "owner" as const, adminPermissions: [...ADMIN_PERMISSIONS], adminSource: ownerData ? "key" as const : "environment" as const };
     return !permission || admin.adminPermissions.includes(permission) ? admin : null;
   }
 
-  const supabase = getSupabaseAdmin();
   const membership = await supabase.from("admin_members_v067")
     .select("role,permissions,active")
     .eq("profile_id", profile.id)
