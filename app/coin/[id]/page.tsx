@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Share2, Star, Users, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CircleCheck, RotateCcw, Share2, ShieldCheck, Star, X } from "lucide-react";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -82,6 +82,7 @@ export default function CoinPage() {
   const [sellAll, setSellAll] = useState(false);
   const [slippage, setSlippage] = useState(2);
   const [tradeNotice, setTradeNotice] = useState<string | null>(null);
+  const [launchNotice, setLaunchNotice] = useState(false);
   const [impactArmed, setImpactArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
@@ -106,6 +107,12 @@ export default function CoinPage() {
   useEffect(() => {
     const requestedSide = new URLSearchParams(window.location.search).get("side");
     if (requestedSide === "sell" || requestedSide === "buy") setSide(requestedSide);
+    if (new URLSearchParams(window.location.search).get("created") === "1") {
+      setLaunchNotice(true);
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("created");
+      window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }
     const savedSlippage = Number(window.sessionStorage.getItem("mxm-coin-slippage"));
     if ([0.5, 1, 2, 5].includes(savedSlippage)) setSlippage(savedSlippage);
     const savedTab = window.sessionStorage.getItem("mxm-coin-market-tab");
@@ -290,7 +297,7 @@ export default function CoinPage() {
     } finally { setWatchBusy(false); }
   }
 
-  if (!data) return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[520px] rounded-xl" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
+  if (!data) return <div className="mx-auto max-w-6xl">{error ? <div className="mxm-coin-load-error"><span><RotateCcw size={17} /></span><h1>Рынок не загрузился</h1><p>{error}</p><button type="button" onClick={() => { setError(null); void load(); }} className="mxm-secondary-action mt-4"><RotateCcw size={12} />Повторить</button></div> : <><div className="mxm-skeleton h-16 rounded-[16px]" /><div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_330px]"><div className="mxm-skeleton h-[420px] rounded-[16px]" /><div className="mxm-skeleton h-[360px] rounded-[16px]" /></div></>}</div>;
   const { coin } = data;
   const holdingValue = data.holding.quantity * coin.currentPrice;
   const holdingPnl = holdingValue - data.holding.costBasis;
@@ -306,22 +313,24 @@ export default function CoinPage() {
 
   const tradePanel = (
     <section className="mxm-trade-panel mxm-coin-trade-panel">
+      <div className="mb-2 flex items-center justify-between"><div><p className="text-[10px] font-semibold">Торговый тикет</p><p className="mt-0.5 text-[7px] text-[var(--muted-2)]">Рыночное исполнение через AMM</p></div><span className="mxm-market-live"><span />LIVE</span></div>
       <div className="grid grid-cols-2 border-b border-[var(--border-soft)]">
-        <button disabled={busy} onClick={() => switchSide("buy")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
-        <button disabled={busy} onClick={() => switchSide("sell")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
+        <button type="button" disabled={busy} onClick={() => switchSide("buy")} aria-pressed={side === "buy"} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
+        <button type="button" disabled={busy} onClick={() => switchSide("sell")} aria-pressed={side === "sell"} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
       <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
-        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
+        <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" autoComplete="off" aria-label={side === "buy" ? "Сумма покупки в TON" : `Количество ${coin.symbol} для продажи`} placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
         <span className="text-[10px] text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <div className="flex gap-3">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)} className="py-1 text-[9px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
-        <div className="flex items-center gap-2 text-[8px] text-[var(--muted)]"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => { setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "text-white" : "hover:text-white"}>{value}%</button>)}</div>
+      <div className="mxm-trade-options mt-2">
+        <div className="mxm-trade-fractions" aria-label="Быстрый выбор суммы">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)}>{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
+        <div className="mxm-slippage-options" aria-label="Допустимое проскальзывание"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" aria-pressed={slippage === value} onClick={() => { setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "is-active" : ""}>{value}%</button>)}</div>
       </div>
 
-      {quote ? <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-[var(--border-soft)] pt-2">
+      {quote ? <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-[var(--border-soft)] pt-2.5">
         <QuoteCompact label="Получишь" value={side === "buy" ? `${compact(quote.outputAmount)} ${coin.symbol}` : money(quote.outputAmount)} />
+        <QuoteCompact label="Мин. к получению" value={side === "buy" ? `${compact(quote.outputAmount * (1 - slippage / 100))} ${coin.symbol}` : money(quote.outputAmount * (1 - slippage / 100))} />
         <QuoteCompact label="Комиссия" value={money(quote.feeAmount)} />
         <QuoteCompact label="Цена" value={price(quote.executionPrice)} />
         <QuoteCompact label="Влияние" value={`${quote.priceImpact.toFixed(2)}%`} warning={quote.priceImpact >= 10} />
@@ -332,9 +341,10 @@ export default function CoinPage() {
       {side === "sell" && validAmount && !quote && data.economy.floorActive ? <p className="mt-1.5 text-[9px] text-[#d9c27a]">Активный floor не позволяет продать такой объём.</p> : null}
       {side === "sell" && data.economy.lock?.remaining ? <p className="mt-1.5 truncate text-[8px] text-[#d9c27a]">Заблокировано: {compact(data.economy.lock.remaining)} {coin.symbol}</p> : null}
       {tradeNotice ? <div aria-live="polite" className={`mxm-success-pop mt-1.5 text-[9px] font-medium ${impactArmed ? "text-[#e7c867]" : "text-[var(--positive)]"}`}>{impactArmed ? tradeNotice : `Готово · ${tradeNotice}`}</div> : null}
-      {error ? <div className="mt-1.5 line-clamp-2 text-[9px] text-[#ff9aa4]">{error}</div> : null}
+      {error ? <div className="mxm-inline-notice is-error mt-2" role="alert">{error}</div> : null}
       <PrimaryButton onClick={trade} disabled={busy || !quote || !validAmount} className={`mt-2.5 w-full !min-h-9 !py-2 ${side === "sell" ? "!bg-[var(--negative)] !text-white" : "!bg-[var(--positive)]"}`}>{busy ? "Подтверждаем…" : impactArmed ? "Подтвердить сделку" : `${side === "buy" ? "Купить" : "Продать"} $${coin.symbol}`}</PrimaryButton>
       {data.holding.quantity > 0 ? <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[var(--border-soft)] pt-2"><MiniStat label="Позиция" value={money(holdingValue)} /><MiniStat label="Результат" value={money(holdingPnl)} tone={holdingPnl} /></div> : null}
+      <div className="mt-2 flex items-start gap-1.5 border-t border-[var(--border-soft)] pt-2 text-[7px] leading-3.5 text-[var(--muted-2)]"><ShieldCheck size={10} className="mt-0.5 shrink-0" /><span>Котировка подтверждается сервером перед сделкой. При влиянии от 10% потребуется повторное подтверждение.</span></div>
     </section>
   );
 
@@ -359,9 +369,18 @@ export default function CoinPage() {
         </div>
       </section>
 
+      {launchNotice ? <div className="mxm-coin-launch-notice" role="status"><CircleCheck size={13} /><span>Рынок запущен. Первая публичная сделка создаст историю цены.</span><button type="button" onClick={() => setLaunchNotice(false)} aria-label="Закрыть уведомление"><X size={12} /></button></div> : null}
+
+      <div className="mxm-coin-ticker-strip" aria-label="Ключевые показатели рынка">
+        <MiniStat label="Капитализация" value={money(coin.marketCap)} />
+        <MiniStat label="Ликвидность" value={money(coin.liquidity)} />
+        <MiniStat label="Владельцы" value={String(coin.holderCount)} />
+        <MiniStat label="Объём 24ч" value={pristineMarket ? "0 TON" : money(coin.volume24h)} />
+      </div>
+
       <div className="mxm-coin-layout">
         <section className="mxm-coin-chart-slot">
-          <CoinChart candles={renderedCandles} height={148} baseFrame="15m" compact emptyLabel={chartEmptyLabel} />
+          <CoinChart candles={renderedCandles} height={178} baseFrame="15m" compact emptyLabel={chartEmptyLabel} />
         </section>
 
         <div className="mxm-coin-tabs" role="tablist" aria-label="Разделы мемкоина">
