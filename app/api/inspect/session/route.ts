@@ -23,7 +23,7 @@ async function POSTHandler(request: Request) {
     .limit(1)
     .maybeSingle();
   if (result.error) return apiFailure(result.error, "Не удалось открыть режим инспектора");
-  if (!result.data || !Number.isSafeInteger(Number(result.data.telegram_id)) || Number(result.data.telegram_id) <= 0) {
+  if (!result.data || !Number.isSafeInteger(Number(result.data.telegram_id)) || Number(result.data.telegram_id) >= 0) {
     return NextResponse.json({ error: "Системный профиль для инспектора не найден" }, { status: 503 });
   }
 
