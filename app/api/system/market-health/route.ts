@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 async function GETHandler() {
   // Operational health contains provider state and database diagnostics. Keep
   // it behind the same admin allowlist as the rest of the control surface.
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("health.read");
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const supabase = getSupabaseAdmin();

@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 async function POSTHandler(request: Request) {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("catalog.manage");
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "admin-catalog-sync", String(admin.id), 2, 600))) {

@@ -38,7 +38,7 @@ async function countRows(table: string, filter?: CountFilter) {
 }
 
 async function GETHandler() {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("health.read");
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const supabase = getSupabaseAdmin();
 
