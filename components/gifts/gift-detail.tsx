@@ -120,6 +120,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const loadSequence = useRef(0);
   const buyRequestKey = useRef<string | null>(null);
@@ -171,14 +172,16 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     }
   }
 
-  async function run(key: string, task: () => Promise<unknown>) {
+  async function run(key: string, task: () => Promise<unknown>, successMessage?: string) {
     if (busy) return;
     setBusy(key);
     setError(null);
+    setActionNotice(null);
     haptic("medium");
     try {
       await task();
-      await Promise.all([load(), refreshProfile()]);
+      await Promise.allSettled([load(), refreshProfile()]);
+      if (successMessage) setActionNotice(successMessage);
       haptic("heavy");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось выполнить действие");
@@ -197,7 +200,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     await run("watch", async () => {
       await apiFetch("/api/watchlist", { method: "POST", body: JSON.stringify({ kind: "gift", giftId: data.resolvedVirtualGiftId || data.gift.virtualGiftId, enabled }) });
       setData((current) => current ? { ...current, watched: enabled } : current);
-    });
+    }, enabled ? "Подарок добавлен в избранное" : "Подарок убран из избранного");
   }
 
   async function createAlert() {
@@ -207,7 +210,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
     await run("alert", async () => {
       await apiFetch("/api/alerts", { method: "POST", body: JSON.stringify({ kind: "gift", giftId: data.resolvedVirtualGiftId || data.gift.virtualGiftId, direction: "below", targetPrice }) });
       setAlertPrice("");
-    });
+    }, `Уведомление создано для цены ${money(targetPrice)}`);
   }
 
   if (!data && error) return (
@@ -318,6 +321,7 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
           </div>
 
           {error ? <div className="rounded-[18px] border border-[#5a3035] bg-[#25191b] px-3 py-2.5 text-xs text-[#ff9aa4]">{error}</div> : null}
+          {actionNotice ? <div aria-live="polite" className="mxm-gift-action-notice flex items-center gap-2 rounded-[18px] border border-[rgba(76,189,126,.18)] bg-[rgba(76,189,126,.07)] px-3 py-2.5 text-[11px] text-[var(--positive)]"><Check size={14} />{actionNotice}</div> : null}
 
           <div className="mxm-gift-trade-panel mxm-surface p-3">
             {gift.isBurned ? (
@@ -330,8 +334,8 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                 listingDays={listingDays}
                 setListingDays={setListingDays}
                 busy={busy}
-                onList={(price) => run("list", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price, durationDays: listingDays }) }))}
-                onUnlist={() => run("unlist", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price: null }) }))}
+                onList={(price) => run("list", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price, durationDays: listingDays }) })), gift.status === "listed" ? `Цена лота обновлена: ${money(price)}` : `Лот выставлен за ${money(price)}`)}
+                onUnlist={() => run("unlist", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/list`, { method: "POST", body: JSON.stringify({ price: null }) })), "Лот снят с продажи")}
               />
             ) : (
               <BuyerTradePanel
@@ -350,11 +354,11 @@ export function GiftDetail({ id, onClose }: { id: string; onClose?: () => void }
                   void run("buy", async () => {
                     await apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/buy`, { method: "POST", headers: { "x-idempotency-key": buyRequestKey.current! } });
                     buyRequestKey.current = null;
-                  });
+                  }, `Подарок куплен за ${money(gift.listingPrice || 0)} и добавлен в портфель`);
                 }}
-                onCart={() => run("cart", () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: canonicalGiftId }) }))}
-                onOffer={(amount) => run("offer", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/offer`, { method: "POST", body: JSON.stringify({ amount, durationHours: offerHours }) }))}
-                onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })) : undefined}
+                onCart={() => run("cart", () => apiFetch("/api/cart", { method: "POST", body: JSON.stringify({ action: data.inCart ? "remove" : "add", virtualGiftId: canonicalGiftId }) })), data.inCart ? "Подарок убран из корзины" : "Подарок добавлен в корзину")}
+                onOffer={(amount) => run("offer", () => apiFetch(`/api/gifts/${encodeURIComponent(canonicalGiftId)}/offer`, { method: "POST", body: JSON.stringify({ amount, durationHours: offerHours }) })), `Предложение ${money(amount)} создано, сумма зарезервирована`)}
+                onCancelOffer={myOffer ? () => run("cancel-offer", () => apiFetch(`/api/gifts/offers/${myOffer.id}`, { method: "POST", body: JSON.stringify({ action: "cancel" }) })), "Предложение отменено, резерв освобождён") : undefined}
               />
             )}
             
@@ -397,20 +401,22 @@ function OwnerTradePanel({ gift, listingPrice, setListingPrice, listingDays, set
   const marketPrice = gift.modelFloor ?? gift.referencePrice ?? gift.collectionFloor ?? gift.lastSalePrice;
   const quickPrice = gift.collectionFloor != null ? gift.collectionFloor * 0.97 : marketPrice != null ? marketPrice * 0.95 : null;
   const premiumPrice = marketPrice != null ? marketPrice * 1.1 : null;
+  const enteredDelta = Number.isFinite(parsed) && parsed > 0 && marketPrice != null && marketPrice > 0 ? ((parsed / marketPrice) - 1) * 100 : null;
   const setSuggested = (value: number | null) => { if (value != null && Number.isFinite(value) && value > 0) setListingPrice(value.toFixed(2)); };
   return <>
-    <div className="mb-2 flex items-center justify-between"><p className="text-xs font-medium">Ваш лот</p>{gift.listingPrice != null ? <span className="flex items-center gap-1 text-xs"><Gem size={12} fill="currentColor" />{money(gift.listingPrice)}</span> : <span className="text-[11px] text-[var(--muted)]">Не выставлен</span>}</div>
-    {marketPrice != null ? <div className="mb-2 grid grid-cols-3 gap-1.5">
-      <button type="button" onClick={() => setSuggested(quickPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">Быстро продать</span><span className="mt-0.5 block text-[10px] font-medium">{quickPrice == null ? "—" : money(quickPrice)}</span></button>
-      <button type="button" onClick={() => setSuggested(marketPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">Рыночная</span><span className="mt-0.5 block text-[10px] font-medium">{money(marketPrice)}</span></button>
-      <button type="button" onClick={() => setSuggested(premiumPrice)} className="rounded-[14px] bg-[var(--panel-2)] px-2 py-2 text-left"><span className="block text-[9px] text-[var(--muted)]">+10%</span><span className="mt-0.5 block text-[10px] font-medium">{premiumPrice == null ? "—" : money(premiumPrice)}</span></button>
+    <div className="mxm-trade-panel-head mb-3 flex items-start justify-between gap-3"><div><p className="text-[9px] uppercase tracking-[.12em] text-[var(--muted-2)]">Управление продажей</p><p className="mt-1 text-sm font-semibold">{gift.status === "listed" ? "Активный лот" : "Выставить подарок"}</p><p className="mt-1 text-[9px] text-[var(--muted)]">Цена и доступность подтверждаются сервером.</p></div>{gift.listingPrice != null ? <div className="text-right"><p className="text-[9px] text-[var(--muted)]">Текущая цена</p><span className="mt-1 flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(gift.listingPrice)}</span></div> : <span className="rounded-full bg-[var(--panel-2)] px-2.5 py-1.5 text-[9px] text-[var(--muted)]">Не выставлен</span>}</div>
+    {marketPrice != null ? <div className="mb-3 grid grid-cols-3 gap-1.5" aria-label="Рыночные ориентиры">
+      <button type="button" onClick={() => setSuggested(quickPrice)} className="mxm-price-preset rounded-[14px] bg-[var(--panel-2)] px-2 py-2.5 text-left"><span className="block text-[8px] text-[var(--muted)]">Быстрый выход</span><span className="mt-1 block text-[10px] font-semibold">{quickPrice == null ? "—" : money(quickPrice)}</span></button>
+      <button type="button" onClick={() => setSuggested(marketPrice)} className="mxm-price-preset rounded-[14px] bg-[var(--panel-2)] px-2 py-2.5 text-left"><span className="block text-[8px] text-[var(--muted)]">Ориентир</span><span className="mt-1 block text-[10px] font-semibold">{money(marketPrice)}</span></button>
+      <button type="button" onClick={() => setSuggested(premiumPrice)} className="mxm-price-preset rounded-[14px] bg-[var(--panel-2)] px-2 py-2.5 text-left"><span className="block text-[8px] text-[var(--muted)]">Премия +10%</span><span className="mt-1 block text-[10px] font-semibold">{premiumPrice == null ? "—" : money(premiumPrice)}</span></button>
     </div> : null}
-    <div className="grid grid-cols-[minmax(0,1fr)_84px] gap-2">
-      <input value={listingPrice} onChange={(event) => setListingPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={gift.listingPrice == null ? "Цена" : String(gift.listingPrice)} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[#555960]" />
-      <select value={listingDays} onChange={(event) => setListingDays(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={3}>3 дн</option><option value={7}>7 дн</option><option value={14}>14 дн</option><option value={30}>30 дн</option></select>
+    <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+      <label className="min-w-0"><span className="mb-1.5 block text-[9px] text-[var(--muted)]">Цена за подарок</span><input aria-label="Цена лота в TON" value={listingPrice} onChange={(event) => setListingPrice(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={gift.listingPrice == null ? "0.00 TON" : String(gift.listingPrice)} className="mxm-input min-w-0 !py-3 !text-sm" /></label>
+      <label><span className="mb-1.5 block text-[9px] text-[var(--muted)]">Срок</span><select aria-label="Срок размещения" value={listingDays} onChange={(event) => setListingDays(Number(event.target.value))} className="mxm-input h-[46px] px-2 text-xs"><option value={3}>3 дня</option><option value={7}>7 дней</option><option value={14}>14 дней</option><option value={30}>30 дней</option></select></label>
     </div>
-    <PrimaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0} onClick={() => onList(parsed)}><Tag size={14} className="mr-1 inline" />{busy === "list" ? "…" : gift.status === "listed" ? "Обновить цену" : "Выставить"}</PrimaryButton>
-    {gift.status === "listed" ? <SecondaryButton className="mt-2 w-full" disabled={busy !== null} onClick={onUnlist}>Снять с продажи</SecondaryButton> : null}
+    <div className="mt-2 flex min-h-4 items-center justify-between gap-2 text-[8px] text-[var(--muted-2)]"><span>{enteredDelta == null ? "Укажите цену, чтобы сравнить с рынком" : `${enteredDelta >= 0 ? "+" : ""}${enteredDelta.toFixed(1)}% к рыночному ориентиру`}</span><span>{listingDays} дн.</span></div>
+    <PrimaryButton className="mt-3 w-full !py-3" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0} onClick={() => onList(parsed)}><Tag size={14} className="mr-1 inline" />{busy === "list" ? "Сохраняем…" : gift.status === "listed" ? "Обновить активный лот" : "Выставить на рынок"}</PrimaryButton>
+    {gift.status === "listed" ? <SecondaryButton className="mt-2 w-full" disabled={busy !== null} onClick={onUnlist}>Снять лот с продажи</SecondaryButton> : null}
   </>;
 }
 
@@ -424,6 +430,10 @@ function advancedScopeLabel(offer: AdvancedOffer) {
 
 function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offerAmount, setOfferAmount, offerHours, setOfferHours, myOffer, busy, onBuy, onCart, onOffer, onCancelOffer }: { gift: GiftAsset; inCart: boolean; availableBalance: number; reservedBalance: number; offerAmount: string; setOfferAmount: (value: string) => void; offerHours: number; setOfferHours: (value: number) => void; myOffer?: DetailOffer; busy: string | null; onBuy: () => void; onCart: () => void; onOffer: (amount: number) => void; onCancelOffer?: () => void }) {
   const parsed = Number(offerAmount);
+  const spendableBalance = availableBalance + (myOffer?.amount || 0);
+  const listingPrice = gift.listingPrice;
+  const canBuy = gift.status === "listed" && listingPrice != null && spendableBalance >= listingPrice;
+  const balanceAfter = listingPrice == null ? null : spendableBalance - listingPrice;
   const [buyArmed, setBuyArmed] = useState(false);
   useEffect(() => {
     if (!buyArmed) return;
@@ -433,17 +443,32 @@ function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offe
   useEffect(() => { if (busy === "buy") setBuyArmed(false); }, [busy]);
   useEffect(() => { setBuyArmed(false); }, [gift.listingPrice]);
   return <>
-    <div className="mb-2 flex items-center justify-between text-[10px] text-[var(--muted)]"><span>Доступно {money(availableBalance)}</span>{reservedBalance > 0 ? <span>{money(reservedBalance)} в резерве</span> : null}</div>
-    {gift.status === "listed" && gift.listingPrice != null ? <>
-      <PrimaryButton className="flex w-full items-center justify-center gap-2 py-3" disabled={busy !== null || availableBalance + (myOffer?.amount || 0) < gift.listingPrice} onClick={() => { if (buyArmed) onBuy(); else setBuyArmed(true); }}><ShoppingCart size={16} />{busy === "buy" ? "Покупка…" : buyArmed ? <span className="flex items-center gap-1">Подтвердить <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span> : <span className="flex items-center gap-1">Купить <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span>}</PrimaryButton>
-      <SecondaryButton className="mt-2 flex w-full items-center justify-center gap-2" disabled={busy !== null} onClick={onCart}><ShoppingCart size={14} />{busy === "cart" ? "…" : inCart ? "Убрать из корзины" : "Добавить в корзину"}</SecondaryButton>
-    </> : <div className="rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5 text-center text-xs text-[var(--muted)]">Не выставлен</div>}
-    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_84px] gap-2">
-      <input value={offerAmount} onChange={(event) => setOfferAmount(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={myOffer ? `Текущий ${myOffer.amount}` : "Сумма предложения"} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none" />
-      <select value={offerHours} onChange={(event) => setOfferHours(Number(event.target.value))} className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-2 text-xs outline-none"><option value={24}>24 ч</option><option value={72}>72 ч</option><option value={168}>7 дн</option></select>
+    <div className="mxm-trade-panel-head mb-3 flex items-start justify-between gap-3">
+      <div><p className="text-[9px] uppercase tracking-[.12em] text-[var(--muted-2)]">Покупка подарка</p><p className="mt-1 text-sm font-semibold">{gift.status === "listed" && listingPrice != null ? "Активный лот" : "Лот не выставлен"}</p><p className="mt-1 inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><ShieldCheck size={11} className="text-[var(--positive)]" />Сервер проверит цену и владельца</p></div>
+      <div className="text-right"><p className="text-[9px] text-[var(--muted)]">Цена сейчас</p><p className="mt-1 flex items-center justify-end gap-1 text-base font-semibold"><Gem size={13} className="text-[var(--accent)]" fill="currentColor" />{listingPrice == null ? "—" : money(listingPrice)}</p></div>
     </div>
-    <SecondaryButton className="mt-2 w-full" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0 || parsed > availableBalance + (myOffer?.amount || 0)} onClick={() => onOffer(parsed)}>{busy === "offer" ? "…" : myOffer ? "Обновить предложение" : "Сделать предложение"}</SecondaryButton>
-    {myOffer && onCancelOffer ? <button disabled={busy !== null} onClick={onCancelOffer} className="mt-2 w-full rounded-[18px] bg-[var(--panel-2)] py-2 text-[11px] text-[var(--muted)]">Отменить предложение · {money(myOffer.amount)}</button> : null}
+    <div className="mb-3 grid grid-cols-3 gap-1.5 rounded-[16px] bg-[var(--panel-2)] p-2">
+      <SmallMetric label="Доступно" value={money(availableBalance)} />
+      <SmallMetric label="В резерве" value={money(reservedBalance)} />
+      <SmallMetric label="После покупки" value={balanceAfter == null ? "—" : money(balanceAfter)} />
+    </div>
+    {gift.status === "listed" && gift.listingPrice != null ? <>
+      <PrimaryButton className="flex w-full items-center justify-center gap-2 !py-3" disabled={busy !== null || !canBuy} onClick={() => { if (buyArmed) onBuy(); else setBuyArmed(true); }}><ShoppingCart size={16} />{busy === "buy" ? "Проверяем и покупаем…" : !canBuy ? "Недостаточно TON" : buyArmed ? <span className="flex items-center gap-1">Подтвердить списание <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span> : <span className="flex items-center gap-1">Купить сейчас · <Gem size={13} fill="currentColor" />{money(gift.listingPrice)}</span>}</PrimaryButton>
+      <SecondaryButton className="mt-2 flex w-full items-center justify-center gap-2 !py-2.5" disabled={busy !== null} onClick={onCart}><ShoppingCart size={14} fill={inCart ? "currentColor" : "none"} />{busy === "cart" ? "Обновляем…" : inCart ? "Убрать из корзины" : "Добавить в корзину"}</SecondaryButton>
+      {buyArmed ? <p aria-live="polite" className="mt-2 text-center text-[9px] text-[var(--accent)]">Повторное нажатие подтвердит покупку. Цена ещё раз проверится сервером.</p> : null}
+    </> : <div className="rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5 text-center text-xs text-[var(--muted)]">Не выставлен</div>}
+    <details className="mxm-gift-market-details mxm-offer-composer mt-3" defaultOpen={Boolean(myOffer)}>
+      <summary><span>Предложить свою цену</span>{myOffer ? <span className="text-[var(--accent)]">Активно · {money(myOffer.amount)}</span> : <span>Необязательно</span>}</summary>
+      <div className="border-t border-[var(--border-soft)] pt-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+          <label className="min-w-0"><span className="mb-1.5 block text-[9px] text-[var(--muted)]">Цена предложения</span><input aria-label="Цена предложения в TON" value={offerAmount} onChange={(event) => setOfferAmount(event.target.value.replace(",", "."))} inputMode="decimal" placeholder={myOffer ? `Текущее: ${money(myOffer.amount)}` : "0.00 TON"} className="mxm-input min-w-0 !py-3 !text-sm" /></label>
+          <label><span className="mb-1.5 block text-[9px] text-[var(--muted)]">Срок</span><select aria-label="Срок предложения" value={offerHours} onChange={(event) => setOfferHours(Number(event.target.value))} className="mxm-input h-[46px] px-2 text-xs"><option value={24}>24 часа</option><option value={72}>3 дня</option><option value={168}>7 дней</option></select></label>
+        </div>
+        <p className="mt-2 text-[8px] leading-4 text-[var(--muted-2)]">Сумма резервируется до исполнения, отмены или окончания срока и не может быть потрачена дважды.</p>
+        <SecondaryButton className="mt-2 w-full !py-2.5" disabled={busy !== null || !Number.isFinite(parsed) || parsed <= 0 || parsed > spendableBalance} onClick={() => onOffer(parsed)}>{busy === "offer" ? "Сохраняем…" : myOffer ? "Обновить предложение" : "Создать предложение"}</SecondaryButton>
+        {myOffer && onCancelOffer ? <button disabled={busy !== null} onClick={onCancelOffer} className="mt-2 min-h-10 w-full rounded-[18px] bg-[var(--panel-2)] py-2 text-[10px] text-[var(--muted)]">Отменить и освободить {money(myOffer.amount)}</button> : null}
+      </div>
+    </details>
   </>;
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { memo } from "react";
-import { Gem, MessageSquareMore, ShoppingCart } from "lucide-react";
+import { Gem, MessageSquareMore, ShieldCheck, ShoppingCart } from "lucide-react";
 import type { GiftAsset } from "@/lib/types";
 import { money } from "@/lib/format";
 import { GiftMedia } from "@/components/gifts/gift-media";
@@ -16,12 +16,16 @@ export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart
   const rarityLabel = rarestPermille < 10 ? `${(rarestPermille / 10).toFixed(1)}%` : `${Math.round(rarestPermille / 10)}%`;
 
   return (
-    <article className="mxm-gift-card group relative min-w-0 overflow-hidden rounded-[22px] border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition-[border-color,transform] duration-150 hover:border-white/[.12] active:scale-[.992]">
+    <article className="mxm-gift-card mxm-commerce-gift-card group relative min-w-0 overflow-hidden rounded-[22px] border border-white/[.06] bg-white/[.025] p-2 contain-content content-visibility-auto transition-[border-color,transform] duration-150 hover:border-white/[.12] active:scale-[.992]">
       <Link href={`/gifts/${gift.virtualGiftId}`} className="block min-w-0">
         <div className="mxm-gift-cover relative overflow-hidden rounded-2xl bg-black/20">
           <GiftMedia gift={gift} compact priority={priority} className="aspect-square w-full" />
           <span className="mxm-gift-number">#{gift.number}</span>
           {gift.offerCount > 0 ? <span className="mxm-gift-offers"><MessageSquareMore size={10} />{gift.offerCount}</span> : null}
+          <div className="mxm-gift-cover-state">
+            <span className={isListed ? "is-listed" : ""}>{isListed ? "Активный лот" : "Не продаётся"}</span>
+            {gift.chainVerified ? <span title="Подтверждено в TON" className="mxm-gift-verified"><ShieldCheck size={11} />TON</span> : null}
+          </div>
         </div>
         <div className="px-0.5 pt-2.5">
           <div className="flex min-w-0 items-baseline justify-between gap-2">
@@ -41,6 +45,7 @@ export const GiftCard = memo(function GiftCard({ gift, showOwner = false, inCart
         {isListed && onCart ? (
           <button type="button" disabled={cartBusy} onClick={() => onCart?.(gift, !inCart)} aria-label={inCart ? "Убрать из корзины" : "Добавить в корзину"} className={`mxm-gift-cart ${inCart ? "is-active" : ""}`}>
             <ShoppingCart size={14} fill={inCart ? "currentColor" : "none"} />
+            <span>{inCart ? "В корзине" : "В корзину"}</span>
           </button>
         ) : null}
       </div>

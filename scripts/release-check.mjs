@@ -134,7 +134,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.68.0 package version", packageJson.includes('"version": "0.68.0"'));
+check("v0.69.0 package version", packageJson.includes('"version": "0.69.0"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
@@ -149,6 +149,11 @@ check("v0.68 trade ticket exposes recovery and minimum received", read("app/coin
 check("v0.68 portfolio has search-aware empty states", read("app/vault/page.tsx").includes("activeGiftRows.length") && read("app/vault/page.tsx").includes("sortedHoldings.length") && read("app/vault/page.tsx").includes("messageTone"));
 check("v0.68 operations center summarizes live exposure", read("app/orders/page.tsx").includes("mxm-orders-summary") && read("app/orders/page.tsx").includes("incomingValue") && read("app/orders/page.tsx").includes("listingValue"));
 check("v0.68 home exposes commercial command center", read("app/hub/page.tsx").includes("mxm-home-command") && read("app/hub/page.tsx").includes("Launch studio") && read("app/hub/page.tsx").includes("availableBalance"));
+check("v0.69 cart keeps an authoritative purchase receipt", read("app/cart/page.tsx").includes("CheckoutReceipt") && read("app/cart/page.tsx").includes("Promise.allSettled") && read("app/cart/page.tsx").includes("Покупка завершена"));
+check("v0.69 gift purchase refresh cannot mask a completed mutation", read("components/gifts/gift-detail.tsx").includes("Promise.allSettled([load(), refreshProfile()])") && read("components/gifts/gift-detail.tsx").includes("Подарок куплен"));
+check("v0.69 collection sweep uses in-app confirmation", read("app/collections/[name]/page.tsx").includes("sweepArmed") && !read("app/collections/[name]/page.tsx").includes("window.confirm"));
+check("v0.69 collection offers expose reserve and execution state", read("components/gifts/advanced-offers-panel.tsx").includes("estimatedReserve") && read("components/gifts/advanced-offers-panel.tsx").includes("activeReserve") && read("components/gifts/advanced-offers-panel.tsx").includes("Исполнение и резерв контролирует сервер"));
+check("v0.69 commercial Gift cards surface listing trust", read("components/gifts/gift-card.tsx").includes("mxm-gift-cover-state") && read("components/gifts/gift-card.tsx").includes("TON"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")
