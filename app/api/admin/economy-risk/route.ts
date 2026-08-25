@@ -14,7 +14,7 @@ function objectPayload(value: unknown): ActivityPayload {
 }
 
 async function GETHandler() {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("risk.read");
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   const supabase = getSupabaseAdmin();
   try {

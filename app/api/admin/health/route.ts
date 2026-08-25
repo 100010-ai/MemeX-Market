@@ -8,7 +8,7 @@ function status(ok: boolean, detail: string, latencyMs?: number) {
 }
 
 async function GETHandler() {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("health.read");
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const supabase = getSupabaseAdmin();

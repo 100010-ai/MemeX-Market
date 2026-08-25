@@ -1,6 +1,6 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { requireAdminProfile } from "@/lib/admin";
+import { ADMIN_ROLE_LABELS, requireAdminProfile, type AdminPermission } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -27,11 +27,12 @@ function relationRecord(value: unknown): Record<string, unknown> {
 }
 
 async function GETHandler() {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("analytics.read");
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
+  const can = (permission: AdminPermission) => admin.adminPermissions.includes(permission);
   const supabase = getSupabaseAdmin();
   try {
-    const [profiles, missions, coins, gifts, audit, catalogSources, npcState, npcLog, promoCodes, refundReconciliation] = await Promise.all([
+    const [profiles, missions, coins, gifts, audit, catalogSources, npcState, npcLog, promoCodes, refundReconciliation, adminMembers] = await Promise.all([
       supabase.from("profiles")
         .select("id,telegram_id,username,first_name,balance,xp,is_banned,ban_reason,banned_until,hidden_from_leaderboard,is_system,created_at")
         .order("created_at", { ascending: false }).limit(LIST_LIMITS.profiles),
@@ -65,9 +66,14 @@ async function GETHandler() {
         .filter("refund_metadata->>virtualReversal", "eq", "manual_review_required")
         .order("refunded_at", { ascending: true })
         .limit(LIST_LIMITS.refundReconciliation),
+      supabase.from("admin_members_v067")
+        .select("profile_id,role,permissions,active,created_at,updated_at,profiles!admin_members_v067_profile_id_fkey(telegram_id,username,first_name)")
+        .order("active", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .limit(100),
     ]);
 
-    const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error;
+    const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error || adminMembers.error;
     if (primaryError) throw primaryError;
     if (promoCodes.error) throw promoCodes.error;
 
@@ -93,20 +99,42 @@ async function GETHandler() {
     };
 
     return NextResponse.json({
+      admin: {
+        profileId: admin.id,
+        role: admin.adminRole,
+        roleLabel: ADMIN_ROLE_LABELS[admin.adminRole],
+        permissions: admin.adminPermissions,
+        source: admin.adminSource,
+      },
+      adminMembers: can("admins.manage") ? (adminMembers.data || []).map((row) => {
+        const profile = relationRecord(row.profiles);
+        return {
+          profileId: row.profile_id,
+          telegramId: Number(profile.telegram_id || 0),
+          username: profile.username ? String(profile.username) : null,
+          firstName: String(profile.first_name || "Администратор"),
+          role: row.role,
+          permissions: Array.isArray(row.permissions) ? row.permissions : [],
+          active: Boolean(row.active),
+          source: "database",
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        };
+      }) : [],
       metrics,
-      economy: economy.data || null,
-      profiles: profiles.data || [],
-      missions: missions.data || [],
-      coins: coins.data || [],
-      gifts: gifts.data || [],
-      audit: audit.data || [],
-      catalogSources: catalogSources.data || [],
-      npcState: npcState.data?.[0] || null,
-      npcLog: npcLog.data || [],
+      economy: can("economy.manage") ? economy.data || null : null,
+      profiles: can("players.manage") || can("coins.manage") || can("gifts.manage") || can("admins.manage") ? profiles.data || [] : [],
+      missions: can("missions.manage") ? missions.data || [] : [],
+      coins: can("coins.manage") ? coins.data || [] : [],
+      gifts: can("gifts.manage") ? gifts.data || [] : [],
+      audit: can("audit.read") ? audit.data || [] : [],
+      catalogSources: can("catalog.manage") || can("gifts.manage") ? catalogSources.data || [] : [],
+      npcState: can("catalog.manage") || can("gifts.manage") ? npcState.data?.[0] || null : null,
+      npcLog: can("catalog.manage") || can("gifts.manage") ? npcLog.data || [] : [],
       tonapiState: tonapiState.data || null,
       liquidity: liquidity.data || null,
-      promoCodes: promoCodes.data || [],
-      refundReconciliation: (refundReconciliation.data || []).map((row) => {
+      promoCodes: can("promos.manage") ? promoCodes.data || [] : [],
+      refundReconciliation: can("economy.manage") ? (refundReconciliation.data || []).map((row) => {
         const profile = relationRecord(row.profiles);
         const product = relationRecord(row.store_products);
         return {
@@ -121,7 +149,7 @@ async function GETHandler() {
           refundedAt: row.refunded_at,
           reason: row.refund_reason || "Причина не записана",
         };
-      }),
+      }) : [],
       listLimits: LIST_LIMITS,
       checkedAt: new Date().toISOString(),
     }, { headers: { "cache-control": "private, no-store" } });

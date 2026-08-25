@@ -76,6 +76,8 @@ const migration9994 = read("supabase/migrations/9994_mrkt_player_market_handoff.
 const migration99999 = read("supabase/migrations/99999_store_battlepass_cases_v13.sql");
 const migration100022 = read("supabase/migrations/100022_memecoin_vip_launch_repair_v0661.sql");
 const migration100023 = read("supabase/migrations/100023_memecoin_launch_fee_rebalance_v0662.sql");
+const migration100024 = read("supabase/migrations/100024_admin_analytics_permissions_v0670.sql");
+const migration100025 = read("supabase/migrations/100025_admin_funnel_consistency_v0671.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -132,11 +134,16 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.64.9 package version", packageJson.includes('"version": "0.64.9"'));
+check("v0.67.0 package version", packageJson.includes('"version": "0.67.0"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
 check("Migration 100023 makes the paid launch reachable", migration100023.includes("coin_launch_fee=50") && migration100023.includes("coin_launch_fee=150"));
+check("Migration 100024 adds live product analytics and RBAC", migration100024.includes("profile_presence_v067") && migration100024.includes("admin_analytics_v067") && migration100024.includes("admin_members_v067") && migration100024.includes("revoke execute"));
+check("Migration 100025 keeps conversion stages nested", migration100025.includes("admin_funnel_v067") && migration100025.includes("from active_new") && migration100025.includes("revoke execute"));
+check("v0.67 admin dashboard uses real charts and periods", exists("components/admin/admin-dashboard.tsx") && read("components/admin/admin-trend-chart.tsx").includes("lightweight-charts") && adminPage.includes("AdminDashboard") && adminPage.includes("AdminTeamPanel"));
+check("v0.67 admin permissions guard operations", read("lib/admin.ts").includes("ADMIN_ROLE_PERMISSIONS") && adminAction.includes("permissionForAction") && adminAction.includes('action === "admin.member.upsert"'));
+check("v0.67 presence is authenticated and rate-limited", read("app/api/analytics/presence/route.ts").includes("requireProfile") && read("app/api/analytics/presence/route.ts").includes("sameOriginMutation") && read("app/api/analytics/presence/route.ts").includes("enforceRateLimit"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")

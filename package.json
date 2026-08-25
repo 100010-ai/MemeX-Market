@@ -1,6 +1,6 @@
 {
   "name": "mxm-telegram-miniapp",
-  "version": "0.64.9",
+  "version": "0.67.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 // admin-set price, via the same list_virtual_gift RPC every player listing
 // goes through. The price is always a deliberate human decision.
 async function POSTHandler(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdminProfile();
+  const admin = await requireAdminProfile("gifts.manage");
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "admin-gift-release", String(admin.id), 30, 60))) return NextResponse.json({ error: "Слишком много операций с лотами." }, { status: 429 });
