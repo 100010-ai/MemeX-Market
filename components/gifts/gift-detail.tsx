@@ -477,7 +477,7 @@ function BuyerTradePanel({ gift, inCart, availableBalance, reservedBalance, offe
       <SecondaryButton className="mt-2 flex w-full items-center justify-center gap-2 !py-2.5" disabled={busy !== null} onClick={onCart}><ShoppingCart size={14} fill={inCart ? "currentColor" : "none"} />{busy === "cart" ? "Обновляем…" : inCart ? "Убрать из корзины" : "Добавить в корзину"}</SecondaryButton>
       {buyArmed ? <p aria-live="polite" className="mt-2 text-center text-[9px] text-[var(--accent)]">Повторное нажатие подтвердит покупку. Цена ещё раз проверится сервером.</p> : null}
     </> : <div className="rounded-[18px] bg-[var(--panel-2)] px-3 py-2.5 text-center text-xs text-[var(--muted)]">Не выставлен</div>}
-    <details className="mxm-gift-market-details mxm-offer-composer mt-3" defaultOpen={Boolean(myOffer)}>
+    <details className="mxm-gift-market-details mxm-offer-composer mt-3">
       <summary><span>Предложить свою цену</span>{myOffer ? <span className="text-[var(--accent)]">Активно · {money(myOffer.amount)}</span> : <span>Необязательно</span>}</summary>
       <div className="border-t border-[var(--border-soft)] pt-3">
         <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
