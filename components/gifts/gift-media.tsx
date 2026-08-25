@@ -29,6 +29,28 @@ function staticImageSource(value: string | null | undefined) {
   return source;
 }
 
+function trustedTonApiImageSource(value: string | null | undefined) {
+  const source = staticImageSource(value);
+  if (!source || source.startsWith("/api/") || source.startsWith("data:image/")) return source;
+  try {
+    const host = new URL(source).hostname.toLowerCase();
+    const trusted = host === "tonapi.io"
+      || host.endsWith(".tonapi.io")
+      || host === "fragment.com"
+      || host.endsWith(".fragment.com")
+      || host === "telegram.org"
+      || host.endsWith(".telegram.org")
+      || host === "getgems.io"
+      || host.endsWith(".getgems.io")
+      || host === "ipfs.io"
+      || host === "headgun.org"
+      || host === "chat-mafia.com";
+    return trusted ? source : null;
+  } catch {
+    return null;
+  }
+}
+
 function uniqueSources(sources: Array<string | null>) {
   return [...new Set(sources.filter((source): source is string => Boolean(source)))];
 }
@@ -372,10 +394,10 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
   const storedPreviews = uniqueSources([
-    staticImageSource(gift.modelPreviewUrl),
-    gift.mediaKind === "static" ? staticImageSource(gift.modelMediaUrl) : null,
-    gift.symbolMediaKind === "static" ? staticImageSource(gift.symbolMediaUrl) : null,
-    staticImageSource(gift.imageUrl),
+    trustedTonApiImageSource(gift.modelPreviewUrl),
+    gift.mediaKind === "static" ? trustedTonApiImageSource(gift.modelMediaUrl) : null,
+    gift.symbolMediaKind === "static" ? trustedTonApiImageSource(gift.symbolMediaUrl) : null,
+    trustedTonApiImageSource(gift.imageUrl),
   ]);
   const previewSources = uniqueSources([previewSource, ...storedPreviews]);
   const previewIndex = previewAttempt.giftId === gift.id ? previewAttempt.index : 0;

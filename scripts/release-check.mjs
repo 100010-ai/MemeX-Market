@@ -78,6 +78,9 @@ const migration100022 = read("supabase/migrations/100022_memecoin_vip_launch_rep
 const migration100023 = read("supabase/migrations/100023_memecoin_launch_fee_rebalance_v0662.sql");
 const migration100024 = read("supabase/migrations/100024_admin_analytics_permissions_v0670.sql");
 const migration100025 = read("supabase/migrations/100025_admin_funnel_consistency_v0671.sql");
+const migration100026 = read("supabase/migrations/100026_system_hardening_v0700.sql");
+const migration100027 = read("supabase/migrations/100027_remaining_fk_indexes_v0700.sql");
+const migration100028 = read("supabase/migrations/100028_tonapi_content_media_v0700.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -136,21 +139,24 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.69.1 package version", packageJson.includes('"version": "0.69.1"'));
+check("v0.70.0 package version", packageJson.includes('"version": "0.70.0"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
 check("Migration 100023 makes the paid launch reachable", migration100023.includes("coin_launch_fee=50") && migration100023.includes("coin_launch_fee=150"));
 check("Migration 100024 adds live product analytics and RBAC", migration100024.includes("profile_presence_v067") && migration100024.includes("admin_analytics_v067") && migration100024.includes("admin_members_v067") && migration100024.includes("revoke execute"));
 check("Migration 100025 keeps conversion stages nested", migration100025.includes("admin_funnel_v067") && migration100025.includes("from active_new") && migration100025.includes("revoke execute"));
+check("Migration 100026 repairs media and hardens Data API", migration100026.includes("consume_rate_limits_v070") && migration100026.includes("model_is_animated = n.is_animated") && migration100026.includes("alter default privileges"));
+check("Migration 100027 completes FK coverage", migration100027.includes("season_claims_reward_fk_idx") && migration100027.includes("user_missions_mission_id_fk_idx"));
+check("Migration 100028 preserves trusted TonAPI content", migration100028.includes("content_url") && migration100028.includes("headgun\\.org") && migration100028.includes("chat-mafia\\.com"));
 check("v0.67 admin dashboard uses real charts and periods", exists("components/admin/admin-dashboard.tsx") && read("components/admin/admin-trend-chart.tsx").includes("lightweight-charts") && adminPage.includes("AdminDashboard") && adminPage.includes("AdminTeamPanel"));
 check("v0.67 admin permissions guard operations", read("lib/admin.ts").includes("ADMIN_ROLE_PERMISSIONS") && adminAction.includes("permissionForAction") && adminAction.includes('action === "admin.member.upsert"'));
 check("v0.67 presence is authenticated and rate-limited", read("app/api/analytics/presence/route.ts").includes("requireProfile") && read("app/api/analytics/presence/route.ts").includes("sameOriginMutation") && read("app/api/analytics/presence/route.ts").includes("enforceRateLimit"));
 check("v0.68 launch studio exposes real readiness and budget", createPage.includes("mxm-launch-studio") && createPage.includes("launchBudget") && createPage.includes("LaunchCheck") && createPage.includes("economyReady"));
-check("v0.68 trade ticket exposes recovery and minimum received", read("app/coin/[id]/page.tsx").includes("mxm-coin-load-error") && read("app/coin/[id]/page.tsx").includes("Мин. к получению") && read("app/coin/[id]/page.tsx").includes("Котировка подтверждается сервером"));
+check("v0.68 trade ticket exposes recovery and minimum received", read("app/coin/[id]/page.tsx").includes("mxm-coin-load-error") && read("app/coin/[id]/page.tsx").includes("Мин. к получению") && read("app/coin/[id]/page.tsx").includes("Серверная котировка"));
 check("v0.68 portfolio has search-aware empty states", read("app/vault/page.tsx").includes("activeGiftRows.length") && read("app/vault/page.tsx").includes("sortedHoldings.length") && read("app/vault/page.tsx").includes("messageTone"));
 check("v0.68 operations center summarizes live exposure", read("app/orders/page.tsx").includes("mxm-orders-summary") && read("app/orders/page.tsx").includes("incomingValue") && read("app/orders/page.tsx").includes("listingValue"));
-check("v0.68 home exposes commercial command center", read("app/hub/page.tsx").includes("mxm-home-command") && read("app/hub/page.tsx").includes("Launch studio") && read("app/hub/page.tsx").includes("availableBalance"));
+check("v0.68 home exposes commercial command center", read("app/hub/page.tsx").includes("mxm-home-command") && read("app/hub/page.tsx").includes("Новый мемкоин") && read("app/hub/page.tsx").includes("availableBalance"));
 check("v0.69 cart keeps an authoritative purchase receipt", read("app/cart/page.tsx").includes("CheckoutReceipt") && read("app/cart/page.tsx").includes("Promise.allSettled") && read("app/cart/page.tsx").includes("Покупка завершена"));
 check("v0.69 gift purchase refresh cannot mask a completed mutation", read("components/gifts/gift-detail.tsx").includes("Promise.allSettled([load(), refreshProfile()])") && read("components/gifts/gift-detail.tsx").includes("Подарок куплен"));
 check("v0.69 collection sweep uses in-app confirmation", read("app/collections/[name]/page.tsx").includes("sweepArmed") && !read("app/collections/[name]/page.tsx").includes("window.confirm"));
@@ -159,6 +165,13 @@ check("v0.69 commercial Gift cards surface listing trust", read("components/gift
 check("v0.69.1 Gift previews never pass animation files to img", giftMediaComponent.includes("staticImageSource") && giftMediaComponent.includes('gift.mediaKind === "static"') && mappers.includes("safeImageMediaUrl") && mappers.includes("modelIsStatic ? telegramFileUrl(row.model_file_id)"));
 check("v0.69.1 Gift preview failures advance through real sources", giftMediaComponent.includes("previewAttempt") && giftMediaComponent.includes("previewSources[previewIndex]") && giftMediaComponent.includes("Медиа недоступно"));
 check("v0.69.1 media proxy isolates provider timeouts", giftMediaRoute.includes("requestSignal.addEventListener") && giftMediaRoute.includes("1_800") && giftMediaRoute.includes("gift media sources exhausted"));
+check("v0.70 NFT importer trusts observed media kind", !read("lib/tonapi-gifts.ts").includes('mediaKind: fragmentMedia ? "animated"') && read("lib/tonapi-gifts.ts").includes("TonAPI actually returned"));
+check("v0.70 media proxy prefers persisted metadata", giftMediaRoute.includes("chain_metadata") && giftMediaRoute.includes("metadataPreview") && giftMediaRoute.includes(".getgems.io"));
+check("v0.70 app readiness is not blocked by whole-app API warming", !read("components/telegram-provider.tsx").includes("criticalRequests") && read("components/telegram-provider.tsx").includes("setAppReady(true)") && !read("components/telegram-provider.tsx").includes("secondaryRoutes"));
+check("v0.70 trade retries preserve their idempotent contract", read("app/coin/[id]/page.tsx").includes("pendingTradeIntent") && read("app/coin/[id]/page.tsx").includes("minOutput: intent.minOutput"));
+check("v0.70 rate limits use one atomic RPC", read("lib/security.ts").includes('rpc("consume_rate_limits_v070"') && read("lib/security.ts").includes("p_keys"));
+check("v0.70 security headers cover Telegram-safe framing and transport", read("next.config.ts").includes("Strict-Transport-Security") && read("next.config.ts").includes("frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"));
+check("v0.70 compact visual system is present", read("app/globals.css").includes("v0.70 — compact commercial system") && read("app/globals.css").includes("contain-intrinsic-size"));
 check("v0.64.8 Orders tolerates missing seller denormalization",
   read("app/api/orders/route.ts").includes("isMissingSellerProfileColumn")
   && read("app/api/orders/route.ts").includes("virtual_gifts!inner(owner_profile_id)")

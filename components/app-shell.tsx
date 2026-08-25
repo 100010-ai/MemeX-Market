@@ -129,7 +129,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   if (!profile) {
-    return <main className="mxm-auth-wall"><div className="mxm-auth-card"><div className="mxm-auth-brand">MXM <span>MARKET</span></div><div className="mxm-auth-icon"><Sparkles size={18}/></div><h1>Нужна сессия Telegram</h1><p>{error || "Откройте MemeX Market внутри Telegram, чтобы безопасно продолжить."}</p><button type="button" onClick={retryAuth} className="mxm-primary-action mt-5 w-full">Повторить вход</button></div></main>;
+    return <main className="mxm-auth-wall"><div className="mxm-auth-card"><div className="mxm-auth-brand">MXM <span>MARKET</span></div><div className="mxm-auth-icon"><Sparkles size={18}/></div><h1>Откройте в Telegram</h1><p>{error || "Безопасный вход работает внутри @MemeXMarketBot."}</p><button type="button" onClick={retryAuth} className="mxm-primary-action mt-5 w-full">Повторить</button></div></main>;
   }
 
   if (runtimeConfig?.maintenanceMode) {
@@ -141,7 +141,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       <aside className="mxm-desktop-sidebar sticky top-0 hidden h-screen px-4 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="mxm-brand-lockup">
           <span className="mxm-brand-mark">MXM</span>
-          <span className="mxm-brand-copy"><b>MEMEX</b><small>MARKET TERMINAL</small></span>
+          <span className="mxm-brand-copy"><b>MEMEX MARKET</b></span>
         </Link>
         <p className="mxm-nav-eyebrow">Торговля</p>
         <nav className="space-y-1">
@@ -158,7 +158,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           <Link href="/notifications" className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
         </nav>
 
-        <Link href="/create" className="mxm-sidebar-cta"><span><Plus size={15}/></span><div><b>Запустить мемкоин</b><small>Создать новый рынок</small></div></Link>
+        <Link href="/create" className="mxm-sidebar-cta"><span><Plus size={15}/></span><div><b>Запустить мемкоин</b></div></Link>
 
         <Link href="/profile" className="mxm-sidebar-profile mt-auto">
           <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} опыта</span></div>
@@ -168,9 +168,9 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
 
       <div className="mxm-shell-content min-w-0 lg:pb-0">
         <header className="mxm-topbar mxm-topbar-fixed safe-top z-40">
-          <div className="mxm-topbar-inner flex h-[58px] items-center gap-2.5 px-3 md:px-5">
+          <div className="mxm-topbar-inner flex h-[52px] items-center gap-2.5 px-3 md:px-5">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></Link>
-            <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
+            <div className="flex min-w-0 items-center gap-2 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><span className="h-3 w-px bg-white/[.08]" /><p className="truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="mxm-topbar-eyebrow">MXM MARKET</p><p className="truncate text-[13px] font-semibold tracking-[-.02em]">{title}</p></div>
             <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>

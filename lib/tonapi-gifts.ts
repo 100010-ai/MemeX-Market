@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
+import { telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { tonApiGet } from "@/lib/providers/tonapi-client";
 
 type JsonRecord = Record<string, unknown>;
@@ -125,11 +125,16 @@ function normalizeMediaUrl(value: unknown) {
 }
 
 function metadataPreview(metadata: JsonRecord, previews?: TonPreview[]) {
+  // TonAPI previews are normalized by the indexer and are considerably more
+  // reliable than arbitrary URLs embedded in NFT metadata. Prefer them so a
+  // collection-controlled host cannot become the first-party market image.
+  const indexedPreview = normalizeMediaUrl(highestPreview(previews));
+  if (indexedPreview) return indexedPreview;
   for (const key of ["image", "image_url", "preview", "thumbnail", "thumbnail_url"]) {
     const value = normalizeMediaUrl(metadata[key]);
     if (value) return value;
   }
-  return highestPreview(previews);
+  return null;
 }
 
 function mediaKindFrom(metadata: JsonRecord, url: string): MediaKind {
@@ -281,7 +286,6 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
 
   const telegramSlug = findTelegramSlug(metadata)
     || telegramCollectibleSlug(null, identity.baseName, identity.number);
-  const fragmentMedia = telegramSlug ? fragmentGiftMedia(telegramSlug) : null;
 
   return {
     address: item.address,
@@ -291,13 +295,12 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
     baseName: identity.baseName,
     number: identity.number,
     telegramSlug,
-    // Fragment publishes the complete Telegram collectible render: the model,
-    // the real backdrop and the repeating symbol pattern. TonAPI previews are
-    // kept only as a validation/source fallback because many of them contain
-    // the transparent model layer without Telegram's backdrop.
-    mediaUrl: fragmentMedia?.animation || tonApiMedia.mediaUrl,
-    previewUrl: fragmentMedia?.large || tonApiMedia.previewUrl,
-    mediaKind: fragmentMedia ? "animated" : tonApiMedia.mediaKind,
+    // A syntactically valid Telegram slug does not prove that Fragment has a
+    // render for the collectible. Persist the media TonAPI actually returned;
+    // the proxy may still try Fragment as a best-effort presentation source.
+    mediaUrl: tonApiMedia.mediaUrl,
+    previewUrl: tonApiMedia.previewUrl,
+    mediaKind: tonApiMedia.mediaKind,
     resalePriceTon: nativeTonSalePrice(item.sale),
     model,
     symbol,
@@ -661,4 +664,3 @@ export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
   if (refreshed.error) throw refreshed.error;
   return { skipped: false, assets: refreshed.count || 0, result };
 }
-
