@@ -136,11 +136,17 @@ export default function SeasonPage() {
       </section>
 
       <aside className="mxm-season-next-card">
-        <div className="mxm-season-next-head"><span>Следующая неделя</span><b>#{data?.nextSeason?.weekNumber || (data?.season.weekNumber || 1) + 1}</b></div>
-        <div className="mxm-season-next-visual"><Image src="/assets/season/weekly-vault-hero.webp" alt="" fill sizes="320px" /></div>
-        <div className="mxm-season-next-copy">
-          <h2>{data?.nextSeason?.title || "Новое хранилище"}</h2>
-          <p>Старт через {daysUntil(data?.nextSeason?.startsAt) ?? 7} дн.</p>
+        <div className="mxm-season-next-head"><span>Сезонная коллекция</span><b>Exclusive</b></div>
+        <div className="mxm-season-next-frames">
+          {exclusiveFrames.length ? exclusiveFrames.map((frame) => <div key={frame.key} className="mxm-season-frame-card"><div className="mxm-season-frame-preview"><Image src={frame.assetSrc!} alt="" fill sizes="76px" /></div><span>{frame.title}</span><small>не продаётся</small></div>) : <><FramePlaceholder /><FramePlaceholder /><FramePlaceholder /></>}
+        </div>
+        <div className="mxm-season-next-release">
+          <div className="mxm-season-next-visual"><Image src="/assets/season/weekly-vault-hero.webp" alt="" fill sizes="120px" /></div>
+          <div className="mxm-season-next-copy">
+            <span>Следующая неделя · #{data?.nextSeason?.weekNumber || (data?.season.weekNumber || 1) + 1}</span>
+            <h2>{data?.nextSeason?.title || "Новое хранилище"}</h2>
+            <p>Старт через {daysUntil(data?.nextSeason?.startsAt) ?? 7} дн.</p>
+          </div>
         </div>
       </aside>
     </div>
@@ -154,13 +160,6 @@ export default function SeasonPage() {
 
     {error ? <div className="mxm-alert mxm-alert-error mt-3">{error}</div> : null}
     {notice ? <div role="status" aria-live="polite" className="mxm-alert mxm-success-pop mt-3">{notice}</div> : null}
-
-    <section className="mxm-season-exclusive">
-      <div><span>Только в этом пропуске</span><h2>Эксклюзивная коллекция</h2></div>
-      <div className="mxm-season-exclusive-list">
-        {exclusiveFrames.length ? exclusiveFrames.map((frame) => <div key={frame.key} className="mxm-season-frame-card"><div className="mxm-season-frame-preview"><Image src={frame.assetSrc!} alt="" fill sizes="64px" /></div><span>{frame.title}</span><small>не продаётся</small></div>) : <><FramePlaceholder /><FramePlaceholder /><FramePlaceholder /></>}
-      </div>
-    </section>
 
     <section className="mxm-season-board">
       <header className="mxm-season-board-head"><div><span>Награды недели</span><h2>12 уровней</h2></div><div className="mxm-season-legend"><span><i className="is-ready" />Доступно</span><span><i className="is-premium" />Premium</span><span><i />Закрыто</span></div></header>

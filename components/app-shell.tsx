@@ -137,8 +137,8 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   return (
-    <div className="mxm-shell-frame mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1380px] lg:grid lg:grid-cols-[232px_1fr]">
-      <aside className="mxm-desktop-sidebar sticky top-0 hidden h-screen px-4 py-5 lg:flex lg:flex-col">
+    <div className="mxm-shell-frame mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1440px] lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
+      <aside className="mxm-desktop-sidebar sticky top-0 hidden h-screen px-3 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="mxm-brand-lockup">
           <span className="mxm-brand-mark">MXM</span>
           <span className="mxm-brand-copy"><b>MEMEX MARKET</b></span>

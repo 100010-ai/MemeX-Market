@@ -3551,9 +3551,9 @@ button:disabled { -webkit-text-fill-color: currentColor; }
 .mxm-profile-progress { height:2px; overflow:hidden; margin-top:11px; border-radius:99px; background:rgba(255,255,255,.05); }
 .mxm-profile-progress>div { height:100%; border-radius:inherit; background:linear-gradient(90deg,#859dff,#b4c1ff); }
 .mxm-topbar { border-bottom:1px solid rgba(255,255,255,.055); box-shadow:0 8px 28px rgba(0,0,0,.10); }
-.mxm-topbar-inner { max-width:1148px; }
+.mxm-topbar-inner { max-width:1260px; }
 .mxm-topbar-eyebrow { margin-bottom:2px; color:#59636e; font-size:6.5px; font-weight:750; letter-spacing:.14em; }
-.mxm-shell-content>main { width:100%; max-width:1160px; }
+.mxm-shell-content>main { width:100%; max-width:1260px; }
 .mxm-shell-content .mxm-card { background:linear-gradient(180deg,rgba(17,21,26,.97),rgba(12,15,19,.98)); border-color:rgba(255,255,255,.075); box-shadow:inset 0 1px rgba(255,255,255,.018),0 12px 32px rgba(0,0,0,.10); }
 .mxm-shell-content input:not([type="checkbox"]):not([type="radio"]):focus,
 .mxm-shell-content textarea:focus,
@@ -4035,10 +4035,17 @@ input:focus-visible,textarea:focus-visible,select:focus-visible {
 .mxm-season-next-card { display:flex; min-height:258px; overflow:hidden; border-radius:20px; flex-direction:column; }
 .mxm-season-next-head { display:flex; min-height:42px; align-items:center; justify-content:space-between; padding:0 14px; color:#818b96; font-size:8px; letter-spacing:.08em; text-transform:uppercase; }
 .mxm-season-next-head b { color:#a9baff; font-size:10px; }
-.mxm-season-next-visual { position:relative; min-height:133px; overflow:hidden; border-block:1px solid rgba(255,255,255,.055); }
+.mxm-season-next-frames { display:grid; flex:1; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; padding:7px 10px 9px; }
+.mxm-season-next-card .mxm-season-frame-card { display:flex; min-width:0; align-items:center; justify-content:center; flex-direction:column; gap:3px; border-radius:10px; padding:5px 3px; text-align:center; }
+.mxm-season-next-card .mxm-season-frame-preview { width:68px; height:68px; grid-row:auto; }
+.mxm-season-next-card .mxm-season-frame-card>span { width:100%; align-self:auto; font-size:7px; }
+.mxm-season-next-card .mxm-season-frame-card>small { align-self:auto; margin-top:0; font-size:5px; }
+.mxm-season-next-release { display:grid; min-height:74px; grid-template-columns:94px minmax(0,1fr); border-top:1px solid rgba(255,255,255,.055); }
+.mxm-season-next-visual { position:relative; min-height:74px; overflow:hidden; border-right:1px solid rgba(255,255,255,.055); }
 .mxm-season-next-visual::after { position:absolute; inset:0; background:linear-gradient(0deg,rgba(7,9,12,.72),transparent 60%); content:""; }
 .mxm-season-next-visual img { object-fit:cover; object-position:67% 50%; filter:saturate(.72) brightness(.78); transform:scale(1.04); }
-.mxm-season-next-copy { padding:13px 14px 15px; }
+.mxm-season-next-copy { align-self:center; padding:8px 10px; }
+.mxm-season-next-copy>span { color:#66717d; font-size:5.5px; letter-spacing:.07em; text-transform:uppercase; }
 .mxm-season-next-copy h2 { overflow:hidden; font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
 .mxm-season-next-copy p { margin-top:4px; color:#78828d; font-size:8px; }
 .mxm-season-commandbar { display:grid; min-height:62px; grid-template-columns:auto minmax(180px,1fr) auto auto; align-items:center; gap:14px; margin-top:12px; border-radius:16px; padding:10px 12px; }
@@ -4116,10 +4123,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible {
   .mxm-season-vault-copy { min-height:230px; padding:21px; }
   .mxm-season-vault-copy h1 { max-width:290px; font-size:25px; }
   .mxm-season-vault-copy>p { max-width:270px; font-size:9px; }
-  .mxm-season-next-card { display:grid; min-height:96px; grid-template-columns:116px 1fr; grid-template-rows:30px 1fr; }
-  .mxm-season-next-head { grid-column:2; grid-row:1; min-height:30px; padding:0 11px; }
-  .mxm-season-next-visual { grid-row:1/3; min-height:96px; border-block:0; border-right:1px solid rgba(255,255,255,.055); }
-  .mxm-season-next-copy { grid-column:2; padding:5px 11px 10px; }
+  .mxm-season-next-card { min-height:auto; }
+  .mxm-season-next-head { min-height:36px; padding:0 11px; }
+  .mxm-season-next-frames { min-height:110px; }
+  .mxm-season-next-card .mxm-season-frame-preview { width:64px; height:64px; }
+  .mxm-season-next-release { min-height:82px; grid-template-columns:116px 1fr; }
+  .mxm-season-next-visual { min-height:82px; }
+  .mxm-season-next-copy { padding:7px 11px; }
   .mxm-season-commandbar { grid-template-columns:auto 1fr; gap:10px; }
   .mxm-season-claim-all,.mxm-season-done { grid-column:1/-1; justify-content:center; }
   .mxm-season-xp-sources { display:grid; grid-template-columns:repeat(4,1fr); }
