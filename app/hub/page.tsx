@@ -29,7 +29,7 @@ type Dashboard = {
 const emptyDashboard: Dashboard = { activity: [], leaders: [], meRank: null, coins: [], missions: [], season: null };
 
 export default function HubPage() {
-  const { profile } = useTelegramProfile();
+  const { profile, appReady } = useTelegramProfile();
   const [data, setData] = useState<Dashboard>(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +61,10 @@ export default function HubPage() {
   }, []);
 
   useEffect(() => {
+    if (!appReady) return;
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [appReady, load]);
 
   const realtimeReload = useCallback(() => { void load(true); }, [load]);
   const readyMissions = useMemo(() => data.missions.filter((mission) => !mission.claimed && !mission.rewardRevoked && mission.progress >= mission.target), [data.missions]);

@@ -228,7 +228,10 @@ async function GETHandler(request: NextRequest) {
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
-      bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
+      // A one-item catalogue used to prevent every later TonAPI bootstrap.
+      // Continue the real catalogue import until the market has a useful
+      // first page instead of getting permanently stuck on PEPE.
+      bootstrapRecommended: page.totalGifts < 24 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
       genesis: genesisResult.data || null,
       liquidity: liquidityResult.data || null,
       filterOptions,

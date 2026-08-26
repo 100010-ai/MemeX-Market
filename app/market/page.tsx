@@ -10,6 +10,7 @@ import { money, percent, price } from "@/lib/format";
 import { CoinAvatar } from "@/components/ui";
 import { GiftCard } from "@/components/gifts/gift-card";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { useTelegramProfile } from "@/components/telegram-provider";
 import { GiftFiltersDrawer } from "@/components/gifts/gift-filters-drawer";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { adaptiveListPageSize, getClientPerformanceProfile } from "@/lib/client-performance";
@@ -66,6 +67,7 @@ type MarketUiState = {
 };
 
 export default function MarketPage() {
+  const { appReady } = useTelegramProfile();
   const [giftPageSize] = useState(() => adaptiveListPageSize(24, 16));
   const [data, setData] = useState<MarketPayload>(() => emptyMarketPayload());
   const [tab, setTab] = useState<"gifts" | "coins">("gifts");
@@ -225,7 +227,12 @@ export default function MarketPage() {
     } finally { if (seq === loadSeq.current) setLoading(false); }
   }, [tab, activeScopeKey, giftCatalogQuery, giftPageSize]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // The page remains mounted behind AppShell's launch screen. Waiting for
+    // the signed Telegram session prevents protected requests from racing auth.
+    if (!appReady) return;
+    void load();
+  }, [appReady, load]);
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
@@ -351,10 +358,10 @@ export default function MarketPage() {
   }, [load, tab]);
 
   useEffect(() => {
-    if (tab !== "gifts" || loading || !data.bootstrapRecommended || data.totalGifts > 0 || bootstrapLoading || bootstrapError) return;
+    if (!appReady || tab !== "gifts" || loading || !data.bootstrapRecommended || bootstrapLoading || bootstrapError) return;
     const timer = window.setTimeout(() => void bootstrapGifts(), 0);
     return () => window.clearTimeout(timer);
-  }, [tab, loading, data.bootstrapRecommended, data.totalGifts, bootstrapLoading, bootstrapError, bootstrapGifts]);
+  }, [appReady, tab, loading, data.bootstrapRecommended, bootstrapLoading, bootstrapError, bootstrapGifts]);
 
   const filterOptions = data.filterOptions || { collections: [], models: [], backdrops: [], symbols: [] };
   const filterCollections = useMemo(() => filterOptions.collections.length ? filterOptions.collections : data.collections.map((item) => item.baseName), [filterOptions.collections, data.collections]);
@@ -722,7 +729,7 @@ const CoinRow = memo(function CoinRow({ coin, index, watched, busy, onWatch }: {
   const buyShare = flowTotal > 0 ? Math.round((coin.buyVolume24h / flowTotal) * 100) : 0;
   const boosted = Boolean(coin.boostedUntil);
   return <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto] ${boosted ? "rounded-[16px] border border-[rgba(198,170,88,.24)] bg-[linear-gradient(90deg,rgba(198,170,88,.11),rgba(198,170,88,.025))] px-2" : ""}`}>
-    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}{boosted ? <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[rgba(198,170,88,.16)] px-1.5 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-[var(--accent)]"><Sparkles size={8} />Продвижение</span> : null}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% покупок</p></div></Link>
+    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 shrink-0 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1"><p className="min-w-0 truncate text-sm font-medium">{coin.name}</p>{boosted ? <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[rgba(198,170,88,.16)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--accent)]"><Sparkles size={8} />Продвижение</span> : null}</div><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% покупок</p></div></Link>
     <Link href={`/coin/${coin.id}`} className="text-right md:text-left"><p className="text-xs font-medium">{price(coin.currentPrice)}</p><p className={`text-[10px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Капитализация</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Объём 24ч</p><p className="mt-0.5 text-xs">{money(coin.volume24h)}</p></Link>
