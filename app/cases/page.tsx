@@ -193,7 +193,7 @@ export default function CasesPage() {
 
   const reelStyle = reel ? ({ "--mxm-case-stop": reel.stopIndex } as CSSProperties) : undefined;
 
-  return <div className="mx-auto max-w-5xl">
+  return <div className="mx-auto max-w-[1240px]">
     <header className="mxm-compact-page-head">
       <div className="min-w-0">
         <div className="flex items-center gap-2"><h1 className="mxm-page-title">Кейсы MXM</h1><span className="mxm-status-chip">честный дроп</span></div>
@@ -221,7 +221,7 @@ export default function CasesPage() {
       </button>)}
     </div>
 
-    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
+    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="min-w-0">
         <div data-case-series={current?.sku || "case_starter"} className={`mxm-case-stage-compact ${opening ? "is-opening" : ""} ${reward ? `has-reward is-${reward.rarity}` : ""}`}>
           {reel && reelPhase !== "revealed" ? <div className="mxm-case-reel-wrap" aria-live="polite">

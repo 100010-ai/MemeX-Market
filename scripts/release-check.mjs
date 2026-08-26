@@ -81,6 +81,7 @@ const migration100025 = read("supabase/migrations/100025_admin_funnel_consistenc
 const migration100026 = read("supabase/migrations/100026_system_hardening_v0700.sql");
 const migration100027 = read("supabase/migrations/100027_remaining_fk_indexes_v0700.sql");
 const migration100028 = read("supabase/migrations/100028_tonapi_content_media_v0700.sql");
+const migration100029 = read("supabase/migrations/100029_stars_weekly_seasons_verification_v071.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -139,7 +140,7 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.70.1 package version", packageJson.includes('"version": "0.70.1"'));
+check("v0.71 package version", packageJson.includes('"version": "0.71.0"'));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));
@@ -149,6 +150,10 @@ check("Migration 100025 keeps conversion stages nested", migration100025.include
 check("Migration 100026 repairs media and hardens Data API", migration100026.includes("consume_rate_limits_v070") && migration100026.includes("model_is_animated = n.is_animated") && migration100026.includes("alter default privileges"));
 check("Migration 100027 completes FK coverage", migration100027.includes("season_claims_reward_fk_idx") && migration100027.includes("user_missions_mission_id_fk_idx"));
 check("Migration 100028 preserves trusted TonAPI content", migration100028.includes("content_url") && migration100028.includes("headgun\\.org") && migration100028.includes("chat-mafia\\.com"));
+check("Migration 100029 adds 52 weekly seasons and review verification", migration100029.includes("generate_series(0,51)") && migration100029.includes("review_verification_request_v071") && migration100029.includes("creator_verified_90d"));
+check("v0.71 uses paid Stars as commercial revenue", read("components/admin/admin-dashboard.tsx").includes("Выручка Stars") && read("components/admin/admin-dashboard.tsx").includes("Игровой TON не считается доходом"));
+check("v0.71 Season Vault uses real optimized assets", read("app/season/page.tsx").includes("weekly-vault-hero.webp") && read("lib/profile-frames.ts").includes("frame-glacier-crown.png") && read("app/globals.css").includes("weekly Season Vault"));
+check("v0.71 verification is review-based", read("app/api/verification/route.ts").includes("verification_requests_v071") && adminAction.includes('action === "verification.review"') && read("app/api/creator/route.ts").includes("creator_verifications_v071"));
 check("v0.67 admin dashboard uses real charts and periods", exists("components/admin/admin-dashboard.tsx") && read("components/admin/admin-trend-chart.tsx").includes("lightweight-charts") && adminPage.includes("AdminDashboard") && adminPage.includes("AdminTeamPanel"));
 check("v0.67 admin permissions guard operations", read("lib/admin.ts").includes("ADMIN_ROLE_PERMISSIONS") && adminAction.includes("permissionForAction") && adminAction.includes('action === "admin.member.upsert"'));
 check("v0.67 presence is authenticated and rate-limited", read("app/api/analytics/presence/route.ts").includes("requireProfile") && read("app/api/analytics/presence/route.ts").includes("sameOriginMutation") && read("app/api/analytics/presence/route.ts").includes("enforceRateLimit"));
@@ -191,7 +196,7 @@ check("v0.64 progression primitives present", migration100001.includes("account_
 
 // v0.64.2 Existing Systems Polish: every existing player/admin surface touched by the pass.
 check("v0.64.2 cases roulette can skip safely", read("app/cases/page.tsx").includes("skipReveal") && read("app/cases/page.tsx").includes("Пропустить") && read("app/cases/page.tsx").includes("pendingRevealRef"));
-check("v0.64.2 battle pass uses compact horizontal track", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("scrollIntoView") && read("app/season/page.tsx").includes("claimAll"));
+check("v0.64.2 battle pass uses compact horizontal track", read("app/season/page.tsx").includes("mxm-season-grid-scroll") && read("app/season/page.tsx").includes("scrollIntoView") && read("app/season/page.tsx").includes("claimAll"));
 check("v0.64.2 store explains unavailable actions", read("components/store-front.tsx").includes("actionReason") && read("components/store-front.tsx").includes("pendingStarsProduct") && read("components/store-front.tsx").includes("confirmPurchaseConsent"));
 check("v0.64.2 profile frames use shaped silhouettes", read("components/profile-avatar.tsx").includes("mxm-profile-frame-orbit-dot") && read("app/globals.css").includes("mxm-profile-frame-prestige") && read("app/globals.css").includes("clip-path: polygon"));
 check("v0.64.2 profile has achievement showcase", read("app/profile/page.tsx").includes("Витрина достижений") && read("app/profile/page.tsx").includes("mxm-profile-achievement"));
@@ -269,7 +274,7 @@ check("v0.64.9 Gift Market uses adaptive page sizing", read("app/market/page.tsx
 check("v0.64.9 Gift detail prioritizes trading", read("components/gifts/gift-detail.tsx").includes("mxm-gift-trade-panel") && read("app/globals.css").includes("position:sticky"));
 check("v0.64.9 memecoin chart starts from the first public candle", read("app/coin/[id]/page.tsx").includes("chartCandles.length >= 1") && read("app/coin/[id]/page.tsx").includes("openTelegramLinkSafely"));
 check("v0.64.9 portfolio supports adaptive rendering and quick sell", read("app/vault/page.tsx").includes("adaptiveListPageSize") && read("app/vault/page.tsx").includes("mxm-vault-quick-sell"));
-check("v0.64.9 battle pass has focused track and live success state", read("app/season/page.tsx").includes("mxm-season-track") && read("app/season/page.tsx").includes("mxm-success-pop"));
+check("v0.64.9 battle pass has focused track and live success state", read("app/season/page.tsx").includes("mxm-season-grid-scroll") && read("app/season/page.tsx").includes("mxm-success-pop"));
 check("v0.64.9 cases reduce roulette work on constrained devices", read("app/cases/page.tsx").includes("getClientPerformanceProfile") && read("app/cases/page.tsx").includes("constrained"));
 check("v0.64.9 profile keeps secondary metrics collapsed", read("app/profile/page.tsx").includes("mxm-profile-more") && read("app/profile/page.tsx").includes("Активы"));
 check("v0.64.9 frames simplify small and constrained renders", read("app/globals.css").includes('[data-profile-frame-size="small"] .mxm-profile-frame-mark') && read("app/globals.css").includes(".mxm-device-constrained .mxm-profile-frame-mark"));
@@ -289,7 +294,7 @@ check("v0.64.9 request observability is correlated", read("lib/api-route.ts").in
 check("v0.64.3 market has removable active filters", read("app/market/page.tsx").includes("mxm-active-filters") && read("app/market/page.tsx").includes("setCollection(\"all\")") && read("app/market/page.tsx").includes("setPriceBand(\"all\")"));
 check("v0.64.3 gift and coin trade panels are visually unified", read("components/gifts/gift-detail.tsx").includes("mxm-gift-trade-panel") && read("app/coin/[id]/page.tsx").includes("mxm-trade-panel") && read("app/globals.css").includes(".mxm-gift-trade-panel"));
 check("v0.64.3 cases keep authoritative roulette with quieter stage", read("app/cases/page.tsx").includes("mxm-case-stage-compact") && read("app/cases/page.tsx").includes("pendingRevealRef") && !read("app/cases/page.tsx").includes("Результат уже зафиксирован сервером"));
-check("v0.64.3 battle pass XP sources are compact chips", read("app/season/page.tsx").includes("mxm-xp-chip") && read("app/globals.css").includes(".mxm-xp-chip"));
+check("v0.64.3 battle pass XP sources are compact chips", read("app/season/page.tsx").includes("mxm-season-xp-sources") && read("app/globals.css").includes(".mxm-season-xp-sources"));
 check("v0.64.3 tasks keep copy compact", read("app/tasks/page.tsx").includes("line-clamp-1") && read("app/tasks/page.tsx").includes("В процессе"));
 check("v0.64.3 notifications clamp long bodies", read("app/notifications/page.tsx").includes("line-clamp-2") && read("app/notifications/page.tsx").includes("mxm-switch"));
 check("v0.64.3 creator dashboard is compact", read("app/creator/page.tsx").includes("mxm-compact-page-head") && read("app/creator/page.tsx").includes("Выбрать инструменты"));

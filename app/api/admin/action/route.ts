@@ -17,7 +17,7 @@ function permissionForAction(action: string): AdminPermission | null {
   if (action.startsWith("admin.member.")) return "admins.manage";
   if (action.startsWith("balance.") || action.startsWith("profile.")) return "players.manage";
   if (action.startsWith("mission.")) return "missions.manage";
-  if (action.startsWith("coin.")) return "coins.manage";
+  if (action.startsWith("coin.") || action.startsWith("verification.")) return "coins.manage";
   if (action.startsWith("gift.")) return "gifts.manage";
   if (action.startsWith("catalog.") || action.startsWith("npc.")) return "catalog.manage";
   if (action.startsWith("promo.")) return "promos.manage";
@@ -146,6 +146,19 @@ async function POSTHandler(request: Request) {
       if (error) throw error;
       await audit(actor, "mission.delete", "mission", id);
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "verification.review") {
+      const requestId = text(body.requestId, 80);
+      const decision = body.decision === "approved" ? "approved" : body.decision === "rejected" ? "rejected" : null;
+      const tier = body.tier === "notable" ? "notable" : "verified";
+      const note = text(body.note, 600);
+      if (!validUuidLike(requestId) || !decision) return NextResponse.json({ error: "Некорректное решение по заявке" }, { status: 400 });
+      if (decision === "rejected" && note.length < 5) return NextResponse.json({ error: "Укажите причину отказа" }, { status: 400 });
+      const { data, error } = await supabase.rpc("review_verification_request_v071", { p_request_id: requestId, p_reviewer_profile_id: admin.id, p_decision: decision, p_note: note, p_tier: tier });
+      if (error) throw error;
+      await audit(actor, "verification.review", "verification_request", requestId, { decision, tier, note });
+      return NextResponse.json({ ok: true, result: data });
     }
 
     if (action === "coin.create") {

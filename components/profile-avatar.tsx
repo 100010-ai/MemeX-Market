@@ -35,7 +35,8 @@ export function ProfileAvatar({
         ? <Image unoptimized fill sizes={size === "large" ? "56px" : size === "small" ? "32px" : "52px"} src={avatarSrc} alt={`Профиль ${name}`} className="object-cover" />
         : <span className="grid h-full w-full place-items-center bg-[var(--panel-2)] text-[var(--muted)]">{name ? <span className={size === "small" ? "text-[11px] font-semibold" : "text-base font-semibold"}>{name.slice(0, 1).toUpperCase()}</span> : <UserRound size={size === "small" ? 14 : 21} />}</span>}
     </span>
-    {framed ? <><span aria-hidden="true" className="mxm-profile-frame-orbit-dot" /><span aria-label={frameTitle || "Рамка профиля"} className="mxm-profile-frame-mark"><Sparkles size={8} /></span></> : null}
+    {frame?.assetSrc ? <Image aria-hidden="true" unoptimized src={frame.assetSrc} alt="" width={128} height={128} className={`mxm-profile-frame-art is-${frame.motion || "drift"}`} /> : null}
+    {framed && !frame?.assetSrc ? <><span aria-hidden="true" className="mxm-profile-frame-orbit-dot" /><span aria-label={frameTitle || "Рамка профиля"} className="mxm-profile-frame-mark"><Sparkles size={8} /></span></> : null}
   </span>;
 }
 

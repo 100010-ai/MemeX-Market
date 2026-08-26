@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, BadgeCheck, Coins, RefreshCw, Rocket, ShoppingBag, Sparkles, TrendingUp, Users } from "lucide-react";
+import { BarChart3, BadgeCheck, Coins, RefreshCw, Rocket, Send, ShieldCheck, ShoppingBag, Sparkles, TrendingUp, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { compact, money, price } from "@/lib/format";
 import { rankLabel } from "@/lib/ui-copy";
@@ -11,19 +11,20 @@ type CreatorCoin = {
   id:string; name:string; symbol:string; imageUrl:string|null; status:string; currentPrice:number; marketCap:number;
   floorPrice:number|null; floorActive:boolean; holders:number; volume:number; creatorFees:number; boostedUntil:string|null; createdAt:string;
   uniqueBuyers?:number|null; buyerRetentionPct?:number|null; buySellRatio?:number|null;
+  verified:boolean; verificationTier:string|null;
 };
+type VerificationRequest={id:string;target_type:"creator"|"coin";coin_id:string|null;status:"pending"|"approved"|"rejected"|"revoked";requested_at:string;reviewed_at:string|null;review_note:string|null;tier:string|null};
 type Payload = {
-  verified:boolean; analyticsUnlocked:boolean;
+  verified:boolean; verificationTier:string|null; analyticsUnlocked:boolean;
   level:{ name:string; creatorFeeBps:number; platformFeeBps:number; holderCount:number; volume:number; nextVolume:number|null };
   totals:{ coins:number; holders:number; volume:number; creatorFees:number };
-  entitlements:Array<{key:string;expiresAt:string|null}>; coins:CreatorCoin[];
+  entitlements:Array<{key:string;expiresAt:string|null}>; coins:CreatorCoin[]; verificationRequests:VerificationRequest[];
 };
 
 function entitlementLabel(key:string) {
   const labels:Record<string,string>={
     creator_analytics:"Расширенная аналитика",
     creator_boost:"Продвижение автора",
-    creator_verified:"Верификация",
   };
   return labels[key] || key.replaceAll("_", " ");
 }
@@ -32,6 +33,10 @@ export default function CreatorDashboardPage() {
   const [data,setData]=useState<Payload|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
+  const [verificationTarget,setVerificationTarget]=useState("creator");
+  const [evidence,setEvidence]=useState("");
+  const [submitting,setSubmitting]=useState(false);
+  const [notice,setNotice]=useState<string|null>(null);
   const load=useCallback(async()=>{
     setLoading(true);setError(null);
     try{setData(await apiFetch<Payload>("/api/creator",{cacheMs:0}));}
@@ -45,15 +50,22 @@ export default function CreatorDashboardPage() {
     const next=Math.max(current,Number(data.level.nextVolume)||current);
     return next<=0?0:Math.min(1,current/next);
   },[data]);
+  async function submitVerification(event:React.FormEvent){
+    event.preventDefault();if(submitting)return;setSubmitting(true);setError(null);setNotice(null);
+    try{await apiFetch("/api/verification",{method:"POST",body:JSON.stringify({targetType:verificationTarget==="creator"?"creator":"coin",coinId:verificationTarget==="creator"?null:verificationTarget,evidence})});setEvidence("");setNotice("Заявка отправлена на проверку");await load();}
+    catch(cause){setError(cause instanceof Error?cause.message:"Не удалось отправить заявку");}
+    finally{setSubmitting(false);}
+  }
   if (!data && loading) return <div className="mx-auto max-w-5xl"><div className="mxm-skeleton h-36 rounded-[18px]"/><div className="mxm-skeleton mt-3 h-56 rounded-[18px]"/></div>;
   if (!data) return <div className="mxm-card mx-auto max-w-xl p-6 text-center"><p className="text-xs text-[var(--negative)]">{error||"Кабинет недоступен"}</p><button type="button" onClick={()=>void load()} className="mxm-secondary-action mt-4"><RefreshCw size={12}/>Повторить</button></div>;
   return <div className="mx-auto max-w-5xl">
     <header className="mxm-compact-page-head">
-      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<BadgeCheck size={16} className="text-[#63a7ff]" aria-label="Проверенный автор"/>:null}</div></div>
+      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<span className="mxm-verified-badge"><BadgeCheck size={14}/>Проверен</span>:null}</div></div>
       <div className="flex shrink-0 gap-2"><Link href="/store?category=creator" className="mxm-compact-link"><ShoppingBag size={12}/>Инструменты</Link><Link href="/create" className="mxm-compact-link"><Rocket size={12}/>Запустить</Link></div>
     </header>
 
     {error?<div className="mxm-alert mxm-alert-error mb-3 flex items-center justify-between gap-2"><span>{error}</span><button type="button" onClick={()=>void load()} className="underline">Обновить</button></div>:null}
+    {notice?<div className="mxm-alert mxm-success-pop mb-3">{notice}</div>:null}
 
     <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <Metric icon={<TrendingUp size={12}/>} label="Уровень" value={rankLabel(data.level.name)}/>
@@ -74,13 +86,23 @@ export default function CreatorDashboardPage() {
 
     {!data.analyticsUnlocked?<div className="mxm-card mt-3 flex items-center justify-between gap-3 p-3 text-[9px] text-[var(--muted)]"><span>Расширенная аналитика</span><Link href="/store?category=creator" className="shrink-0 text-[var(--accent)]">Открыть</Link></div>:null}
 
+    <section className="mxm-verification-center mt-4">
+      <div className="mxm-verification-copy"><span><ShieldCheck size={13}/>Верификация</span><h2>Проверка репутации</h2><p>Галочка выдаётся после ручной проверки проекта. Купить её нельзя.</p></div>
+      <form onSubmit={submitVerification} className="mxm-verification-form">
+        <select value={verificationTarget} onChange={event=>setVerificationTarget(event.target.value)} aria-label="Объект проверки"><option value="creator">Профиль автора</option>{data.coins.map(coin=><option key={coin.id} value={coin.id}>{coin.name} · ${coin.symbol}</option>)}</select>
+        <input value={evidence} onChange={event=>setEvidence(event.target.value)} maxLength={1200} minLength={20} placeholder="Ссылки, аудит, сообщество, достижения" aria-label="Основания для проверки"/>
+        <button disabled={submitting||evidence.trim().length<20}><Send size={12}/>{submitting?"Отправляем":"На проверку"}</button>
+      </form>
+      <div className="mxm-verification-statuses">{data.verificationRequests.slice(0,4).map(request=><div key={request.id}><span>{request.target_type==="creator"?"Автор":data.coins.find(coin=>coin.id===request.coin_id)?.symbol||"Мемкоин"}</span><b className={`is-${request.status}`}>{request.status==="pending"?"На проверке":request.status==="approved"?"Одобрено":request.status==="rejected"?"Отклонено":"Отозвано"}</b></div>)}</div>
+    </section>
+
     <section className="mt-4 overflow-hidden rounded-[16px] border border-[var(--border)]">
       <div className="mxm-section-head"><span>Мои мемкоины</span><span>{data.coins.length}</span></div>
       {data.coins.length?<div className="divide-y divide-[var(--border-soft)]">{data.coins.map((coin)=>{
         const hasMarketActivity=Number(coin.volume)>0 || Number(coin.uniqueBuyers||0)>0;
         const boostActive=Boolean(coin.boostedUntil&&new Date(coin.boostedUntil).getTime()>Date.now());
         return <Link href={`/coin/${coin.id}`} key={coin.id} className="block p-3 hover:bg-white/[.025]">
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-[11px] font-semibold">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[var(--muted)]"><span>{coin.holders} владельцев</span>{hasMarketActivity?<span>объём {money(coin.volume)}</span>:<span className="text-[var(--accent)]">Новый рынок</span>}<span>комиссия {money(coin.creatorFees)}</span>{boostActive?<span className="text-[var(--accent)]">продвижение активно</span>:null}</div></div><div className="shrink-0 text-right"><p className="text-[11px]">{price(coin.currentPrice)}</p><p className="mt-1 text-[8px] text-[var(--muted)]">кап. {money(coin.marketCap)}</p></div></div>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="flex items-center gap-1 truncate text-[11px] font-semibold">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span>{coin.verified?<BadgeCheck size={13} className="shrink-0 text-[#63a7ff]" aria-label="Проверенный мемкоин"/>:null}</p><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[var(--muted)]"><span>{coin.holders} владельцев</span>{hasMarketActivity?<span>объём {money(coin.volume)}</span>:<span className="text-[var(--accent)]">Новый рынок</span>}<span>комиссия {money(coin.creatorFees)}</span>{boostActive?<span className="text-[var(--accent)]">продвижение активно</span>:null}</div></div><div className="shrink-0 text-right"><p className="text-[11px]">{price(coin.currentPrice)}</p><p className="mt-1 text-[8px] text-[var(--muted)]">кап. {money(coin.marketCap)}</p></div></div>
           {data.analyticsUnlocked&&hasMarketActivity?<div className="mt-2 flex flex-wrap gap-1.5">{[["Покупатели",coin.uniqueBuyers??0],["Удержание",`${coin.buyerRetentionPct??0}%`],["Buy/Sell",coin.buySellRatio??0]].map(([label,value])=><span key={String(label)} className="mxm-creator-metric-pill"><small>{label}</small><b>{value}</b></span>)}</div>:null}
         </Link>;
       })}</div>:<div className="p-8 text-center"><p className="text-xs text-[var(--muted)]">Вы ещё не запускали мемкоины.</p><Link href="/create" className="mt-3 inline-flex text-[9px] text-[var(--accent)]">Запустить первый</Link></div>}

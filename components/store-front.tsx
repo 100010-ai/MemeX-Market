@@ -284,7 +284,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-[1240px]">
       <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
         <div className="flex items-start justify-between gap-4">
           <div><p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Telegram Stars · MXM</p><h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">Магазин MXM</h1><p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Кейсы, пропуск, косметика и инструменты для виртуальной экономики MXM.</p></div>
@@ -318,7 +318,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         {category === "creator" && data?.creatorCoins.length ? <label className="mb-3 block max-w-sm text-[10px] text-[var(--muted)]">Мемкоин для продвижения<select value={creatorCoinId} onChange={(event) => setCreatorCoinId(event.target.value)} className="mxm-input mt-1.5 w-full text-white">{data.creatorCoins.map((coin) => <option key={coin.id} value={coin.id}>{coin.name} · ${coin.symbol}</option>)}</select></label> : null}
         {category === "creator" && data && !data.creatorCoins.length ? <div className="mb-3 flex items-center justify-between gap-3 border-y border-[var(--border-soft)] py-3 text-[9px] text-[var(--muted)]"><span>Продвижение требует собственного активного мемкоина.</span><Link href="/create" className="text-[var(--accent)]">Создать</Link></div> : null}
 
-        {!data ? <div className="grid gap-3 md:grid-cols-2"><div className="mxm-skeleton h-44" /><div className="mxm-skeleton h-44" /></div> : products.length ? <div className="grid gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
+        {!data ? <div className="grid gap-3 md:grid-cols-2"><div className="mxm-skeleton h-44" /><div className="mxm-skeleton h-44" /></div> : products.length ? <div className="grid gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {products.map((product) => {
             const owned = inventory.get(product.sku) || 0;
             const sink = mxmShop.get(product.sku);

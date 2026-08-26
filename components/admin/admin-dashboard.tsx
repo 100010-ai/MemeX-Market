@@ -72,7 +72,7 @@ export function AdminDashboard({ analytics, metrics, status, period, loading, on
         <AdminHeroKpi icon={Activity} label="Активны сегодня" value={number(summary.activeToday, 0)} note={`${number(summary.activePeriod, 0)} за ${period} дней`} tone="accent"/>
         <AdminHeroKpi icon={UserPlus} label="Новые игроки" value={number(summary.newPeriod, 0)} note={percentDelta(summary.newPeriod, summary.newPrevious)}/>
         <AdminHeroKpi icon={Users} label="Вернулись" value={number(summary.returningPeriod, 0)} note={percentDelta(summary.activePeriod, summary.activePrevious)}/>
-        <AdminHeroKpi icon={CircleDollarSign} label="Оборот" value={`${number(summary.turnover)} TON`} note={`${number(summary.trades, 0)} сделок · ${number(summary.payers, 0)} плательщиков`}/>
+        <AdminHeroKpi icon={CircleDollarSign} label="Выручка Stars" value={`${number(summary.stars, 0)} Stars`} note={`${number(summary.payers, 0)} плательщиков · только оплаченные счета`} tone="good"/>
       </div>
       <div className="admin-coverage-note"><ShieldCheck size={12}/><span>{coverage ? `Live-присутствие учитывается с ${coverage}. Исторические активные пользователи восстановлены по сделкам и событиям экономики.` : "Live-присутствие начнёт заполняться после первого входа игрока; исторические значения строятся по подтверждённым действиям."}</span></div>
     </section>
@@ -89,7 +89,7 @@ export function AdminDashboard({ analytics, metrics, status, period, loading, on
     </div>
 
     <div className="admin-operations-grid">
-      <section className="admin-insight-panel"><header><div><span>BUSINESS</span><h3>Коммерческий срез</h3></div><Link href="/admin/economy-risk">Risk Center <ArrowUpRight size={11}/></Link></header><div className="admin-business-grid"><div><Coins size={14}/><span>Активные мемкоины</span><b>{number(metrics.activeCoins, 0)}</b></div><div><Gift size={14}/><span>Лоты подарков</span><b>{number(metrics.listedGifts, 0)}</b></div><div><CircleDollarSign size={14}/><span>Stars сегодня</span><b>{number(metrics.starsRevenueToday, 0)}</b></div><div><Users size={14}/><span>Всего игроков</span><b>{number(metrics.players, 0)}</b></div></div></section>
+      <section className="admin-insight-panel"><header><div><span>BUSINESS</span><h3>Коммерческий срез</h3></div><Link href="/admin/economy-risk">Risk Center <ArrowUpRight size={11}/></Link></header><div className="admin-business-grid"><div><CircleDollarSign size={14}/><span>Stars сегодня</span><b>{number(metrics.starsRevenueToday, 0)}</b></div><div><Users size={14}/><span>Всего плательщиков</span><b>{number(summary.payers, 0)}</b></div><div><Coins size={14}/><span>Игровой объём TON</span><b>{number(summary.turnover)}</b></div><div><Gift size={14}/><span>Виртуальных сделок</span><b>{number(summary.trades, 0)}</b></div></div><p className="mt-3 text-[8px] text-[var(--muted-2)]">Игровой TON не считается доходом и не смешивается с Telegram Stars.</p></section>
       <section className={`admin-insight-panel admin-issues-panel ${issues.length ? "has-issues" : "is-clear"}`}><header><div><span>OPERATIONS</span><h3>{issues.length ? "Требует внимания" : "Системы в норме"}</h3></div><Link href="/admin/health">Health <ArrowUpRight size={11}/></Link></header>{issues.length ? <div className="admin-issue-list">{issues.map((issue) => <p key={issue}><i/>{issue}</p>)}</div> : <div className="admin-clear-state"><ShieldCheck size={18}/><div><b>Критичных сигналов нет</b><span>Каталог, платежи и системный пул без известных ошибок.</span></div></div>}</section>
     </div>
   </div>;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Coins, Flame, Gem, Gift, Layers3, List, Plus, RefreshCw, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
+import { BadgeCheck, BarChart3, Coins, Flame, Gem, Gift, Layers3, List, Plus, RefreshCw, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { ActivityItem, Coin, GiftAsset, GiftCollection, Watchlist } from "@/lib/types";
 import { money, percent, price } from "@/lib/format";
@@ -722,7 +722,7 @@ const CoinRow = memo(function CoinRow({ coin, index, watched, busy, onWatch }: {
   const buyShare = flowTotal > 0 ? Math.round((coin.buyVolume24h / flowTotal) * 100) : 0;
   const boosted = Boolean(coin.boostedUntil);
   return <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 md:grid-cols-[minmax(0,1.25fr)_0.7fr_0.72fr_0.72fr_auto] ${boosted ? "rounded-[16px] border border-[rgba(198,170,88,.24)] bg-[linear-gradient(90deg,rgba(198,170,88,.11),rgba(198,170,88,.025))] px-2" : ""}`}>
-    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="truncate text-sm font-medium">{coin.name}{boosted ? <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[rgba(198,170,88,.16)] px-1.5 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-[var(--accent)]"><Sparkles size={8} />Продвижение</span> : null}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% покупок</p></div></Link>
+    <Link href={`/coin/${coin.id}`} className="flex min-w-0 items-center gap-2.5"><span className="w-4 text-[10px] text-[var(--muted)]">{index}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} /><div className="min-w-0"><p className="flex items-center gap-1 truncate text-sm font-medium">{coin.name}{coin.verified?<BadgeCheck size={13} className="shrink-0 text-[#63a7ff]" aria-label="Проверенный мемкоин"/>:null}{boosted ? <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-[rgba(198,170,88,.16)] px-1.5 py-0.5 align-middle text-[8px] font-semibold uppercase tracking-wide text-[var(--accent)]"><Sparkles size={8} />Продвижение</span> : null}</p><p className="truncate text-[10px] text-[var(--muted)]">${coin.symbol} · {coin.holderCount} · {buyShare}% покупок</p></div></Link>
     <Link href={`/coin/${coin.id}`} className="text-right md:text-left"><p className="text-xs font-medium">{price(coin.currentPrice)}</p><p className={`text-[10px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Капитализация</p><p className="mt-0.5 text-xs">{money(coin.marketCap)}</p></Link>
     <Link href={`/coin/${coin.id}`} className="hidden md:block"><p className="text-[9px] text-[var(--muted)]">Объём 24ч</p><p className="mt-0.5 text-xs">{money(coin.volume24h)}</p></Link>
@@ -744,7 +744,7 @@ const HotNowStrip = memo(function HotNowStrip({ tab, coins, collections, loading
         <div className="shrink-0 text-right"><p className="text-[10px] font-medium">{money(item.volume24h)}</p><p className={`mt-1 text-[9px] ${item.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(item.change24h)}</p></div>
       </Link>) : coins.map((coin, index) => <Link key={coin.id} href={`/coin/${coin.id}`} className="flex min-w-[190px] shrink-0 items-center gap-2.5 rounded-[12px] bg-[var(--panel-2)] px-3 py-2">
         <span className="text-[9px] text-[var(--muted)]">#{index + 1}</span><CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} />
-        <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><p className="mt-1 text-[8px] text-[var(--muted)]">{coin.tradeCount24h} сделок · {coin.holderCount} держ.</p></div>
+        <div className="min-w-0 flex-1"><p className="flex items-center gap-1 truncate text-[10px] font-medium">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span>{coin.verified?<BadgeCheck size={11} className="shrink-0 text-[#63a7ff]" aria-label="Проверенный мемкоин"/>:null}</p><p className="mt-1 text-[8px] text-[var(--muted)]">{coin.tradeCount24h} сделок · {coin.holderCount} держ.</p></div>
         <div className="shrink-0 text-right"><p className="text-[10px] font-medium">{money(coin.volume24h)}</p><p className={`mt-1 text-[9px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></div>
       </Link>)}
     </div> : null}
