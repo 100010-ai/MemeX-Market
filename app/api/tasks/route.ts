@@ -7,6 +7,7 @@ import { getMainChannelTaskState, MAIN_CHANNEL_MISSION_KEY, MAIN_CHANNEL_URL } f
 import { isInspectionSession } from "@/lib/session";
 
 const missionEnsureCache = new Map<string, number>();
+function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 
 async function ensureMissions(profileId: string) {
   const now = Date.now();
