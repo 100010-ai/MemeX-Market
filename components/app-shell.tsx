@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Sparkles, Star, Store, Trophy } from "lucide-react";
+import { Activity, Bell, Boxes, Crown, Gem, ListChecks, PackageOpen, Plus, ReceiptText, Sparkles, Star, Store, Trophy } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { apiFetch } from "@/lib/api";
@@ -153,6 +153,9 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         </nav>
         <p className="mxm-nav-eyebrow mt-5">Инструменты</p>
         <nav className="space-y-1">
+          <Link href="/store" className={`mxm-side-link ${pathname.startsWith("/store") ? "is-active" : ""}`}><Gem size={17} />Магазин MXM</Link>
+          <Link href="/season" className={`mxm-side-link ${pathname.startsWith("/season") ? "is-active" : ""}`}><Crown size={17} />Боевой пропуск</Link>
+          <Link href="/cases" className={`mxm-side-link ${pathname.startsWith("/cases") ? "is-active" : ""}`}><PackageOpen size={17} />Кейсы</Link>
           <Link href="/leaderboard" className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
           <Link href="/watchlist" className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
           <Link href="/notifications" className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
