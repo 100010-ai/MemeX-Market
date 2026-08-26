@@ -230,6 +230,9 @@ export type Mission = {
   title: string;
   description: string;
   reward: number;
+  rewardKind?: "mxm_coins" | "case" | "profile_item" | "energy";
+  rewardLabel?: string;
+  xpReward?: number;
   target: number;
   progress: number;
   claimed: boolean;
@@ -238,6 +241,27 @@ export type Mission = {
   membershipStatus?: "member" | "not_member" | "unknown" | null;
   rewardRevoked?: boolean;
   clawbackDue?: number;
+};
+
+export type LeagueLeader = {
+  rank: number;
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  frame: string | null;
+  score: number;
+  profit: number;
+  tradeVolume: number;
+  tradeCount: number;
+  giftCount: number;
+  activeDays: number;
+};
+
+export type LeagueSnapshot = {
+  season: { id: string; title: string; startsAt: string; endsAt: string; daysLeft: number };
+  me: { rank: number | null; score: number; tradeVolume: number; tradeCount: number; profit: number; giftCount: number; activeDays: number; gapToNext: number | null };
+  leaders: LeagueLeader[];
+  rewards: Array<{ rank: string; title: string; itemKey: string }>;
 };
 
 export type ActivityItem = {

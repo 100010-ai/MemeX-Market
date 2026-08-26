@@ -34,6 +34,9 @@ const FRAME_DEFINITIONS: ProfileFrameDefinition[] = [
   { key: "ember_sentinel_frame", title: "Ember Sentinel", cssClass: "mxm-profile-frame-asset", rarity: "legendary", shortLabel: "Ember", assetSrc: "/assets/season/frame-ember-sentinel.png", motion: "pulse", exclusive: true },
   { key: "quantum_frost_frame", title: "Quantum Frost", cssClass: "mxm-profile-frame-asset", rarity: "legendary", shortLabel: "Quantum", assetSrc: "/assets/season/frame-quantum-frost.png", motion: "scan", exclusive: true },
   { key: "midnight_laurels_frame", title: "Midnight Laurels", cssClass: "mxm-profile-frame-asset", rarity: "legendary", shortLabel: "Laurels", assetSrc: "/assets/season/frame-midnight-laurels.png", motion: "drift", exclusive: true },
+  { key: "league_challenger_frame", title: "League Challenger", cssClass: "mxm-profile-frame-asset", rarity: "epic", shortLabel: "Challenger", assetSrc: "/assets/league/frame-challenger.png", motion: "drift", exclusive: true },
+  { key: "league_apex_frame", title: "League Apex", cssClass: "mxm-profile-frame-asset", rarity: "legendary", shortLabel: "Apex", assetSrc: "/assets/league/frame-apex.png", motion: "scan", exclusive: true },
+  { key: "league_founder_frame", title: "League Founder", cssClass: "mxm-profile-frame-asset", rarity: "legendary", shortLabel: "Founder", assetSrc: "/assets/league/frame-founder.png", motion: "pulse", exclusive: true },
 ];
 
 export const PROFILE_FRAME_CATALOG = Object.fromEntries(

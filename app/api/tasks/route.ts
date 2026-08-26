@@ -43,7 +43,7 @@ async function GETHandler() {
 
   const missionResult = await supabase
     .from("user_missions_view")
-    .select("mission_id,key,period,title,description,reward,target,progress,claimed,action_type,sort_order")
+    .select("mission_id,key,period,title,description,reward,reward_kind,reward_metadata,xp_reward,target,progress,claimed,action_type,sort_order")
     .eq("profile_id", profile.id)
     .neq("key", "daily_game_3")
     .order("sort_order", { ascending: true })
@@ -64,6 +64,9 @@ async function GETHandler() {
         title: text(mission.title, "Задание", 160),
         description: text(mission.description, "", 500),
         reward: finiteNumber(mission.reward),
+        rewardKind: text(mission.reward_kind, "mxm_coins", 32),
+        rewardLabel: text(object(mission.reward_metadata).label, "", 160) || (text(mission.reward_kind, "mxm_coins", 32) === "mxm_coins" ? `${Math.max(0, finiteNumber(mission.reward)).toLocaleString("ru-RU")} MXM` : "Косметический предмет"),
+        xpReward: Math.max(0, Math.floor(finiteNumber(mission.xp_reward, 8))),
         target: Math.max(0, finiteNumber(mission.target)),
         progress: Math.max(0, finiteNumber(mission.progress)),
         claimed: Boolean(mission.claimed),

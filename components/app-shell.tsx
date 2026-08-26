@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, Bell, Boxes, Crown, Gem, ListChecks, PackageOpen, Plus, ReceiptText, Sparkles, Star, Store, Trophy } from "lucide-react";
+import { Activity, Archive, Bell, Boxes, Crown, Gem, ListChecks, Medal, PackageOpen, Plus, ReceiptText, Sparkles, Star, Store, Trophy } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { apiFetch } from "@/lib/api";
@@ -32,6 +32,9 @@ const routeTitles: Array<[string, string]> = [
   ["/vault", "Портфель"],
   ["/portfolio", "Портфель"],
   ["/leaderboard", "Рейтинг"],
+  ["/league", "MemeX League"],
+  ["/missions", "Миссии"],
+  ["/hall-of-fame", "Зал славы"],
   ["/profile", "Профиль"],
   ["/progression", "Прогресс"],
   ["/watchlist", "Избранное"],
@@ -156,6 +159,9 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
           <Link href="/store" aria-current={pathname.startsWith("/store") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/store") ? "is-active" : ""}`}><Gem size={17} />Магазин MXM</Link>
           <Link href="/season" aria-current={pathname.startsWith("/season") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/season") ? "is-active" : ""}`}><Crown size={17} />Боевой пропуск</Link>
           <Link href="/cases" aria-current={pathname.startsWith("/cases") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/cases") ? "is-active" : ""}`}><PackageOpen size={17} />Кейсы</Link>
+          <Link href="/league" aria-current={pathname.startsWith("/league") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/league") ? "is-active" : ""}`}><Medal size={17} />MemeX League</Link>
+          <Link href="/missions" aria-current={pathname.startsWith("/missions") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/missions") ? "is-active" : ""}`}><Sparkles size={17} />Миссии</Link>
+          <Link href="/hall-of-fame" aria-current={pathname.startsWith("/hall-of-fame") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/hall-of-fame") ? "is-active" : ""}`}><Archive size={17} />Зал славы</Link>
           <Link href="/leaderboard" aria-current={pathname.startsWith("/leaderboard") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
           <Link href="/watchlist" aria-current={pathname.startsWith("/watchlist") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
           <Link href="/notifications" aria-current={pathname.startsWith("/notifications") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>

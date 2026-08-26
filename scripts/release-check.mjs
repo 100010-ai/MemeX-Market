@@ -82,6 +82,7 @@ const migration100026 = read("supabase/migrations/100026_system_hardening_v0700.
 const migration100027 = read("supabase/migrations/100027_remaining_fk_indexes_v0700.sql");
 const migration100028 = read("supabase/migrations/100028_tonapi_content_media_v0700.sql");
 const migration100029 = read("supabase/migrations/100029_stars_weekly_seasons_verification_v071.sql");
+const migration100032 = read("supabase/migrations/100032_social_league_missions_cases_v0722.sql");
 const packageJson = read("package.json");
 const marketPage = read("app/market/page.tsx");
 const filters = read("components/gifts/gift-filters-drawer.tsx");
@@ -140,7 +141,12 @@ check("Migration 9998 player UI copy cleanup present", exists("supabase/migratio
 check("Migration 99999 store/battle-pass/cases v0.63 present", Boolean(migration99999));
 const migration100000 = read("supabase/migrations/100000_cases_runtime_hotfix_v13_1.sql");
 check("Migration 100000 case runtime hotfix v0.63.1 present", Boolean(migration100000));
-check("v0.72 package version", packageJson.includes('"version": "0.72.0"'));
+check("v0.72.2 package version", packageJson.includes('"version": "0.72.2"'));
+check("v0.72.2 social League uses activity rather than player balance", migration100032.includes("league_season_entries") && migration100032.includes("refresh_league_entries_v0722") && migration100032.includes("trade_volume") && !migration100032.includes("p.balance"));
+check("v0.72.2 market missions pay MXM and XP, never virtual TON", migration100032.includes("reward_kind='mxm_coins'") && migration100032.includes("xp_reward") && migration100032.includes("grant_virtual_reward_v200"));
+check("v0.72.2 real-data Trending Radar has a guarded API", exists("app/api/market/radar/route.ts") && read("app/api/market/radar/route.ts").includes("requireProfile") && read("app/hub/page.tsx").includes("/api/market/radar"));
+check("v0.72.2 League and Hall routes are present", exists("app/league/page.tsx") && exists("app/hall-of-fame/page.tsx") && exists("app/api/league/route.ts") && exists("app/api/hall-of-fame/route.ts"));
+check("v0.72.2 case and League artwork are optimized project assets", ["public/assets/cases/nebula-cache.png","public/assets/cases/prism-circuit.png","public/assets/cases/league-vault.png","public/assets/league/frame-challenger.png","public/assets/league/frame-apex.png","public/assets/league/frame-founder.png"].every(exists) && read("lib/profile-frames.ts").includes("league_founder_frame"));
 const migration100003 = read("supabase/migrations/100003_orders_runtime_compat_v0648.sql");
 check("Migration 100003 Orders runtime compatibility present", Boolean(migration100003));
 check("Migration 100022 restores memecoin VIP launch dependency", migration100022.includes("create table if not exists public.vip_point_events") && migration100022.includes("credit_vip_activity_v200") && migration100022.includes("revoke execute"));

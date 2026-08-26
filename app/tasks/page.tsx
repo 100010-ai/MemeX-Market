@@ -14,6 +14,8 @@ const sectionMeta: Record<MissionPeriod, { title: string; icon: typeof Gift }> =
   weekly: { title: "Неделя", icon: Trophy },
 };
 
+function mxm(value: number) { return `${Math.max(0, Math.floor(value)).toLocaleString("ru-RU")} MXM`; }
+
 export default function TasksPage() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [promoCode, setPromoCode] = useState("");
@@ -142,13 +144,13 @@ export default function TasksPage() {
   }
 
   const claimable = useMemo(() => missions.filter((mission) => mission.progress >= mission.target && !mission.claimed), [missions]);
-  const available = useMemo(() => missions.filter((mission) => !mission.claimed).reduce((sum, mission) => sum + mission.reward, 0), [missions]);
+  const available = useMemo(() => missions.filter((mission) => !mission.claimed && mission.rewardKind === "mxm_coins").reduce((sum, mission) => sum + mission.reward, 0), [missions]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mxm-tasks-page mx-auto max-w-3xl">
       <div className="mb-4 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-3">
         <h1 className="text-[20px] font-semibold tracking-[-.035em]">Задания</h1>
-        <div className="text-right"><p className="flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать · ${claimable.length}`}</button> : null}</div>
+        <div className="text-right"><p className="flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{mxm(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать · ${claimable.length}`}</button> : null}</div>
       </div>
 
       {profile ? <div className="mb-5 flex items-center gap-2.5"><Sparkles size={12} className="text-[var(--accent)]" /><span className="text-[10px] text-[var(--muted)]">Уровень {profile.level}</span><div className="h-[2px] min-w-0 flex-1 overflow-hidden bg-white/[.06]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div><span className="text-[9px] text-[var(--muted)]">{profile.xp} опыта</span></div> : null}
@@ -187,7 +189,7 @@ export default function TasksPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-start justify-between gap-3">
                         <div className="min-w-0 flex-1"><h3 className="text-[12px] font-semibold leading-[1.35] tracking-[-.015em] text-white">{displayTitle}</h3><p className="mt-1 line-clamp-1 text-[9px] leading-[1.5] text-[var(--muted)]">{displayDescription}</p></div>
-                        <span className="mxm-task-reward"><Gem size={10} fill="currentColor" />{money(mission.reward)}</span>
+                        <span className="mxm-task-reward"><Gem size={10} fill="currentColor" />{mission.rewardKind === "mxm_coins" ? mxm(mission.reward) : mission.rewardLabel || "Косметика"}<small>+{mission.xpReward || 0} XP</small></span>
                       </div>
                       <div className="mt-3 flex items-center gap-2.5">
                         <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/[.055]"><div className={`h-full rounded-full ${mission.claimed || done ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`} style={{ width: `${progress}%` }} /></div>

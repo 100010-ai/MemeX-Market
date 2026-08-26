@@ -364,15 +364,23 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     const capabilities = telegramCapabilitySnapshot(window.Telegram?.WebApp);
+    const telegramPlatform = String(window.Telegram?.WebApp?.platform || "").toLowerCase();
+    const desktopTelegram = new Set(["tdesktop", "macos", "weba", "webk"]);
+    const desktopViewport = window.matchMedia("(min-width: 900px) and (pointer: fine)").matches;
+    const surface = desktopTelegram.has(telegramPlatform) || desktopViewport ? "desktop" : "mobile";
     root.dataset.telegramVersion = capabilities.version;
     root.dataset.telegramSafeArea = capabilities.safeArea ? "1" : "0";
     root.dataset.telegramBackButton = capabilities.backButton ? "1" : "0";
     root.dataset.telegramInvoice = capabilities.invoice ? "1" : "0";
+    root.dataset.telegramPlatform = telegramPlatform || "unknown";
+    root.dataset.mxmSurface = surface;
     return () => {
       delete root.dataset.telegramVersion;
       delete root.dataset.telegramSafeArea;
       delete root.dataset.telegramBackButton;
       delete root.dataset.telegramInvoice;
+      delete root.dataset.telegramPlatform;
+      delete root.dataset.mxmSurface;
     };
   }, []);
 
@@ -468,6 +476,7 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData: string;
+        platform?: string;
         version?: string;
         isVersionAtLeast?: (version: string) => boolean;
         ready: () => void;

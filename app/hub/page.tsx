@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, Flame, Gift, ListChecks, Rocket, Trophy, WalletCards } from "lucide-react";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -16,6 +17,9 @@ type LeaderboardPayload = { players: LeaderboardPlayer[]; meRank: number };
 type CoinPayload = { coins: Coin[] };
 type TasksPayload = { missions: Mission[] };
 type SeasonPayload = { level: number; xp: number; season: { daysLeft: number } };
+type RadarGift = { id: string; name: string; imageUrl: string | null; volume: number; tradeCount: number };
+type RadarCoin = { id: string; name: string; symbol: string; imageUrl: string | null; change24h: number; volume24h: number; tradeCount24h: number };
+type RadarPayload = { gifts: RadarGift[]; coins: RadarCoin[]; activity: { tradeCount: number; volume: number } };
 
 type Dashboard = {
   activity: ActivityItem[];
@@ -24,9 +28,10 @@ type Dashboard = {
   coins: Coin[];
   missions: Mission[];
   season: SeasonPayload | null;
+  radar: RadarPayload | null;
 };
 
-const emptyDashboard: Dashboard = { activity: [], leaders: [], meRank: null, coins: [], missions: [], season: null };
+const emptyDashboard: Dashboard = { activity: [], leaders: [], meRank: null, coins: [], missions: [], season: null, radar: null };
 
 export default function HubPage() {
   const { profile } = useTelegramProfile();
@@ -60,15 +65,17 @@ export default function HubPage() {
   const loadExtras = useCallback(async () => {
     setExtrasLoading(true);
     try {
-      const [leaderboard, season] = await Promise.all([
+      const [leaderboard, season, radar] = await Promise.all([
         apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall&limit=5", { cacheMs: 20_000 }),
         apiFetch<SeasonPayload>("/api/season", { cacheMs: 30_000 }).catch(() => null),
+        apiFetch<RadarPayload>("/api/market/radar", { cacheMs: 15_000 }).catch(() => null),
       ]);
       setData((current) => ({
         ...current,
         leaders: leaderboard.players.slice(0, 5),
         meRank: Number.isFinite(leaderboard.meRank) ? leaderboard.meRank : null,
         season,
+        radar,
       }));
     } finally {
       setExtrasLoading(false);
@@ -89,7 +96,7 @@ export default function HubPage() {
   const hotCoins = useMemo(() => [...data.coins].sort((a, b) => (b.volume24h + Math.max(0, b.change24h) * 2) - (a.volume24h + Math.max(0, a.change24h) * 2)).slice(0, 3), [data.coins]);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mxm-hub-page mx-auto max-w-6xl">
       <RealtimeRefresh channelName="mxm-hub-v0645" tables={realtimeTables} onChange={realtimeReload} debounceMs={2_000} />
 
       <header className="mxm-home-hero mb-3">
@@ -118,7 +125,7 @@ export default function HubPage() {
           <div className="min-w-0"><small>Рынок</small><p>{hotCoins.length ? `${hotCoins.length} в тренде` : "Открыть"}</p></div>
           <ChevronRight size={14} />
         </Link>
-        <Link href="/tasks" className="mxm-home-tile">
+        <Link href="/missions" className="mxm-home-tile">
           <span className="mxm-home-tile-icon"><ListChecks size={16} /></span>
           <div className="min-w-0"><small>Задания</small><p>{readyMissions.length ? `${readyMissions.length} готово` : `${activeMissions.length} активно`}</p></div>
           <ChevronRight size={14} />
@@ -144,6 +151,15 @@ export default function HubPage() {
               <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-medium">{coin.name} <span className="text-[var(--muted)]">${coin.symbol}</span></p><p className="mt-0.5 text-[8px] text-[var(--muted-2)]">{coin.tradeCount24h} сделок · {coin.holderCount} держ.</p></div>
               <div className="text-right"><p className="text-[10px] font-semibold">{price(coin.currentPrice)}</p><p className={`mt-0.5 text-[8px] ${coin.change24h >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(coin.change24h)}</p></div>
             </Link>)}</div> : <CompactEmpty text="Пока тихо" />}
+          </section>
+
+          <section className="mxm-card overflow-hidden">
+            <div className="mxm-section-head"><div className="flex items-center gap-2"><Flame size={14} className="text-[var(--accent)]" /><span>Trending Radar</span></div><Link href="/market" className="text-[8px] text-[var(--muted)]">Рынок</Link></div>
+            {extrasLoading ? <RowsSkeleton count={3} /> : data.radar && (data.radar.gifts.length || data.radar.coins.length) ? <div className="mxm-radar-grid px-3 py-1.5">
+              {data.radar.gifts.slice(0, 2).map((item) => <Link key={`gift:${item.id}`} href={`/gifts/${item.id}`} className="mxm-radar-row"><span className="mxm-radar-mark">{item.imageUrl ? <Image unoptimized src={item.imageUrl} alt="" width={28} height={28} /> : <Gift size={13} />}</span><span className="min-w-0 flex-1"><b className="truncate">{item.name}</b><small className="truncate">Gift · {item.tradeCount.toLocaleString("ru-RU")} сделок</small></span><span className="mxm-radar-value">{money(item.volume)}</span></Link>)}
+              {data.radar.coins.slice(0, 2).map((item) => <Link key={`coin:${item.id}`} href={`/coin/${item.id}`} className="mxm-radar-row"><span className="mxm-radar-mark">{item.imageUrl ? <Image unoptimized src={item.imageUrl} alt="" width={28} height={28} /> : <BarChart3 size={13} />}</span><span className="min-w-0 flex-1"><b className="truncate">{item.name}</b><small className="truncate">${item.symbol} · {item.tradeCount24h.toLocaleString("ru-RU")} сделок</small></span><span className={item.change24h >= 0 ? "mxm-radar-change is-up" : "mxm-radar-change is-down"}>{percent(item.change24h)}</span></Link>)}
+            </div> : <CompactEmpty text="Рынок пока набирает данные" />}
+            {data.radar ? <div className="mxm-radar-foot"><span>{data.radar.activity.tradeCount.toLocaleString("ru-RU")} сделок за 24 ч.</span><b>{money(data.radar.activity.volume)} оборот</b></div> : null}
           </section>
 
           <section className="mxm-card overflow-hidden">

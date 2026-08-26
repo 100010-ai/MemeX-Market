@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Clock3, Gem, PackageOpen, ShieldCheck, Sparkles, Star } from "lucide-react";
@@ -41,6 +42,11 @@ const CASE_ART_CLASS: Record<string, string> = {
   case_creator: "mxm-case-art-creator",
   case_legendary: "mxm-case-art-legendary",
   case_vault: "mxm-case-art-vault",
+};
+const CASE_ASSET: Record<string, string> = {
+  case_nebula: "/assets/cases/nebula-cache.png",
+  case_prism: "/assets/cases/prism-circuit.png",
+  case_league: "/assets/cases/league-vault.png",
 };
 const RARITY_BAR: Record<string, string> = {
   common: "mxm-odds-common",
@@ -246,7 +252,11 @@ export default function CasesPage() {
             <p className="mt-1 text-[7px] uppercase tracking-[.09em] text-[var(--muted-2)]">Награда зачислена</p>
             {Number(reward.overflowMxmCoins || 0) > 0 ? <p className="mt-1.5 text-[8px] text-[var(--accent)]">Излишек энергии: +{Number(reward.overflowMxmCoins).toLocaleString("ru-RU")} MXM</p> : null}
           </div> : <div className="mxm-case-idle-compact">
-            <div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}><Box size={38} /></div>
+            <div className={`mxm-case-art ${CASE_ART_CLASS[current?.sku || ""] || TIER_CLASS[current?.tier || "starter"] || TIER_CLASS.starter}`}>
+              {CASE_ASSET[current?.sku || ""]
+                ? <Image src={CASE_ASSET[current?.sku || ""]} alt="" width={160} height={160} sizes="(max-width: 640px) 70px, 82px" className="mxm-case-art-image" />
+                : <Box size={38} />}
+            </div>
             <div className="min-w-0">
               <p className="text-[8px] uppercase tracking-[.13em] text-[var(--muted-2)]">{TIER_LABEL[current?.tier || "starter"] || "Серия MXM"}</p>
               <h2 className="mt-1 text-[15px] font-semibold">{current?.title || "Загрузка…"}</h2>

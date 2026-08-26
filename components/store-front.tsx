@@ -95,6 +95,11 @@ function profileItemKey(product: StoreProduct) {
   return typeof product.metadata.profileItem === "string" ? product.metadata.profileItem : null;
 }
 
+function storeAsset(product: StoreProduct) {
+  const asset = product.metadata.asset;
+  return product.category === "cases" && typeof asset === "string" && asset.startsWith("/assets/") ? asset : null;
+}
+
 function CaseOddsSummary({ odds }: { odds: Array<{ label: string; percent: number; rarity: string }> }) {
   if (!odds.length) return null;
   const rarePlus = odds.reduce((sum, odd) => sum + (rarityRank[odd.rarity] >= rarityRank.rare ? odd.percent : 0), 0);
@@ -341,6 +346,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
             const highlights = metadataTextList(product.metadata, "highlights");
             const itemKey = profileItemKey(product);
             const frame = itemKey ? getProfileFrameDefinition(itemKey) : null;
+            const asset = storeAsset(product);
             const odds = data.caseOdds[product.sku] || [];
             const insufficientMxm = Boolean(sink && data.wallet.mxmCoins < sink.mxmPrice);
             const actionReason = unavailable
@@ -350,7 +356,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
               || (insufficientMxm && sink ? `Не хватает ${(sink.mxmPrice - data.wallet.mxmCoins).toLocaleString("ru-RU")} MXM` : null);
             return <article key={product.sku} className="mxm-card mxm-store-product flex min-h-[164px] flex-col py-3">
               <div className="flex items-start gap-3">
-                {frame ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={frame.key} /> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div>}
+                {frame ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={frame.key} /> : asset ? <div className="mxm-store-case-art"><Image src={asset} alt="" width={80} height={80} sizes="48px" /></div> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{categoryGlyph(product.category)}</div>}
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-[12px] font-semibold">{product.title}</h3>{product.badge ? <span className="rounded-md bg-white/[.06] px-1.5 py-0.5 text-[8px] text-[var(--muted)]">{product.badge}</span> : null}{frame ? <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><BadgeCheck size={9} />{rarityLabel(frame.rarity)}</span> : null}</div><p className="mt-1 text-[10px] font-medium text-[var(--accent)]">{product.rewardLabel}</p></div>
               </div>
               <p className="mt-2 line-clamp-2 text-[9px] leading-4 text-[var(--muted)]">{product.description}</p>
