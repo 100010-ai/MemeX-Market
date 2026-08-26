@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 // Lists system-owned, unlisted Gifts that came from a real Telegram catalog
 // sync and are waiting on an admin to set a real price and publish them.
 async function GETHandler() {
-  const admin = await requireAdminProfile("gifts.manage");
+  const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const supabase = getSupabaseAdmin();

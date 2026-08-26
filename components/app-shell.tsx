@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, Bell, Boxes, Crown, Gem, ListChecks, PackageOpen, Plus, ReceiptText, Sparkles, Star, Store, Trophy } from "lucide-react";
+import { Activity, Bell, Boxes, Gem, ListChecks, Plus, ReceiptText, Star, Store, Trophy } from "lucide-react";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { money } from "@/lib/format";
 import { apiFetch } from "@/lib/api";
@@ -53,22 +53,9 @@ function currentTitle(pathname: string) {
   return routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1] || "Рынок MXM";
 }
 
-function presenceSessionId() {
-  const key = "mxm:presence-session:v1";
-  try {
-    const current = window.sessionStorage.getItem(key);
-    if (current) return current;
-    const next = globalThis.crypto?.randomUUID?.() || `mxm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    window.sessionStorage.setItem(key, next);
-    return next;
-  } catch {
-    return `mxm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  }
-}
-
 export function AppShell({ children, modal }: { children: React.ReactNode; modal?: React.ReactNode }) {
   const pathname = usePathname();
-  const { profile, inspectionMode, loading, appReady, error, retryAuth } = useTelegramProfile();
+  const { profile, loading, appReady, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [desktopToolsReady, setDesktopToolsReady] = useState(false);
   const title = currentTitle(pathname);
@@ -76,35 +63,12 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
 
   useEffect(() => {
     let cancelled = false;
-    if (!profileId || inspectionMode) return;
+    if (!profileId) return;
     apiFetch<{ config: RuntimeConfig }>("/api/runtime-config", { cacheMs: 15_000 })
       .then((payload) => { if (!cancelled) setRuntimeConfig(payload.config); })
       .catch((cause) => console.error("runtime config", cause));
     return () => { cancelled = true; };
-  }, [profileId, inspectionMode]);
-
-  useEffect(() => {
-    if (!profileId || inspectionMode) return;
-    const sessionId = presenceSessionId();
-    const sendPresence = () => {
-      if (document.visibilityState === "hidden") return;
-      void fetch("/api/analytics/presence", {
-        method: "POST",
-        credentials: "same-origin",
-        keepalive: true,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId, route: pathname }),
-      }).catch(() => undefined);
-    };
-    sendPresence();
-    const interval = window.setInterval(sendPresence, 120_000);
-    const handleVisibility = () => { if (document.visibilityState === "visible") sendPresence(); };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [pathname, profileId, inspectionMode]);
+  }, [profileId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
@@ -129,7 +93,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   if (!profile) {
-    return <main className="mxm-auth-wall"><div className="mxm-auth-card"><div className="mxm-auth-brand">MXM <span>MARKET</span></div><div className="mxm-auth-icon"><Sparkles size={18}/></div><h1>Откройте в Telegram</h1><p>{error || "Безопасный вход работает внутри @MemeXMarketBot."}</p><button type="button" onClick={retryAuth} className="mxm-primary-action mt-5 w-full">Повторить</button></div></main>;
+    return <main className="mx-auto flex min-h-[100dvh] max-w-md items-center px-5"><div className="w-full border-t border-white/[.14] py-6"><div className="mb-5 text-[13px] font-black tracking-[-.08em]">MXM</div><h1 className="text-lg font-semibold tracking-[-.025em]">Нужна сессия Telegram</h1><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{error || "Не удалось авторизоваться"}</p><button type="button" onClick={retryAuth} className="mt-5 border-b border-white pb-1 text-xs font-semibold text-white">Повторить вход</button></div></main>;
   }
 
   if (runtimeConfig?.maintenanceMode) {
@@ -137,45 +101,36 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   return (
-    <div className="mxm-shell-frame mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1440px] lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
-      <aside className="mxm-desktop-sidebar sticky top-0 hidden h-screen px-3 py-5 lg:flex lg:flex-col">
-        <Link href="/market" className="mxm-brand-lockup">
-          <span className="mxm-brand-mark">MXM</span>
-          <span className="mxm-brand-copy"><b>MEMEX MARKET</b></span>
+    <div className="mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
+      <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
+        <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
+          <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
+          <span className="text-[9px] text-[var(--muted)]">рынок</span>
         </Link>
-        <p className="mxm-nav-eyebrow">Торговля</p>
-        <nav className="space-y-1">
+        <nav className="mt-4 space-y-1">
           {nav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`mxm-side-link ${active ? "is-active" : ""}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.8} /><span>{item.label}</span></Link>;
+            return <Link key={item.href} href={item.href} className={`mxm-side-link ${active ? "is-active" : ""}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.8} /><span>{item.label}</span></Link>;
           })}
-        </nav>
-        <p className="mxm-nav-eyebrow mt-5">Инструменты</p>
-        <nav className="space-y-1">
-          <Link href="/store" aria-current={pathname.startsWith("/store") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/store") ? "is-active" : ""}`}><Gem size={17} />Магазин MXM</Link>
-          <Link href="/season" aria-current={pathname.startsWith("/season") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/season") ? "is-active" : ""}`}><Crown size={17} />Боевой пропуск</Link>
-          <Link href="/cases" aria-current={pathname.startsWith("/cases") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/cases") ? "is-active" : ""}`}><PackageOpen size={17} />Кейсы</Link>
-          <Link href="/leaderboard" aria-current={pathname.startsWith("/leaderboard") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
-          <Link href="/watchlist" aria-current={pathname.startsWith("/watchlist") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
-          <Link href="/notifications" aria-current={pathname.startsWith("/notifications") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
+          <Link href="/leaderboard" className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
+          <Link href="/watchlist" className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
+          <Link href="/notifications" className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
         </nav>
 
-        <Link href="/create" className="mxm-sidebar-cta"><span><Plus size={15}/></span><div><b>Запустить мемкоин</b></div></Link>
-
-        <Link href="/profile" className="mxm-sidebar-profile mt-auto">
+        <Link href="/profile" className="mt-auto border-t border-[var(--border-soft)] px-1 pt-4">
           <div className="flex items-center gap-2.5"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{profile.username ? `@${profile.username}` : profile.firstName}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">{money(profile.netWorth)} · ур. {profile.level}</p></div><span className="text-[8px] text-[var(--muted-2)]">{profile.xp} опыта</span></div>
-          <div className="mxm-profile-progress"><div style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div>
+          <div className="mt-3 h-px overflow-hidden bg-white/[.05]"><div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round(profile.levelProgress * 100)}%` }} /></div>
         </Link>
       </aside>
 
       <div className="mxm-shell-content min-w-0 lg:pb-0">
         <header className="mxm-topbar mxm-topbar-fixed safe-top z-40">
-          <div className="mxm-topbar-inner flex h-[52px] items-center gap-2.5 px-3 md:px-5">
+          <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-5">
             <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></Link>
-            <div className="flex min-w-0 items-center gap-2 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><span className="h-3 w-px bg-white/[.08]" /><p className="truncate text-[9px] text-[var(--muted)]">{title}</p></div>
-            <div className="hidden min-w-0 lg:block"><p className="mxm-topbar-eyebrow">MXM MARKET</p><p className="truncate text-[13px] font-semibold tracking-[-.02em]">{title}</p></div>
-            <div className="ml-auto flex items-center gap-1.5">{inspectionMode ? <span className="mxm-inspector-badge">READ ONLY</span> : null}<Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : "Виртуальный торговый баланс TON"}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Пополнить MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
+            <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
+            <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
+            <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
           </div>
         </header>
         <main id="mxm-main" className="mxm-page-enter min-h-0 px-3 py-3 md:px-5 md:py-4">{children}</main>
@@ -185,7 +140,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
-          return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`mxm-bottom-link ${active ? "is-active" : ""}`}><span className="mxm-bottom-icon"><Icon size={17} strokeWidth={active ? 2.35 : 1.8} /></span><span className="truncate">{item.label}</span></Link>;
+          return <Link key={item.href} href={item.href} className={`mxm-bottom-link ${active ? "is-active" : ""}`}><span className="mxm-bottom-icon"><Icon size={17} strokeWidth={active ? 2.35 : 1.8} /></span><span className="truncate">{item.label}</span></Link>;
         })}
       </nav>
 

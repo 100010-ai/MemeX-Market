@@ -37,21 +37,26 @@ export function securityKey(...parts: Array<string | number | null | undefined>)
   return crypto.createHmac("sha256", securitySecret()).update(parts.map((part) => String(part ?? "")).join("|")).digest("hex");
 }
 
-export async function enforceRateLimit(request: Request, scope: string, actor: string | number, limit: number, windowSeconds: number) {
-  // The actor-only bucket prevents a client from resetting its quota by
-  // rotating/spoofing forwarded IPs. The actor+IP bucket remains useful for
-  // incident analysis and constrains one device/network path independently.
+export async function consumeRateLimit(key: string, limit: number, windowSeconds: number) {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.rpc("consume_rate_limits_v070", {
-    p_keys: [
-      securityKey(scope, "actor", actor),
-      securityKey(scope, "actor-ip", actor, requestIp(request)),
-    ],
+  const { data, error } = await supabase.rpc("consume_rate_limit", {
+    p_key: key,
     p_limit: limit,
     p_window_seconds: windowSeconds,
   });
   if (error) throw error;
   return data === true;
+}
+
+export async function enforceRateLimit(request: Request, scope: string, actor: string | number, limit: number, windowSeconds: number) {
+  // The actor-only bucket prevents a client from resetting its quota by
+  // rotating/spoofing forwarded IPs. The actor+IP bucket remains useful for
+  // incident analysis and constrains one device/network path independently.
+  const [actorAllowed, actorIpAllowed] = await Promise.all([
+    consumeRateLimit(securityKey(scope, "actor", actor), limit, windowSeconds),
+    consumeRateLimit(securityKey(scope, "actor-ip", actor, requestIp(request)), limit, windowSeconds),
+  ]);
+  return actorAllowed && actorIpAllowed;
 }
 
 export function validUuidLike(value: string) {
@@ -60,7 +65,7 @@ export function validUuidLike(value: string) {
 
 export function safeSecretEquals(actual: string, expected: string) {
   if (!actual || !expected) return false;
-  const actualDigest = crypto.createHash("sha256").update(actual).digest();
-  const expectedDigest = crypto.createHash("sha256").update(expected).digest();
-  return crypto.timingSafeEqual(actualDigest, expectedDigest);
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && crypto.timingSafeEqual(actualBytes, expectedBytes);
 }

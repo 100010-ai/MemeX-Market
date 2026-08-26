@@ -42,7 +42,6 @@ export default function GiftCollectionPage() {
   const [traitTab, setTraitTab] = useState<TraitTab>("models");
   const [busyWatch, setBusyWatch] = useState(false);
   const [busySweep, setBusySweep] = useState<number | null>(null);
-  const [sweepArmed, setSweepArmed] = useState<3 | 5 | 10 | null>(null);
   const [sweepMessage, setSweepMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -73,11 +72,6 @@ export default function GiftCollectionPage() {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-  useEffect(() => {
-    if (sweepArmed == null) return;
-    const timer = window.setTimeout(() => setSweepArmed(null), 4_000);
-    return () => window.clearTimeout(timer);
-  }, [sweepArmed]);
   const reload = useCallback(() => { void load(true); }, [load]);
 
   const loadMore = useCallback(async () => {
@@ -128,10 +122,12 @@ export default function GiftCollectionPage() {
   async function sweep(count: 3 | 5 | 10) {
     if (!data || busySweep !== null) return;
     const cheapest = data.gifts.filter((gift) => gift.listingPrice != null).slice().sort((a, b) => Number(a.listingPrice) - Number(b.listingPrice)).slice(0, count);
-    if (cheapest.length !== count) { setError(`Сейчас доступно меньше ${count} активных лотов`); return; }
-    if (sweepArmed !== count) { setSweepArmed(count); setSweepMessage(null); return; }
+    const estimate = cheapest.length === count ? cheapest.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0) : null;
+    const question = estimate == null
+      ? `Купить ${count} самых дешёвых подарков из ${data.collection.baseName}?`
+      : `Купить ${count} самых дешёвых подарков примерно за ${money(estimate)}? Итог проверится сервером перед покупкой.`;
+    if (!window.confirm(question)) return;
     setBusySweep(count);
-    setSweepArmed(null);
     setSweepMessage(null);
     try {
       const result = await apiFetch<{ sweep?: { total?: number; itemCount?: number } }>(`/api/collections/${encodeURIComponent(decodedName)}/sweep`, {
@@ -170,10 +166,6 @@ export default function GiftCollectionPage() {
 
   const traits = traitTab === "models" ? data.models : traitTab === "backdrops" ? data.backdrops : data.symbols;
   const c = data.collection;
-  const sweepOptions = ([3, 5, 10] as const).map((count) => {
-    const cheapest = data.gifts.filter((gift) => gift.listingPrice != null).slice().sort((a, b) => Number(a.listingPrice) - Number(b.listingPrice)).slice(0, count);
-    return { count, total: cheapest.length === count ? cheapest.reduce((sum, gift) => sum + Number(gift.listingPrice || 0), 0) : null };
-  });
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -183,7 +175,7 @@ export default function GiftCollectionPage() {
         <button onClick={toggleWatch} disabled={busyWatch} aria-label={data.watched ? "Убрать коллекцию из избранного" : "Добавить коллекцию в избранное"} className={`grid h-9 w-9 place-items-center rounded-[20px] border ${data.watched ? "border-[var(--accent)] bg-[rgba(198,170,88,.09)] text-[var(--accent)]" : "border-[var(--border)] bg-[var(--panel)] text-[var(--muted)]"}`}><Star size={16} fill={data.watched ? "currentColor" : "none"} /></button>
       </div>
 
-      <section className="mxm-collection-commerce-head overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
+      <section className="overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--panel)]">
         <div className="px-3 py-4 md:px-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -197,13 +189,13 @@ export default function GiftCollectionPage() {
             </div>
           </div>
         </div>
-        <div className="mxm-collection-metrics grid grid-cols-4 border-t border-[var(--border-soft)]">
+        <div className="grid grid-cols-4 border-t border-[var(--border-soft)]">
           <Metric icon={<BarChart3 size={12} />} label="Объём 24ч" value={money(c.volume24h)} />
           <Metric icon={<Users size={12} />} label="Владельцы" value={String(c.holderCount)} />
           <Metric icon={<Layers3 size={12} />} label="Лоты" value={String(c.listedCount)} />
           <Metric icon={<Gem size={12} />} label="Последняя продажа" value={c.lastSalePrice == null ? "—" : money(c.lastSalePrice)} />
         </div>
-        <div className="mxm-collection-metrics grid grid-cols-4 border-t border-[var(--border-soft)]">
+        <div className="grid grid-cols-4 border-t border-[var(--border-soft)]">
           <Metric icon={<BarChart3 size={12} />} label="Объём 7д" value={money(c.volume7d)} />
           <Metric icon={<Gem size={12} />} label="Продажи 7д" value={String(c.tradeCount7d)} />
           <Metric icon={<Gem size={12} />} label="Макс. продажа" value={c.highSale == null ? "—" : money(c.highSale)} />
@@ -211,10 +203,9 @@ export default function GiftCollectionPage() {
         </div>
       </section>
 
-      <section className="mxm-sweep-panel mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3">
-        <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} className="text-[var(--accent)]" />Sweep · быстрая покупка</p><p className="mt-1 max-w-xl text-[9px] leading-4 text-[var(--muted)]">Сервер выберет самые дешёвые активные лоты и проведёт всю покупку атомарно: либо купятся все, либо ни один.</p></div>{sweepMessage ? <span className="shrink-0 rounded-full bg-[rgba(76,189,126,.08)] px-2.5 py-1 text-[9px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
-        <div className="mt-3 grid grid-cols-3 gap-2">{sweepOptions.map(({ count, total }) => <button key={count} type="button" disabled={busySweep !== null || total == null} onClick={() => void sweep(count)} className={`mxm-sweep-option rounded-[16px] border px-3 py-2.5 text-left disabled:opacity-40 ${sweepArmed === count ? "is-armed" : ""}`}><span className="block text-[9px] text-[var(--muted)]">{busySweep === count ? "Покупаем…" : sweepArmed === count ? "Нажми ещё раз" : `${count} лота`}</span><span className="mt-1 flex items-center gap-1 text-[11px] font-semibold"><Gem size={10} fill="currentColor" />{total == null ? "Недоступно" : money(total)}</span></button>)}</div>
-        {sweepArmed != null ? <p aria-live="polite" className="mt-2 text-center text-[9px] text-[var(--accent)]">Подтверди sweep повторным нажатием. Итоговая цена будет перепроверена сервером.</p> : null}
+      <section className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--panel)] p-3">
+        <div className="flex items-center justify-between gap-3"><div><p className="flex items-center gap-1.5 text-xs font-medium"><ShoppingBasket size={14} />Быстрая покупка</p><p className="mt-1 text-[10px] text-[var(--muted)]">Купить несколько самых дешёвых активных лотов одной атомарной операцией.</p></div>{sweepMessage ? <span className="text-[10px] text-[var(--positive)]">{sweepMessage}</span> : null}</div>
+        <div className="mt-3 grid grid-cols-3 gap-2">{([3,5,10] as const).map((count) => <button key={count} type="button" disabled={busySweep !== null || c.listedCount < count} onClick={() => void sweep(count)} className="rounded-[16px] border border-[var(--border-soft)] bg-[var(--panel-2)] px-3 py-2.5 text-[11px] font-medium disabled:opacity-40">{busySweep === count ? "Покупка…" : `${count} подарков`}</button>)}</div>
       </section>
 
       <div className="mt-3"><AdvancedOffersPanel baseName={c.baseName} models={data.models} backdrops={data.backdrops} symbols={data.symbols} /></div>

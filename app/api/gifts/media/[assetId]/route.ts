@@ -24,7 +24,6 @@ type GiftMediaRow = {
   base_name: string | null;
   gift_number: number | string | null;
   chain_nft_address: string | null;
-  chain_metadata: unknown;
 };
 
 type TonApiPreview = { resolution?: string; url?: string };
@@ -47,10 +46,6 @@ function trustedMediaHost(hostname: string) {
     || host.endsWith(".cdn-telegram.org")
     || host === "telesco.pe"
     || host.endsWith(".telesco.pe")
-    || host === "getgems.io"
-    || host.endsWith(".getgems.io")
-    || host === "headgun.org"
-    || host === "chat-mafia.com"
     || host === "ipfs.io";
 }
 
@@ -71,23 +66,13 @@ function previewScore(resolution: unknown) {
   return match ? Number(match[1]) * Number(match[2]) : 0;
 }
 
-function metadataUrl(metadata: unknown, keys: string[]) {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const record = metadata as Record<string, unknown>;
-  for (const key of keys) {
-    const candidate = trustedUrl(record[key]);
-    if (candidate) return candidate;
-  }
-  return null;
-}
-
 async function liveTonApiPreviewUrls(chainAddress: string | null) {
   const address = String(chainAddress || "").trim();
   if (!address) return [] as URL[];
   try {
     const item = await tonApiGet<TonApiNftItem>(`/v2/nfts/${encodeURIComponent(address)}`, {
-      timeoutMs: 4_000,
-      attempts: 1,
+      timeoutMs: 5_000,
+      attempts: 2,
       cacheTtlMs: 60_000,
       allowStaleOnFailure: true,
     });
@@ -102,62 +87,21 @@ async function liveTonApiPreviewUrls(chainAddress: string | null) {
   }
 }
 
-async function fetchCandidate(
-  url: URL,
-  requestSignal: AbortSignal,
-  accept: string,
-  timeoutMs: number,
-  maxBytes: number,
-  acceptsContentType?: (contentType: string) => boolean,
-) {
-  if (requestSignal.aborted) return null;
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  const timeout = setTimeout(abort, timeoutMs);
-  requestSignal.addEventListener("abort", abort, { once: true });
-
-  try {
-    let current = url;
-    let response: Response | null = null;
-    for (let redirects = 0; redirects <= 2; redirects += 1) {
-      response = await fetch(current, {
-        signal: controller.signal,
-        cache: "force-cache",
-        redirect: "manual",
-        headers: {
-          accept,
-          "user-agent": "MXM-Market/0.72.1",
-          referer: "https://fragment.com/",
-        },
-      });
-      if (response.status < 300 || response.status >= 400) break;
-      const location = response.headers.get("location");
-      await response.body?.cancel().catch(() => undefined);
-      const next = location ? trustedUrl(new URL(location, current).href) : null;
-      if (!next || redirects === 2) return null;
-      current = next;
-      response = null;
-    }
-    if (!response) return null;
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => undefined);
-      return null;
-    }
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
-    if (acceptsContentType && !acceptsContentType(contentType)) {
-      await response.body?.cancel().catch(() => undefined);
-      return null;
-    }
-    const bytes = await readResponseBytesLimited(response, maxBytes);
-    return bytes ? { bytes, contentType } : null;
-  } catch {
-    // A single unavailable CDN must not prevent the next trusted source from
-    // being attempted. Exhaustion is logged once by the route handler.
+async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
+  const response = await fetch(url, {
+    signal,
+    cache: "force-cache",
+    headers: {
+      accept,
+      "user-agent": "MXM-Market/0.64.9",
+      referer: "https://fragment.com/",
+    },
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
     return null;
-  } finally {
-    clearTimeout(timeout);
-    requestSignal.removeEventListener("abort", abort);
   }
+  return response;
 }
 
 async function previewResponse(candidates: Array<URL | null>, signal: AbortSignal) {
@@ -165,22 +109,21 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate.href)) continue;
     seen.add(candidate.href);
-    const upstream = await fetchCandidate(
-      candidate,
-      signal,
-      "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5",
-      1_800,
-      MAX_PREVIEW_BYTES,
-      (contentType) => contentType.startsWith("image/"),
-    );
+    const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
-    return new Response(toBodyArrayBuffer(upstream.bytes), {
+    const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) {
+      await upstream.body?.cancel().catch(() => undefined);
+      continue;
+    }
+    const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
+    if (!limited) continue;
+    return new Response(toBodyArrayBuffer(limited), {
       status: 200,
       headers: {
-        "content-type": upstream.contentType.split(";")[0] || "image/jpeg",
+        "content-type": contentType.split(";")[0] || "image/jpeg",
         "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
         "x-content-type-options": "nosniff",
-        "x-mxm-media-source": candidate.hostname,
       },
     });
   }
@@ -192,15 +135,11 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate.href)) continue;
     seen.add(candidate.href);
-    const upstream = await fetchCandidate(
-      candidate,
-      signal,
-      "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5",
-      2_500,
-      MAX_ANIMATION_SOURCE_BYTES,
-    );
+    const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
     if (!upstream) continue;
-    const compressed = Buffer.from(upstream.bytes);
+    const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
+    if (!limited) continue;
+    const compressed = Buffer.from(limited);
 
     try {
       const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
@@ -236,12 +175,31 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   const suppliedFragment = suppliedSlug ? fragmentGiftMedia(suppliedSlug) : null;
   const variant = requestUrl.searchParams.get("variant") === "preview" ? "preview" : "animation";
   const size = requestUrl.searchParams.get("size") === "medium" ? "medium" : "large";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
+    // Use a client-supplied canonical Fragment slug first because it is the
+    // cheapest path for already-indexed Telegram collectibles. Crucially, a
+    // Fragment miss no longer ends the request: newly minted/exported gifts
+    // can lag behind Fragment CDN while TonAPI already has a valid preview.
+    if (suppliedFragment) {
+      if (variant === "preview") {
+        const fragmentCandidates = size === "medium"
+          ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
+          : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
+        const response = await previewResponse(fragmentCandidates, controller.signal);
+        if (response) return response;
+      } else {
+        const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
+        if (response) return response;
+      }
+    }
+
     const supabase = getSupabaseAdmin();
     const primary = await supabase
       .from("gift_assets")
-      .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number,chain_nft_address,chain_metadata")
+      .select("model_media_url,model_preview_url,model_is_animated,catalog_source,is_burned,telegram_name,base_name,gift_number,chain_nft_address")
       .eq("id", assetId)
       .maybeSingle();
 
@@ -255,57 +213,42 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
 
     const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
     const fragment = slug ? fragmentGiftMedia(slug) : null;
-    const alternateFragment = suppliedSlug && suppliedSlug.toLowerCase() !== slug?.toLowerCase()
-      ? suppliedFragment
-      : null;
-    const metadataPreview = metadataUrl(row.chain_metadata, ["image", "image_url", "preview", "thumbnail", "thumbnail_url"]);
-    const metadataAnimation = metadataUrl(row.chain_metadata, ["animation_url", "animation", "video_url", "video", "content_url"]);
 
     if (variant === "preview") {
       const storedCandidates = size === "medium" ? [
-        trustedUrl(row.model_preview_url),
-        metadataPreview,
         trustedUrl(fragment?.medium),
         trustedUrl(fragment?.small),
         trustedUrl(fragment?.large),
-        trustedUrl(alternateFragment?.medium),
-        trustedUrl(alternateFragment?.large),
+        trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ] : [
-        trustedUrl(row.model_preview_url),
-        metadataPreview,
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
-        trustedUrl(alternateFragment?.large),
-        trustedUrl(alternateFragment?.medium),
+        trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ];
-      const storedResponse = await previewResponse(storedCandidates, request.signal);
+      const storedResponse = await previewResponse(storedCandidates, controller.signal);
       if (storedResponse) return storedResponse;
 
       // Older catalogue rows may already contain an optimistic Fragment URL in
       // model_preview_url. Recover from that stale data by asking TonAPI for
       // the current verified NFT previews using the immutable chain address.
       const liveTonApiCandidates = await liveTonApiPreviewUrls(row.chain_nft_address);
-      const liveResponse = await previewResponse(liveTonApiCandidates.slice(0, 3), request.signal);
-      if (liveResponse) return liveResponse;
-      console.warn("gift media sources exhausted", { assetId, variant, size, hasChainAddress: Boolean(row.chain_nft_address) });
-      return NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
+      const liveResponse = await previewResponse(liveTonApiCandidates, controller.signal);
+      return liveResponse || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
     }
 
     const animation = await animationResponse([
-      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
-      row.model_is_animated ? metadataAnimation : null,
       trustedUrl(fragment?.animation),
-      trustedUrl(alternateFragment?.animation),
-    ], request.signal);
-    if (animation) return animation;
-    console.warn("gift media sources exhausted", { assetId, variant, size, hasChainAddress: Boolean(row.chain_nft_address) });
-    return NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
+      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
+    ], controller.signal);
+    return animation || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
   } catch (error) {
     const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
     console.warn("gift media proxy", { assetId, variant, error });
     return NextResponse.json({ error: message }, { status: 502 });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 export const GET = withApiErrors("app/api/gifts/media/[assetId]/route.ts:GET", GETHandler);

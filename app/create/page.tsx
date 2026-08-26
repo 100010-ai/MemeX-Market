@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BadgeCheck, Check, Circle, Coins, ImagePlus, LockKeyhole, Rocket, Sparkles, Upload, WalletCards, X } from "lucide-react";
+import { ImagePlus, Rocket, ShieldCheck, Sparkles, Upload, WalletCards, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { money } from "@/lib/format";
 import { PrimaryButton } from "@/components/ui";
@@ -118,9 +117,6 @@ export default function CreatePage() {
     return { openingPrice, marketCap: openingPrice * supply, liquidity: quoteReserve * 2 };
   })();
   const canLaunch = Boolean(rulesLoaded && rules.economyReady && profile && validEconomy && hasBalance && hasEnergy && hasSlot && !cooldownActive && name.trim().length >= 2 && symbol.length >= 2 && !busy && !imageBusy);
-  const identityReady = name.trim().length >= 2 && symbol.length >= 2;
-  const accountReady = Boolean(profile && hasBalance && hasEnergy && hasSlot && !cooldownActive);
-  const launchBudget = rules.launchFee + (parsedInitialBuy ?? 0);
 
   async function create() {
     if (!canLaunch) return;
@@ -152,95 +148,57 @@ export default function CreatePage() {
   const blocker = !rulesLoaded ? "Проверяем правила запуска…" : !rules.economyReady ? "Экономика рынка ещё не готова" : !validEconomy ? "Проверьте стартовую позицию и цены" : !hasSlot ? `Достигнут лимит: ${rules.maxActiveCoins} активных мемкоинов` : cooldownActive ? `Следующий запуск: ${new Date(rules.nextLaunchAt!).toLocaleString("ru-RU", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" })}` : !hasEnergy ? `Нужно ${rules.energyCost} энергии · доступно ${rules.energy}` : !hasBalance ? `Нужно ${money(rules.launchFee + (parsedInitialBuy ?? 0))} доступного баланса` : null;
 
   return (
-    <div className="mx-auto max-w-6xl mxm-page-enter">
-      <header className="mxm-compact-page-head">
-        <div className="min-w-0">
-          <Link href="/market?tab=coins" className="mxm-compact-link"><ArrowLeft size={12} />Мемкоины</Link>
-          <h1 className="mxm-page-title mt-1">Запуск нового рынка</h1>
-        </div>
-        <span className={`mxm-studio-status ${canLaunch ? "is-ready" : ""}`}><span />{canLaunch ? "Готов к запуску" : "Черновик"}</span>
-      </header>
-
-      <div className="mxm-launch-studio">
-        <div className="min-w-0 space-y-3">
-          <section className="mxm-launch-section">
-            <SectionHead step="01" title="Идентичность" ready={identityReady} />
-            <div className="mxm-launch-section-body">
-              <div className="flex items-center gap-3.5 border-b border-[var(--border-soft)] pb-4">
-                <button type="button" onClick={() => inputRef.current?.click()} className="mxm-launch-upload" aria-label="Выбрать изображение мемкоина">
-                  {preview ? <Image src={preview} alt="Предпросмотр логотипа" fill unoptimized sizes="82px" className="object-cover" /> : <div className="text-center text-[var(--muted)]"><ImagePlus size={22} className="mx-auto" /><span className="mt-1 block text-[8px]">Логотип</span></div>}
-                </button>
-                <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} className="hidden" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium">Визуальный знак</p>
-                  <p className="mt-1 text-[9px] leading-4 text-[var(--muted)]">PNG, JPG или WebP · до 2 МБ</p>
-                  <div className="mt-2 flex gap-4"><button type="button" onClick={() => inputRef.current?.click()} className="inline-flex min-h-7 items-center gap-1.5 text-[9px] text-[#cdd1d6]"><Upload size={11} />{imageBusy ? "Обрабатываем…" : image ? "Заменить" : "Выбрать"}</button>{image ? <button type="button" onClick={() => { replaceImage(null); if (inputRef.current) inputRef.current.value = ""; }} className="inline-flex min-h-7 items-center gap-1 text-[9px] text-[var(--muted)]"><X size={11} />Убрать</button> : null}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Field label="Название" hint={`${name.length}/32`}><input value={name} onChange={(event) => setName(event.target.value)} maxLength={32} autoComplete="off" placeholder="Например, Sad Cat" className="mxm-input" /></Field>
-                <Field label="Тикер" hint={`${symbol.length}/8`}><div className="mxm-input flex items-center"><span className="text-[var(--muted)]">$</span><input value={symbol} onChange={(event) => setSymbol(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0,8))} maxLength={8} autoCapitalize="characters" autoComplete="off" placeholder="CAT" className="min-w-0 flex-1 bg-transparent px-1 outline-none" /></div></Field>
-                <div className="sm:col-span-2"><Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={180} rows={3} placeholder="Коротко объясните идею мемкоина" className="mxm-input min-h-[82px] resize-none" /></Field></div>
-              </div>
-            </div>
-          </section>
-
-          <section className="mxm-launch-section">
-            <SectionHead step="02" title="Экономика старта" ready={validEconomy} />
-            <div className="mxm-launch-section-body">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label="Первичная покупка" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><div className="mxm-input flex items-center gap-2"><input value={initialBuy} onChange={(event) => setInitialBuy(event.target.value)} inputMode="decimal" aria-label="Первичная покупка в TON" className="min-w-0 flex-1 bg-transparent outline-none" /><span className="text-[9px] text-[var(--muted)]">TON</span></div></Field>
-                <Field label="Стартовая цена" hint={`${rules.startPriceMin}–${rules.startPriceMax}`}><input value={startPrice} onChange={(event) => setStartPrice(event.target.value)} inputMode="decimal" aria-label="Стартовая цена" className="mxm-input" /></Field>
-                <Field label={`Floor на ${rules.creatorLockDays} дней`} hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(event) => setFloorPrice(event.target.value)} inputMode="decimal" aria-label="Минимальная цена" className="mxm-input" /></Field>
-              </div>
-              <div className="mxm-launch-policy mt-3"><LockKeyhole size={13} /><p><strong>{rules.creatorLockBps / 100}% позиции</strong> · линейный unlock {rules.creatorLockDays} дней · floor на стартовый период</p></div>
-            </div>
-          </section>
-        </div>
-
-        <aside className="mxm-launch-sidebar">
-          <section className="mxm-launch-preview-card">
-            <div className="flex items-center gap-3">
-              <div className="mxm-launch-preview-logo">{preview ? <Image src={preview} alt="" fill unoptimized sizes="52px" className="object-cover" /> : <Coins size={20} />}</div>
-              <div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold">{name.trim() || "Название мемкоина"}</p><p className="mt-0.5 text-[9px] text-[var(--muted)]">${symbol || "TICKER"} · новый рынок</p></div>
-              <span className="mxm-status-chip">PRE-LAUNCH</span>
-            </div>
-            <p className="mt-3 line-clamp-3 min-h-10 text-[9px] leading-5 text-[var(--muted)]">{description.trim() || "Описание поможет участникам быстро понять идею рынка."}</p>
-            <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-[13px] border border-[var(--border-soft)] bg-[var(--border-soft)]">
-              <PreviewMetric label="Цена открытия" value={launchPreview ? pricePreview(launchPreview.openingPrice) : "—"} />
-              <PreviewMetric label="Капитализация" value={launchPreview ? money(launchPreview.marketCap) : "—"} />
-              <PreviewMetric label="Ликвидность" value={launchPreview ? money(launchPreview.liquidity) : "—"} />
-              <PreviewMetric label="Комиссия сделки" value={`${rules.tradeFeePercent.toLocaleString("ru-RU")}%`} />
-            </div>
-          </section>
-
-          <section className="mxm-launch-checklist">
-            <div className="mxm-section-head"><span>Проверка запуска</span><span className="text-[8px] text-[var(--muted-2)]">{[identityReady, validEconomy, accountReady].filter(Boolean).length}/3</span></div>
-            <LaunchCheck ready={identityReady} label="Карточка рынка" detail={identityReady ? `${name.trim()} · $${symbol}` : "Добавьте название и тикер"} />
-            <LaunchCheck ready={validEconomy} label="Экономика" detail={validEconomy ? "Параметры проходят лимиты" : "Проверьте позицию, цену и floor"} />
-            <LaunchCheck ready={accountReady} label="Аккаунт" detail={accountReady ? "Баланс, энергия и слот доступны" : blocker || "Проверяем ограничения"} />
-          </section>
-
-          <section className="mxm-launch-budget">
-            <div className="flex items-center justify-between"><span>Бюджет запуска</span><strong>{Number.isFinite(launchBudget) ? money(launchBudget) : "—"}</strong></div>
-            <div className="mt-2 grid grid-cols-2 gap-3"><Info icon={<WalletCards size={12} />} label="Доступно" value={profile ? money(profile.availableBalance) : "—"} /><Info icon={<Sparkles size={12} />} label="Энергия" value={`${rules.energy}/${rules.maxEnergy}`} /></div>
-            <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[8px] text-[var(--muted)]"><span>Комиссия {money(rules.launchFee)}</span><span>Позиция {parsedInitialBuy == null ? "—" : money(parsedInitialBuy)}</span></div>
-          </section>
-
-          {blocker ? <div className="mxm-inline-notice" aria-live="polite">{blocker}</div> : null}
-          {error ? <div className="mxm-inline-notice is-error" role="alert">{error}</div> : null}
-          <PrimaryButton onClick={create} disabled={!canLaunch} className="flex w-full items-center justify-center gap-2 !min-h-11 text-[11px]"><Rocket size={15} />{busy ? "Создаём рынок…" : "Запустить мемкоин"}</PrimaryButton>
-          <p className="px-1 text-center text-[7.5px] leading-4 text-[var(--muted-2)]">Виртуальный рынок MXM, не реальный токен.</p>
-        </aside>
+    <div className="mx-auto max-w-xl mxm-page-enter">
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--border-soft)] pb-2.5">
+        <h1 className="text-sm font-semibold tracking-[-.02em]">Новый мемкоин</h1>
+        <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Комиссия запуска</p><p className="mt-1 text-xs font-semibold">{money(rules.launchFee)}</p></div>
       </div>
+
+      <section>
+        <div className="flex items-center gap-3.5 border-b border-[var(--border-soft)] pb-4">
+          <button type="button" onClick={() => inputRef.current?.click()} className="group relative grid h-[76px] w-[76px] shrink-0 place-items-center overflow-hidden rounded-[16px] border border-dashed border-[#353a40] transition hover:border-[#555a61] active:scale-[.98]" aria-label="Выбрать изображение мемкоина">
+            {preview ? <Image src={preview} alt="Предпросмотр" fill unoptimized sizes="76px" className="object-cover" /> : <div className="text-center text-[var(--muted)]"><ImagePlus size={22} className="mx-auto" /><span className="mt-1 block text-[9px]">Логотип</span></div>}
+          </button>
+          <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} className="hidden" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium">Логотип</p>
+            <p className="mt-1 text-[9px] text-[var(--muted)]">PNG/JPG/WebP · до 2 МБ</p>
+            <div className="mt-2 flex gap-3"><button type="button" onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 text-[10px] text-[#cdd1d6]"><Upload size={11} />{imageBusy ? "Обрабатываем…" : "Выбрать"}</button>{image ? <button type="button" onClick={() => { replaceImage(null); if (inputRef.current) inputRef.current.value = ""; }} className="inline-flex items-center gap-1 text-[10px] text-[var(--muted)]"><X size={11} />Убрать</button> : null}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <Field label="Название" hint={`${name.length}/32`}><input value={name} onChange={(e) => setName(e.target.value)} maxLength={32} placeholder="Например, Sad Cat" className="mxm-input" /></Field>
+          <Field label="Тикер" hint={`${symbol.length}/8`}><div className="mxm-input flex items-center"><span className="text-[var(--muted)]">$</span><input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0,8))} placeholder="CAT" className="min-w-0 flex-1 bg-transparent px-1 outline-none" /></div></Field>
+          <Field label="Описание" hint={`${description.length}/180`}><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={180} rows={3} placeholder="Идея мемкоина" className="mxm-input min-h-[84px] resize-none" /></Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Стартовый резерв" hint={`${rules.initialBuyMin}–${rules.initialBuyMax} TON`}><input value={initialBuy} onChange={(e) => setInitialBuy(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
+            <Field label="Стартовая цена" hint={`${rules.startPriceMin}–${rules.startPriceMax}`}><input value={startPrice} onChange={(e) => setStartPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
+            <Field label={`Мин. цена на ${rules.creatorLockDays} дней`} hint={`≤ ${rules.floorMaxBps / 100}% старта`}><input value={floorPrice} onChange={(e) => setFloorPrice(e.target.value)} inputMode="decimal" className="mxm-input" /></Field>
+          </div>
+          <p className="text-[9px] leading-4 text-[var(--muted-2)]">{rules.creatorLockBps / 100}% токенов стартовой позиции линейно разблокируются за {rules.creatorLockDays} дней. Минимальная цена действует в тот же стартовый период.</p>
+        </div>
+
+        <div className="mt-4 border-y border-[var(--border-soft)] py-3">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+            <Info icon={<Sparkles size={12} />} label="Цена открытия" value={launchPreview ? launchPreview.openingPrice.toExponential(3).replace("e+", "e") : "—"} />
+            <Info icon={<ShieldCheck size={12} />} label="Ликвидность AMM" value={launchPreview ? money(launchPreview.liquidity) : "—"} />
+            <Info icon={<Rocket size={12} />} label="Комиссия сделки" value={`${rules.tradeFeePercent.toLocaleString("ru-RU")}%`} />
+            <Info icon={<WalletCards size={12} />} label="Доступный баланс" value={profile ? money(profile.availableBalance) : "—"} />
+            <Info icon={<Sparkles size={12} />} label="Энергия запуска" value={`${rules.energyCost} · доступно ${rules.energy}/${rules.maxEnergy}`} />
+          </div>
+          <p className="mt-3 text-[9px] leading-4 text-[var(--muted-2)]">Все значения внутри MXM виртуальные. Здесь нет депозита, вывода или обещания реальной стоимости TON.</p>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3 text-[9px] text-[var(--muted)]"><span>Активных мемкоинов: {rules.activeCoins}/{rules.maxActiveCoins}</span><span>Пауза между запусками: {rules.cooldownHours} ч</span></div>
+
+        {blocker ? <p className="mt-3 border-l-2 border-[var(--accent)] px-2 text-[10px] text-[#d4c596]">{blocker}</p> : null}
+        {error ? <p className="mt-3 border-l-2 border-[var(--negative)] px-2 py-1 text-[11px] text-[#ff9aa4]">{error}</p> : null}
+        <PrimaryButton onClick={create} disabled={!canLaunch} className="mt-4 flex w-full items-center justify-center gap-2 py-3 text-xs"><Rocket size={16} />{busy ? "Создаём…" : blocker || "Запустить мемкоин"}</PrimaryButton>
+      </section>
     </div>
   );
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) { return <label className="block"><span className="mb-1.5 flex items-center justify-between text-[11px] text-[#c9cdd2]"><span>{label}</span>{hint ? <span className="text-[9px] text-[var(--muted-2)]">{hint}</span> : null}</span>{children}</label>; }
 function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div><div className="flex items-center gap-1.5 text-[9px] text-[var(--muted)]">{icon}{label}</div><p className="mt-1 text-xs font-semibold">{value}</p></div>; }
-function SectionHead({ step, title, ready }: { step: string; title: string; ready: boolean }) { return <header className="mxm-launch-section-head"><span>{step}</span><div className="min-w-0 flex-1"><h2>{title}</h2></div>{ready ? <BadgeCheck size={16} /> : null}</header>; }
-function PreviewMetric({ label, value }: { label: string; value: string }) { return <div className="bg-[var(--panel)] px-2.5 py-2"><p className="text-[7px] text-[var(--muted-2)]">{label}</p><p className="mt-1 truncate text-[9px] font-semibold tabular-nums">{value}</p></div>; }
-function LaunchCheck({ ready, label, detail }: { ready: boolean; label: string; detail: string }) { return <div className="mxm-launch-check"><span className={ready ? "is-ready" : ""}>{ready ? <Check size={11} /> : <Circle size={10} />}</span><div className="min-w-0"><p>{label}</p><small>{detail}</small></div></div>; }
-function pricePreview(value: number) { return Number.isFinite(value) && value > 0 ? value.toExponential(3).replace("e+", "e") : "—"; }

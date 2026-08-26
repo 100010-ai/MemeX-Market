@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
@@ -157,7 +156,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
   }
 
   function startStarsPurchase(product: StoreProduct) {
-    if (product.category !== "currency" || busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
+    if (busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
     if (!termsAccepted) {
       setTermsDraftAccepted(false);
       setPendingStarsProduct(product);
@@ -184,7 +183,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
   }
 
   async function buy(product: StoreProduct) {
-    if (product.category !== "currency" || busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
+    if (busy || !data?.migrationReady || !data.starsEnabled || unavailableReason(product)) return;
     const requiresCoin = product.metadata.requiresCoin === true;
     if (requiresCoin && !creatorCoinId) {
       setNotice("Для этого инструмента сначала нужен свой активный мемкоин. Создай его или выбери существующий.");
@@ -285,42 +284,29 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
   }
 
   return (
-    <div className="mxm-store-front mx-auto max-w-[1240px]">
-      <header className="mxm-store-header mb-3">
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-3 border-b border-[var(--border-soft)] pb-3">
         <div className="flex items-start justify-between gap-4">
-          <div><p className="text-[9px] uppercase tracking-[.16em] text-[var(--accent)]">MXM STORE</p><h1 className="mt-1 text-[21px] font-bold tracking-[-.045em]">Магазин MXM</h1><p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Пропуск, кейсы и коллекционное оформление.</p></div>
+          <div><p className="text-[10px] uppercase tracking-[.14em] text-[var(--muted-2)]">Telegram Stars · MXM</p><h1 className="mt-1 text-[18px] font-semibold tracking-[-.035em]">Магазин MXM</h1><p className="mt-1 max-w-2xl text-[9px] leading-4 text-[var(--muted)]">Кейсы, пропуск, косметика и инструменты для виртуальной экономики MXM.</p></div>
           <div className="shrink-0 text-right"><p className="text-[9px] text-[var(--muted)]">Баланс</p><p className="mt-1 flex items-center justify-end gap-1 text-sm font-semibold"><Gem size={13} className="text-[var(--accent)]" />{Number(data?.wallet.mxmCoins || 0).toLocaleString("ru-RU")} MXM</p><p className="mt-1 flex items-center justify-end gap-1 text-[9px] text-[var(--muted)]"><Zap size={10} />{data?.wallet.energy ?? 100}/{data?.wallet.maxEnergy ?? 100} энергии</p></div>
         </div>
         {data?.wallet.premiumActive ? <div className="mt-3 flex items-center gap-2 border-l-2 border-[#f5c451] px-2 text-[10px] text-[#f3d789]"><Crown size={12} />Премиум MXM до {new Date(data.wallet.premiumUntil!).toLocaleDateString("ru-RU")}{data.wallet.dailyBonusAvailable ? <button type="button" disabled={Boolean(busy)} onClick={() => void claimDaily()} className="ml-auto text-white underline decoration-white/30 underline-offset-4">Получить ежедневный бонус</button> : <span className="ml-auto text-[var(--muted)]">Бонус сегодня получен</span>}</div> : null}
       </header>
 
-      <section className="mxm-store-drop">
-        <Image src="/assets/season/weekly-vault-hero.webp" alt="Эксклюзив недели" fill sizes="(max-width: 700px) 100vw, 760px" priority className="mxm-store-drop-art" />
-        <div className="mxm-store-drop-shade" />
-        <div className="mxm-store-drop-copy">
-          <span><Sparkles size={11} /> Эксклюзив недели</span>
-          <h2>Ледяной разлом</h2>
-          <p>Анимированная рамка только в боевом пропуске.</p>
-          <div><Link href="/season">Открыть пропуск <ChevronRight size={13} /></Link><small>{data?.currentSeason ? `${data.currentSeason.daysLeft} дн. до смены` : "Новая награда каждую неделю"}</small></div>
-        </div>
-      </section>
-
-      <nav className="mxm-store-nav mxm-hscroll mb-3 gap-2 pb-1">
+      <nav className="mxm-hscroll mb-3 gap-2 pb-1">
         <Link href="/season" className="mxm-quick-link"><Sparkles size={14} />Боевой пропуск</Link>
         <Link href="/cases" className="mxm-quick-link"><PackageOpen size={14} />Кейсы</Link>
         <Link href="/collections" className="mxm-quick-link"><Gift size={14} />Коллекции</Link>
         <Link href="/creator" className="mxm-quick-link"><Rocket size={14} />Авторам</Link>
       </nav>
 
-      <button type="button" onClick={() => setCategory("currency")} className="mxm-store-topup w-full text-left"><span><Star size={14} fill="currentColor" /><b>Пополнить MXM</b><small>Telegram Stars используются только для оплаты Invoice</small></span><ChevronRight size={16} /></button>
-
       {!data?.migrationReady && data ? <div className="mxm-alert mxm-alert-error mb-3">Каталог работает в режиме предпросмотра. Для покупок примените миграцию <code>{data.migration}</code>.</div> : null}
       {notice ? <div aria-live="polite" className="mxm-alert mb-3">{notice}</div> : null}
-      {data && !data.starsEnabled ? <div className="mxm-alert mb-3">Пополнение MXM через Telegram Stars временно отключено. Покупки за MXM остаются доступны.</div> : null}
+      {data && !data.starsEnabled ? <div className="mxm-alert mb-3">Покупки за Telegram Stars временно отключены в Runtime Config. Товары с ценой в MXM остаются доступны.</div> : null}
 
       <div className="mb-3 flex items-start gap-2 border-y border-[var(--border-soft)] py-2.5 text-[8px] leading-4 text-[var(--muted)]">
         <ShieldCheck size={12} className="mt-0.5 shrink-0 text-[var(--accent)]" />
-        <span>Telegram Stars используются только для пополнения MXM через официальный Invoice. Товары магазина оплачиваются MXM. <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">Условия</Link></span>
+        <span>Stars-покупки проходят через официальный Telegram Invoice. <Link href="/terms" className="text-white underline decoration-white/30 underline-offset-2">Условия</Link> · <Link href="/paysupport" className="text-white underline decoration-white/30 underline-offset-2">поддержка</Link>.</span>
       </div>
 
       <div className="mxm-hscroll mb-3 gap-1.5 pb-1">
@@ -332,11 +318,10 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         {category === "creator" && data?.creatorCoins.length ? <label className="mb-3 block max-w-sm text-[10px] text-[var(--muted)]">Мемкоин для продвижения<select value={creatorCoinId} onChange={(event) => setCreatorCoinId(event.target.value)} className="mxm-input mt-1.5 w-full text-white">{data.creatorCoins.map((coin) => <option key={coin.id} value={coin.id}>{coin.name} · ${coin.symbol}</option>)}</select></label> : null}
         {category === "creator" && data && !data.creatorCoins.length ? <div className="mb-3 flex items-center justify-between gap-3 border-y border-[var(--border-soft)] py-3 text-[9px] text-[var(--muted)]"><span>Продвижение требует собственного активного мемкоина.</span><Link href="/create" className="text-[var(--accent)]">Создать</Link></div> : null}
 
-        {!data ? <div className="grid gap-3 md:grid-cols-2"><div className="mxm-skeleton h-44" /><div className="mxm-skeleton h-44" /></div> : products.length ? <div className="grid gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {!data ? <div className="grid gap-3 md:grid-cols-2"><div className="mxm-skeleton h-44" /><div className="mxm-skeleton h-44" /></div> : products.length ? <div className="grid gap-x-5 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => {
             const owned = inventory.get(product.sku) || 0;
             const sink = mxmShop.get(product.sku);
-            const isMxmTopup = product.category === "currency";
             const unavailable = unavailableReason(product);
             const highlights = metadataTextList(product.metadata, "highlights");
             const itemKey = profileItemKey(product);
@@ -345,8 +330,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
             const insufficientMxm = Boolean(sink && data.wallet.mxmCoins < sink.mxmPrice);
             const actionReason = unavailable
               || (!data.migrationReady ? "Магазин обновляется — покупки временно недоступны" : null)
-              || (isMxmTopup && !data.starsEnabled ? "Пополнение через Stars временно отключено" : null)
-              || (!isMxmTopup && !sink ? "Цена в MXM ещё не настроена" : null)
+              || (!data.starsEnabled && !sink ? "Покупки Stars временно отключены" : null)
               || (insufficientMxm && sink ? `Не хватает ${(sink.mxmPrice - data.wallet.mxmCoins).toLocaleString("ru-RU")} MXM` : null);
             return <article key={product.sku} className="mxm-card mxm-store-product flex min-h-[164px] flex-col py-3">
               <div className="flex items-start gap-3">
@@ -361,7 +345,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
                 <div className="mb-2 min-h-4">{unavailable ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--muted)]"><CheckCircle2 size={11} />{unavailable}</span> : owned > 0 ? <span className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><CheckCircle2 size={11} />В инвентаре: {owned}</span> : product.category === "cases" && data.caseAvailability[product.sku] != null ? <span className="text-[8px] text-[var(--muted-2)]">Осталось в серии: {Number(data.caseAvailability[product.sku]).toLocaleString("ru-RU")}</span> : <span className="inline-flex items-center gap-1 text-[8px] text-[var(--muted-2)]"><ShieldCheck size={9} />Без реальной стоимости</span>}</div>
                 <div className="flex flex-wrap items-stretch gap-1.5">
                   {sink ? <button type="button" title={insufficientMxm ? `Нужно ${sink.mxmPrice.toLocaleString("ru-RU")} MXM` : "Купить за MXM"} disabled={Boolean(busy) || !data.migrationReady || Boolean(unavailable) || insufficientMxm} onClick={() => void buyWithMxm(product)} className="mxm-secondary-action min-w-[92px] flex-1 !text-[10px]"><Gem size={11} />{busy === `mxm:${product.sku}` ? "Покупка…" : sink.mxmPrice.toLocaleString("ru-RU")}</button> : null}
-                  {isMxmTopup ? <button type="button" title={!data.starsEnabled ? "Пополнение Stars отключено" : unavailable || "Пополнить MXM через Telegram Invoice"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="mxm-primary-action min-w-[104px] flex-1"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : unavailable ? "Недоступно" : `${product.stars} Stars`}</button> : null}
+                  <button type="button" title={!data.starsEnabled ? "Покупки Stars отключены в Runtime Config" : unavailable || "Купить за Telegram Stars"} disabled={Boolean(busy) || !data.migrationReady || !data.starsEnabled || Boolean(unavailable)} onClick={() => startStarsPurchase(product)} className="mxm-primary-action min-w-[104px] flex-1"><Star size={11} fill="currentColor" />{busy === product.sku ? "Открываем…" : unavailable ? "Недоступно" : `${product.stars} · Купить`}</button>
                 </div>
                 {actionReason ? <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] text-[var(--muted)]"><Info size={9} />{actionReason}</span> : null}
               </div>
@@ -374,7 +358,7 @@ export function StoreFront({ initialCategory = "currency" }: { initialCategory?:
         <button type="button" aria-label="Закрыть подтверждение покупки" className="mxm-sheet-backdrop absolute inset-0 bg-black/75" onClick={closePurchaseConsent} />
         <section role="dialog" aria-modal="true" aria-labelledby="mxm-store-consent-title" className="mxm-sheet-panel relative z-[1] w-full max-w-md rounded-t-[24px] border border-[var(--border)] bg-[var(--bg)] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-18px_56px_rgba(0,0,0,.55)] md:rounded-[24px] md:pb-4">
           <div className="flex items-start justify-between gap-4">
-            <div><p className="text-[8px] uppercase tracking-[.14em] text-[var(--muted-2)]">Пополнение MXM</p><h3 id="mxm-store-consent-title" className="mt-1 text-[15px] font-semibold">{pendingStarsProduct.title}</h3><p className="mt-1 text-[10px] text-[var(--accent)]">{pendingStarsProduct.rewardLabel}</p></div>
+            <div><p className="text-[8px] uppercase tracking-[.14em] text-[var(--muted-2)]">Подтверждение Stars</p><h3 id="mxm-store-consent-title" className="mt-1 text-[15px] font-semibold">{pendingStarsProduct.title}</h3><p className="mt-1 text-[10px] text-[var(--accent)]">{pendingStarsProduct.rewardLabel}</p></div>
             <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-[var(--accent)] px-2.5 py-1.5 text-[10px] font-semibold text-[#0b0f15]"><Star size={11} fill="currentColor" />{pendingStarsProduct.stars}</span>
           </div>
           <div className="mt-4 rounded-[14px] border border-white/[.08] bg-white/[.025] p-3 text-[9px] leading-4 text-[var(--muted)]">

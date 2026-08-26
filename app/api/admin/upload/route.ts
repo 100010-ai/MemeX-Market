@@ -7,7 +7,7 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 export const runtime = "nodejs";
 
 async function POSTHandler(request: Request) {
-  const admin = await requireAdminProfile("assets.manage");
+  const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "admin-upload", String(admin.id), 12, 60))) {

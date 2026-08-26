@@ -6,7 +6,7 @@ import { getRuntimeConfig, invalidateRuntimeConfigCache, validateRuntimeConfigIn
 import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 
 async function GETHandler() {
-  const admin = await requireAdminProfile("runtime.manage");
+  const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   try {
     return NextResponse.json({ config: await getRuntimeConfig() }, { headers: { "cache-control": "no-store" } });
@@ -16,7 +16,7 @@ async function GETHandler() {
 }
 
 async function POSTHandler(request: Request) {
-  const admin = await requireAdminProfile("runtime.manage");
+  const admin = await requireAdminProfile();
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
   if (!(await enforceRateLimit(request, "admin-runtime-config", String(admin.id), 12, 60))) {

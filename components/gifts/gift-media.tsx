@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GiftAsset, GiftMediaKind } from "@/lib/types";
-import { telegramCollectibleSlug } from "@/lib/fragment-gifts";
+import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 type LottieAnimation = {
@@ -21,39 +21,6 @@ const CLIENT_TGS_COMPRESSED_LIMIT = 4 * 1024 * 1024;
 const CLIENT_TGS_JSON_LIMIT = 12 * 1024 * 1024;
 const lottieJsonCache = new Map<string, Promise<unknown>>();
 let lottieModulePromise: Promise<typeof import("lottie-web")> | null = null;
-
-function staticImageSource(value: string | null | undefined) {
-  const source = value?.trim();
-  if (!source || !/^(?:https?:|data:image\/|\/api\/)/i.test(source)) return null;
-  if (/\.(?:json|tgs|mp4|webm|mov|m4v|ogv)(?:$|[?#])/i.test(source)) return null;
-  return source;
-}
-
-function trustedTonApiImageSource(value: string | null | undefined) {
-  const source = staticImageSource(value);
-  if (!source || source.startsWith("/api/") || source.startsWith("data:image/")) return source;
-  try {
-    const host = new URL(source).hostname.toLowerCase();
-    const trusted = host === "tonapi.io"
-      || host.endsWith(".tonapi.io")
-      || host === "fragment.com"
-      || host.endsWith(".fragment.com")
-      || host === "telegram.org"
-      || host.endsWith(".telegram.org")
-      || host === "getgems.io"
-      || host.endsWith(".getgems.io")
-      || host === "ipfs.io"
-      || host === "headgun.org"
-      || host === "chat-mafia.com";
-    return trusted ? source : null;
-  } catch {
-    return null;
-  }
-}
-
-function uniqueSources(sources: Array<string | null>) {
-  return [...new Set(sources.filter((source): source is string => Boolean(source)))];
-}
 
 function loadLottieModule() {
   lottieModulePromise ??= import("lottie-web").then((module) => {
@@ -334,13 +301,15 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   const animationRef = useRef<LottieAnimation | null>(null);
   const [animationFailedKey, setAnimationFailedKey] = useState<string | null>(null);
   const [animationReadyKey, setAnimationReadyKey] = useState<string | null>(null);
-  const [previewAttempt, setPreviewAttempt] = useState({ giftId: "", index: 0 });
+  const [previewFailedKey, setPreviewFailedKey] = useState<string | null>(null);
   const { near, active } = useViewportState(compact, holderRef);
   const wantsAnimation = gift.mediaKind === "animated";
   const animationFailed = animationFailedKey === gift.id;
   const animationReady = animationReadyKey === gift.id;
+  const previewFailed = previewFailedKey === gift.id;
   const permitted = useAnimationPermit(active && wantsAnimation && !animationFailed, `tonapi:${gift.id}`, compact);
   const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
+  const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
   // Always use our media proxy for Telegram collectible previews. Fragment URLs
   // can reject embedded WebView requests and expose CORS/referrer issues.
   // The proxy validates the source and serves the original collectible render.
@@ -393,23 +362,14 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
     };
   }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
-  const storedPreviews = uniqueSources([
-    trustedTonApiImageSource(gift.modelPreviewUrl),
-    gift.mediaKind === "static" ? trustedTonApiImageSource(gift.modelMediaUrl) : null,
-    gift.symbolMediaKind === "static" ? trustedTonApiImageSource(gift.symbolMediaUrl) : null,
-    trustedTonApiImageSource(gift.imageUrl),
-  ]);
-  const previewSources = uniqueSources([previewSource, ...storedPreviews]);
-  const previewIndex = previewAttempt.giftId === gift.id ? previewAttempt.index : 0;
-  const activePreview = previewSources[previewIndex] || null;
+  const storedPreview = gift.modelPreviewUrl || gift.modelMediaUrl || gift.symbolMediaUrl || gift.imageUrl;
   const showAnimation = wantsAnimation && permitted && !animationFailed;
 
   return (
     <div ref={holderRef} className="mxm-gift-media relative h-full w-full overflow-hidden bg-[#0b0d0f]">
-      {activePreview ? (
+      {!previewFailed ? (
         <Image
-          key={`${gift.id}:${previewIndex}:${activePreview}`}
-          src={activePreview}
+          src={previewSource}
           alt={`${gift.baseName} #${gift.number}`}
           width={768}
           height={768}
@@ -417,16 +377,23 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
           loading={priority ? "eager" : compact ? "lazy" : "eager"}
           decoding="async"
           fetchPriority={priority || !compact ? "high" : "low"}
-          onError={() => setPreviewAttempt((current) => ({
-            giftId: gift.id,
-            index: current.giftId === gift.id ? Math.max(current.index, previewIndex) + 1 : previewIndex + 1,
-          }))}
-          referrerPolicy={activePreview === previewSource ? undefined : "no-referrer"}
+          onError={() => setPreviewFailedKey(gift.id)}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
         />
-      ) : (
-        <div className="absolute inset-0 grid place-items-center px-4 text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>
-      )}
+      ) : storedPreview ? (
+        <Image
+          src={storedPreview}
+          alt={`${gift.baseName} #${gift.number}`}
+          width={768}
+          height={768}
+          unoptimized
+          loading={priority ? "eager" : compact ? "lazy" : "eager"}
+          decoding="async"
+          fetchPriority={priority || !compact ? "high" : "low"}
+          referrerPolicy="no-referrer"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
+        />
+      ) : null}
 
       {showAnimation ? (
         <div
@@ -436,13 +403,15 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
         />
       ) : null}
 
+      {previewFailed && !storedPreview && (!wantsAnimation || animationFailed || !near) ? (
+        <div className="absolute inset-0 grid place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>
+      ) : null}
     </div>
   );
 }
 
 export function GiftMedia({ gift, className = "", compact = false, priority = false }: { gift: GiftAsset; className?: string; compact?: boolean; priority?: boolean }) {
-  const [modelErrorKey, setModelErrorKey] = useState<string | null>(null);
-  const modelError = modelErrorKey === gift.id;
+  const [modelError, setModelError] = useState<string | null>(null);
   const pattern = useMemo(() => Array.from({ length: compact ? 6 : 10 }, (_, i) => i), [compact]);
 
   if (gift.catalogSource === "tonapi") {
@@ -467,7 +436,7 @@ export function GiftMedia({ gift, className = "", compact = false, priority = fa
     <div className={`mxm-gift-media relative isolate overflow-hidden ${className}`} style={{ background: `radial-gradient(circle at 48% 38%, ${gift.backdropCenter} 0%, ${gift.backdropEdge} 100%)` }}>
       {symbolUrl ? <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.13]" aria-hidden>{pattern.map((i) => <span key={i} className="absolute h-7 w-7" style={{ left: `${-3 + (i % 4) * 31}%`, top: `${1 + Math.floor(i / 4) * 38}%`, transform: `rotate(${(i % 2 ? 1 : -1) * (7 + (i % 4) * 6)}deg)`, backgroundColor: gift.backdropSymbol, WebkitMaskImage: `url(${symbolUrl})`, maskImage: `url(${symbolUrl})`, WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }} />)}</div> : !compact && (safeSymbolFileId || gift.symbolMediaUrl) ? <div className="pointer-events-none absolute inset-0 grid place-items-center opacity-[0.10]" aria-hidden><TelegramSticker fileId={safeSymbolFileId} mediaUrl={gift.symbolMediaUrl} kind={gift.symbolMediaKind} alt="" className="h-[42%] w-[42%]" lazy /></div> : null}
       <div className={`relative z-10 grid h-full w-full place-items-center ${compact ? "p-[14%]" : "p-[13%]"}`}>
-        {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={() => setModelErrorKey(gift.id)} lazy={compact && !priority} />}
+        {modelError ? <div className="rounded-2xl bg-black/20 px-3 py-2 text-center text-[9px] leading-4 text-white/65">Медиа недоступно</div> : <TelegramSticker fileId={compactModelFileId} mediaUrl={gift.modelMediaUrl} kind={compactModelKind} alt={`${gift.baseName} #${gift.number}`} className="h-full w-full" onError={setModelError} lazy={compact && !priority} />}
       </div>
     </div>
   );

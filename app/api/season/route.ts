@@ -12,39 +12,7 @@ function rewardSnapshot(value: unknown) {
   const label = text(row.label, "", 160);
   const kind = text(row.kind, "", 64);
   if (!label || !kind) return null;
-  const metadataRaw = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-    ? row.metadata as Record<string, unknown>
-    : {};
-  return {
-    label,
-    kind,
-    amount: Math.max(0, finiteNumber(row.amount)),
-    metadata: {
-      assetKey: text(metadataRaw.assetKey, text(metadataRaw.itemKey, "", 80), 80),
-      rarity: text(metadataRaw.rarity, "", 32),
-      exclusive: Boolean(metadataRaw.exclusive),
-    },
-  };
-}
-
-function frameKeys(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => text(item, "", 80)).filter(Boolean).slice(0, 6);
-}
-
-function nextSeasonSnapshot(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as Record<string, unknown>;
-  const id = text(row.id, "", 80);
-  if (!id) return null;
-  return {
-    id,
-    title: text(row.title, "Следующая неделя", 160),
-    startsAt: safeIsoDate(row.startsAt),
-    weekNumber: Math.max(1, Math.floor(finiteNumber(row.weekNumber, 1))),
-    theme: text(row.theme, "vault", 48),
-    exclusiveFrameKeys: frameKeys(row.exclusiveFrameKeys),
-  };
+  return { label, kind, amount: Math.max(0, finiteNumber(row.amount)) };
 }
 
 function seasonSnapshot(value: unknown) {
@@ -75,9 +43,6 @@ function seasonSnapshot(value: unknown) {
       startsAt: safeIsoDate(seasonRaw.startsAt),
       endsAt: safeIsoDate(seasonRaw.endsAt),
       daysLeft: Math.max(0, Math.floor(finiteNumber(seasonRaw.daysLeft))),
-      weekNumber: Math.max(1, Math.floor(finiteNumber(seasonRaw.weekNumber, 1))),
-      theme: text(seasonRaw.theme, "vault", 48),
-      exclusiveFrameKeys: frameKeys(seasonRaw.exclusiveFrameKeys),
     },
     xp: Math.max(0, Math.floor(finiteNumber(root.xp))),
     level: Math.max(1, Math.floor(finiteNumber(root.level, 1))),
@@ -94,7 +59,6 @@ function seasonSnapshot(value: unknown) {
       nextClaimLevel: Math.max(1, Math.floor(finiteNumber(prestigeRaw.nextClaimLevel, 1))),
       nextReward,
     },
-    nextSeason: nextSeasonSnapshot(root.nextSeason),
   };
 }
 

@@ -188,7 +188,7 @@ The v0.10 migration inserts no mock Gifts, coins, trades, leaderboard users or f
 
 ## Environment
 
-Copy `.env.example` (or `.env.production.example` for deployment) and replace every placeholder used by your environment. The production-critical variables are Supabase server/browser credentials, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, and a real human `SUPPORT_TELEGRAM_USERNAME`. Production owner access at `/admin` additionally requires `ADMIN_OWNER_TELEGRAM_ID` and a server-only `ADMIN_OWNER_KEY` with at least 32 random characters.
+Copy `.env.example` (or `.env.production.example` for deployment) and replace every placeholder used by your environment. The production-critical variables are Supabase server/browser credentials, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`, and a real human `SUPPORT_TELEGRAM_USERNAME`.
 
 Do not commit `.env`, `.env.local`, service-role secrets, bot tokens, webhook secrets, or control secrets. `SUPPORT_TELEGRAM_USERNAME` must point to a human support account and must not be the bot username.
 

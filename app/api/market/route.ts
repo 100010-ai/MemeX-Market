@@ -20,31 +20,6 @@ let filterOptionsInFlight: Promise<unknown> | null = null;
 let collectionOverviewCache: SharedMarketCache<Array<Record<string, unknown>>> | null = null;
 let collectionOverviewInFlight: Promise<Array<Record<string, unknown>>> | null = null;
 
-async function verificationMaps(rows: Array<Record<string, unknown>>) {
-  const coinIds = [...new Set(rows.map((row) => String(row.id || "")).filter(Boolean))];
-  const creatorIds = [...new Set(rows.map((row) => String(row.creator_profile_id || "")).filter(Boolean))];
-  if (!coinIds.length && !creatorIds.length) return { coins: new Map<string, string>(), creators: new Map<string, string>() };
-  const supabase = getSupabaseAdmin();
-  const emptyCoinResult = Promise.resolve({ data: [] as Array<{ coin_id: string; tier: string }>, error: null });
-  const emptyCreatorResult = Promise.resolve({ data: [] as Array<{ profile_id: string; tier: string }>, error: null });
-  const [coins, creators] = await Promise.all([
-    coinIds.length ? supabase.from("coin_verifications_v071").select("coin_id,tier").in("coin_id", coinIds).is("revoked_at", null) : emptyCoinResult,
-    creatorIds.length ? supabase.from("creator_verifications_v071").select("profile_id,tier").in("profile_id", creatorIds).is("revoked_at", null) : emptyCreatorResult,
-  ]);
-  if (coins.error || creators.error) throw coins.error || creators.error;
-  return {
-    coins: new Map((coins.data || []).map((row) => [String(row.coin_id), String(row.tier)])),
-    creators: new Map((creators.data || []).map((row) => [String(row.profile_id), String(row.tier)])),
-  };
-}
-
-function mapVerifiedCoin(row: Record<string, unknown>, maps: Awaited<ReturnType<typeof verificationMaps>>) {
-  const coin = mapCoin(row);
-  const coinTier = maps.coins.get(coin.id) || null;
-  const creatorTier = maps.creators.get(String(row.creator_profile_id || "")) || null;
-  return { ...coin, verified: Boolean(coinTier), verificationTier: coinTier, creatorVerified: Boolean(creatorTier), creatorVerificationTier: creatorTier };
-}
-
 async function getCachedGiftFilterOptions() {
   const now = Date.now();
   if (filterOptionsCache && filterOptionsCache.expiresAt > now) return filterOptionsCache.value;
@@ -138,11 +113,9 @@ async function GETHandler(request: NextRequest) {
           .order("created_at", { ascending: false })
           .limit(coinLimit);
         if (coinsResult.error) throw coinsResult.error;
-        const rows = (coinsResult.data || []) as Array<Record<string, unknown>>;
-        const maps = await verificationMaps(rows);
         return NextResponse.json({
           scope,
-          coins: rows.map((row) => mapVerifiedCoin(row, maps)),
+          coins: (coinsResult.data || []).map((row) => mapCoin(row as Record<string, unknown>)),
         }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-coins-compact;dur=${Date.now() - startedAt}` } });
       }
 
@@ -168,10 +141,8 @@ async function GETHandler(request: NextRequest) {
         if (boostedCoinsResult.error) throw boostedCoinsResult.error;
         boostedCoinRows = (boostedCoinsResult.data || []) as Record<string, unknown>[];
       }
-      const allCoinRows = [...(coinsResult.data || []), ...(newCoinsResult.data || []), ...boostedCoinRows] as Array<Record<string, unknown>>;
-      const maps = await verificationMaps(allCoinRows);
       const mapMarketCoin = (row: Record<string, unknown>) => {
-        const coin = mapVerifiedCoin(row, maps);
+        const coin = mapCoin(row);
         return { ...coin, boostedUntil: boostByCoin.get(coin.id) || null };
       };
       const newestCoins = (newCoinsResult.data || []).map((row) => mapMarketCoin(row as Record<string, unknown>));
@@ -257,7 +228,10 @@ async function GETHandler(request: NextRequest) {
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
-      bootstrapRecommended: page.totalGifts === 0 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
+      // A one-item catalogue used to prevent every later TonAPI bootstrap.
+      // Continue the real catalogue import until the market has a useful
+      // first page instead of getting permanently stuck on PEPE.
+      bootstrapRecommended: page.totalGifts < 24 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
       genesis: genesisResult.data || null,
       liquidity: liquidityResult.data || null,
       filterOptions,

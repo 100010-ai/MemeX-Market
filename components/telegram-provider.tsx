@@ -9,7 +9,6 @@ import { getClientPerformanceProfile } from "@/lib/client-performance";
 
 type TelegramContextValue = {
   profile: Profile | null;
-  inspectionMode: boolean;
   loading: boolean;
   appReady: boolean;
   error: string | null;
@@ -17,11 +16,6 @@ type TelegramContextValue = {
   retryAuth: () => void;
   patchProfile: (patch: Partial<Profile>) => void;
   haptic: (style?: "light" | "medium" | "heavy") => void;
-};
-
-type SessionProfilePayload = {
-  profile: Profile;
-  inspectionMode?: boolean;
 };
 
 const TelegramContext = createContext<TelegramContextValue | null>(null);
@@ -39,7 +33,7 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function existingSession(attempts = 3, expectedTelegramId?: number | null): Promise<SessionProfilePayload | null> {
+async function existingSession(attempts = 3, expectedTelegramId?: number | null): Promise<Profile | null> {
   let lastError: SessionCheckError | null = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -48,10 +42,7 @@ async function existingSession(attempts = 3, expectedTelegramId?: number | null)
       if (response.status === 401) return null;
       const payload = await response.json().catch(() => ({}));
       if (response.status === 409 && payload?.code === "SESSION_ACCOUNT_MISMATCH") return null;
-      if (response.ok && payload?.profile) return {
-        profile: payload.profile as Profile,
-        inspectionMode: payload.inspectionMode === true,
-      };
+      if (response.ok && payload?.profile) return payload.profile as Profile;
       const message = typeof payload?.error === "string" ? payload.error : "Не удалось проверить сессию";
       lastError = new SessionCheckError(message, response.status);
       // 4xx other than 401 is authoritative and should not be hammered.
@@ -107,32 +98,29 @@ function prepareWebApp() {
 }
 
 function warmCurrentRoute(pathname: string) {
-  if (pathname === "/" || pathname.startsWith("/hub")) {
-    void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
-    return;
-  }
-  if (pathname.startsWith("/market")) {
+  if (pathname === "/" || pathname.startsWith("/market")) {
     void prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 12_000, timeoutMs: 18_000 });
     return;
   }
   if (pathname.startsWith("/orders")) void prefetchApi("/api/orders", { cacheMs: 8_000 });
   else if (pathname.startsWith("/vault") || pathname.startsWith("/portfolio")) void prefetchApi("/api/portfolio", { cacheMs: 8_000 });
   else if (pathname.startsWith("/tasks")) void prefetchApi("/api/tasks", { cacheMs: 8_000 });
+  else if (pathname.startsWith("/hub")) void prefetchApi("/api/feed?limit=20", { cacheMs: 6_000 });
 }
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isControl = pathname.startsWith("/control") || pathname.startsWith("/admin");
+  const isControl = pathname.startsWith("/control");
   const isPublic = pathname === "/about" || pathname === "/terms" || pathname === "/paysupport";
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [inspectionMode, setInspectionMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [appReady, setAppReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authNonce, setAuthNonce] = useState(0);
   const authInFlight = useRef(false);
   const authRun = useRef(0);
+  const appWarmRun = useRef(0);
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -140,17 +128,15 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       if (activeTelegramId && profile && profile.telegramId !== activeTelegramId) {
         setApiCacheNamespace(`tg:${activeTelegramId}`);
         setProfile(null);
-        setInspectionMode(false);
         setAppReady(false);
         setLoading(true);
         setAuthNonce((value) => value + 1);
         return;
       }
       const meUrl = activeTelegramId ? `/api/me?expectedTelegramId=${encodeURIComponent(String(activeTelegramId))}` : "/api/me";
-      const result = await apiFetch<SessionProfilePayload>(meUrl, { cacheMs: 0, dedupe: false });
-      setApiCacheNamespace(result.inspectionMode ? "inspector" : `tg:${result.profile.telegramId}`);
+      const result = await apiFetch<{ profile: Profile }>(meUrl, { cacheMs: 0, dedupe: false });
+      setApiCacheNamespace(`tg:${result.profile.telegramId}`);
       setProfile(result.profile);
-      setInspectionMode(result.inspectionMode === true);
       setError(null);
     } catch (cause) {
       // A transient profile refresh must never wipe an already authenticated UI.
@@ -201,15 +187,14 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           forcedIdentitySwitch = true;
           setApiCacheNamespace(`tg:${currentTelegramId}`);
           setProfile(null);
-          setInspectionMode(false);
           setAppReady(false);
           setLoading(true);
         }
-        let sessionPayload: SessionProfilePayload | null = null;
+        let sessionProfile: Profile | null = null;
         let sessionError: unknown = null;
 
         if (immediateWebApp?.initData) {
-          try { sessionPayload = await existingSession(3, currentTelegramId); }
+          try { sessionProfile = await existingSession(3, currentTelegramId); }
           catch (cause) { sessionError = cause; }
         } else {
           const [webAppResult, sessionResult] = await Promise.allSettled([
@@ -218,64 +203,40 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           ]);
           webApp = webAppResult.status === "fulfilled" ? webAppResult.value : null;
           currentTelegramId = telegramUserIdFromInitData(webApp?.initData);
-          sessionPayload = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+          sessionProfile = sessionResult.status === "fulfilled" ? sessionResult.value : null;
           sessionError = sessionResult.status === "rejected" ? sessionResult.reason : null;
 
           // In the rare case Telegram injected initData after the session read,
           // validate the already loaded profile against the now-known account.
-          if (sessionPayload && currentTelegramId && sessionPayload.profile.telegramId !== currentTelegramId) {
+          if (sessionProfile && currentTelegramId && sessionProfile.telegramId !== currentTelegramId) {
             forcedIdentitySwitch = true;
             setApiCacheNamespace(`tg:${currentTelegramId}`);
             setProfile(null);
-            setInspectionMode(false);
             setAppReady(false);
-            sessionPayload = null;
+            sessionProfile = null;
           }
         }
 
-        if (sessionPayload && (!currentTelegramId || sessionPayload.profile.telegramId === currentTelegramId)) {
-          setApiCacheNamespace(sessionPayload.inspectionMode ? "inspector" : `tg:${sessionPayload.profile.telegramId}`);
+        if (sessionProfile && (!currentTelegramId || sessionProfile.telegramId === currentTelegramId)) {
+          setApiCacheNamespace(`tg:${sessionProfile.telegramId}`);
           warmCurrentRoute(pathname);
-          if (!cancelled && run === authRun.current) {
-            setProfile(sessionPayload.profile);
-            setInspectionMode(sessionPayload.inspectionMode === true);
-          }
+          if (!cancelled && run === authRun.current) setProfile(sessionProfile);
           return;
         }
 
         // A different Telegram account is active in the WebApp than the one
         // stored in our cookie. Never render or prefetch with the old identity.
-        if (sessionPayload && currentTelegramId && sessionPayload.profile.telegramId !== currentTelegramId) {
+        if (sessionProfile && currentTelegramId && sessionProfile.telegramId !== currentTelegramId) {
           forcedIdentitySwitch = true;
           setApiCacheNamespace(`tg:${currentTelegramId}`);
           setProfile(null);
-          setInspectionMode(false);
           setAppReady(false);
         }
 
         if (!webApp?.initData) {
-          if (sessionPayload) {
-            setApiCacheNamespace(sessionPayload.inspectionMode ? "inspector" : `tg:${sessionPayload.profile.telegramId}`);
-            if (!cancelled && run === authRun.current) {
-              setProfile(sessionPayload.profile);
-              setInspectionMode(sessionPayload.inspectionMode === true);
-            }
-            return;
-          }
-          const inspectRequested = new URLSearchParams(window.location.search).get("inspect") === "1";
-          if (inspectRequested) {
-            const inspected = await apiFetch<SessionProfilePayload>("/api/inspect/session", {
-              method: "POST",
-              body: JSON.stringify({}),
-            });
-            setApiCacheNamespace("inspector");
-            const cleanUrl = new URL(window.location.href);
-            cleanUrl.searchParams.delete("inspect");
-            window.history.replaceState(window.history.state, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
-            if (!cancelled && run === authRun.current) {
-              setProfile(inspected.profile);
-              setInspectionMode(true);
-            }
+          if (sessionProfile) {
+            setApiCacheNamespace(`tg:${sessionProfile.telegramId}`);
+            if (!cancelled && run === authRun.current) setProfile(sessionProfile);
             return;
           }
           throw sessionError instanceof Error
@@ -285,19 +246,17 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         prepareWebApp();
 
         if (currentTelegramId) setApiCacheNamespace(`tg:${currentTelegramId}`);
-        const result = await apiFetch<SessionProfilePayload>("/api/auth/telegram", {
+        const result = await apiFetch<{ profile: Profile }>("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: webApp.initData }),
         });
         setApiCacheNamespace(`tg:${result.profile.telegramId}`);
-        setInspectionMode(false);
         warmCurrentRoute(pathname);
         if (!cancelled && run === authRun.current) setProfile(result.profile);
       } catch (cause) {
         if (!cancelled && run === authRun.current && (!profile || forcedIdentitySwitch)) {
           setApiCacheNamespace("anon");
           if (forcedIdentitySwitch) setProfile(null);
-          if (forcedIdentitySwitch) setInspectionMode(false);
           setError(cause instanceof Error ? cause.message : "Не удалось войти через Telegram");
         }
       } finally {
@@ -321,7 +280,6 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       const nextTelegramId = telegramUserIdFromInitData(window.Telegram?.WebApp?.initData);
       setApiCacheNamespace(nextTelegramId ? `tg:${nextTelegramId}` : "anon");
       setProfile(null);
-      setInspectionMode(false);
       setAppReady(false);
       setLoading(true);
       setAuthNonce((value) => value + 1);
@@ -341,7 +299,6 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         lastTelegramId = nextTelegramId;
         setApiCacheNamespace(`tg:${nextTelegramId}`);
         setProfile(null);
-        setInspectionMode(false);
         setAppReady(false);
         setLoading(true);
         setAuthNonce((value) => value + 1);
@@ -444,16 +401,68 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setAppReady(true);
+    const run = ++appWarmRun.current;
+    let cancelled = false;
+    const startedAt = performance.now();
+    setAppReady(false);
 
+    const primaryRoutes = ["/hub", "/market", "/orders", "/tasks", "/vault"];
+    const secondaryRoutes = ["/leaderboard", "/watchlist", "/notifications", "/profile", "/progression", "/profile/customize", "/store", "/cart", "/referrals", "/season", "/cases", "/collections", "/create", "/creator"];
     const performanceProfile = getClientPerformanceProfile();
     const constrainedDevice = performanceProfile.constrained;
     const root = document.documentElement;
     root.classList.toggle("mxm-device-constrained", constrainedDevice);
-    return () => { root.classList.remove("mxm-device-constrained"); };
-  }, [profileId, isControl, isPublic]);
+    for (const href of primaryRoutes) router.prefetch(href);
 
-  const value = useMemo(() => ({ profile, inspectionMode, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, inspectionMode, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
+    const criticalRequests = [
+      prefetchApi("/api/market?scope=gifts&limit=24&t=0", { cacheMs: 30_000, timeoutMs: 14_000 }),
+      prefetchApi("/api/orders", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/portfolio", { cacheMs: 20_000, timeoutMs: 14_000 }),
+      prefetchApi("/api/tasks", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      prefetchApi("/api/runtime-config", { cacheMs: 30_000, timeoutMs: 10_000 }),
+      ...(!constrainedDevice ? [
+        prefetchApi("/api/market/collections?limit=40", { cacheMs: 30_000, timeoutMs: 14_000 }),
+        prefetchApi("/api/feed?limit=12", { cacheMs: 20_000, timeoutMs: 12_000 }),
+        prefetchApi("/api/leaderboard?board=overall&limit=8", { cacheMs: 20_000, timeoutMs: 12_000 }),
+      ] : []),
+    ];
+
+    const preload = Promise.allSettled(criticalRequests);
+    const timeout = sleep(3_200);
+    void Promise.race([preload, timeout]).then(async () => {
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < 780) await sleep(780 - elapsed);
+      if (cancelled || run !== appWarmRun.current) return;
+      setAppReady(true);
+
+      const warmSecondary = () => {
+        const routes = constrainedDevice ? secondaryRoutes.slice(0, 6) : secondaryRoutes;
+        for (const href of routes) router.prefetch(href);
+        if (constrainedDevice) return;
+        void Promise.allSettled([
+          prefetchApi("/api/watchlist", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/notifications", { cacheMs: 15_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/profile/meta", { cacheMs: 25_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/cart", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/referrals", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/store", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/season", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/cases", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/collections/progress", { cacheMs: 20_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/coins", { cacheMs: 15_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/creator", { cacheMs: 15_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/profile/customize", { cacheMs: 15_000, timeoutMs: 12_000 }),
+          prefetchApi("/api/market?scope=coins&limit=48&t=0", { cacheMs: 25_000, timeoutMs: 14_000 }),
+        ]);
+      };
+      if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(warmSecondary, { timeout: 1_200 });
+      else window.setTimeout(warmSecondary, 180);
+    });
+
+    return () => { cancelled = true; root.classList.remove("mxm-device-constrained"); };
+  }, [profileId, isControl, isPublic, router]);
+
+  const value = useMemo(() => ({ profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic }), [profile, loading, appReady, error, refreshProfile, retryAuth, patchProfile, haptic]);
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>;
 }
 

@@ -12,8 +12,7 @@ function creatorDashboardSnapshot(value: unknown) {
   const entitlements = Array.isArray(root.entitlements) ? root.entitlements : [];
   const coins = Array.isArray(root.coins) ? root.coins : [];
   return {
-    verified: false,
-    verificationTier: null as string | null,
+    verified: root.verified === true,
     analyticsUnlocked: root.analyticsUnlocked === true,
     level: {
       name: text(level.name, "Bronze", 32),
@@ -33,7 +32,7 @@ function creatorDashboardSnapshot(value: unknown) {
       const row = record(item);
       if (!row) return [];
       const key = text(row.key, "", 80);
-      if (!key || key === "creator_verified") return [];
+      if (!key) return [];
       return [{ key, expiresAt: row.expiresAt == null ? null : safeIsoDate(row.expiresAt) }];
     }),
     coins: coins.flatMap((item) => {
@@ -59,8 +58,6 @@ function creatorDashboardSnapshot(value: unknown) {
         buyerRetentionPct: row.buyerRetentionPct == null ? null : Math.min(100, Math.max(0, finiteNumber(row.buyerRetentionPct))),
         buySellRatio: row.buySellRatio == null ? null : Math.max(0, finiteNumber(row.buySellRatio)),
         boostedUntil,
-        verified: false,
-        verificationTier: null as string | null,
         createdAt: safeIsoDate(row.createdAt),
       }];
     }),
@@ -70,21 +67,10 @@ function creatorDashboardSnapshot(value: unknown) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-  const supabase = getSupabaseAdmin();
-  const [dashboard, creatorVerification, coinVerifications, requests] = await Promise.all([
-    supabase.rpc("creator_dashboard_v200", { p_profile_id: profile.id }),
-    supabase.from("creator_verifications_v071").select("tier,verified_at").eq("profile_id", profile.id).is("revoked_at", null).maybeSingle(),
-    supabase.from("coin_verifications_v071").select("coin_id,tier,verified_at,coins!inner(creator_profile_id)").eq("coins.creator_profile_id", profile.id).is("revoked_at", null),
-    supabase.from("verification_requests_v071").select("id,target_type,coin_id,status,requested_at,reviewed_at,review_note,tier").eq("profile_id", profile.id).order("requested_at", { ascending: false }).limit(30),
-  ]);
-  const error = dashboard.error || creatorVerification.error || coinVerifications.error || requests.error;
+  const { data, error } = await getSupabaseAdmin().rpc("creator_dashboard_v200", { p_profile_id: profile.id });
   if (error) return apiFailure(error, "Не удалось загрузить кабинет создателя");
-  const snapshot = creatorDashboardSnapshot(dashboard.data);
+  const snapshot = creatorDashboardSnapshot(data);
   if (!snapshot) return NextResponse.json({ error: "Некорректные данные кабинета автора", code: "DATA_INTEGRITY" }, { status: 500 });
-  const verifiedCoins = new Map((coinVerifications.data || []).map((row) => [row.coin_id, row.tier]));
-  snapshot.verified = Boolean(creatorVerification.data);
-  snapshot.verificationTier = creatorVerification.data?.tier || null;
-  snapshot.coins = snapshot.coins.map((coin) => ({ ...coin, verified: verifiedCoins.has(coin.id), verificationTier: verifiedCoins.get(coin.id) || null }));
-  return NextResponse.json({ ...snapshot, verificationRequests: requests.data || [] }, { headers: { "cache-control": "private, no-store" } });
+  return NextResponse.json(snapshot, { headers: { "cache-control": "private, no-store" } });
 }
 export const GET = withApiErrors("app/api/creator/route.ts:GET", GETHandler);

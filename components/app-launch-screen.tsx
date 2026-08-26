@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 
 const MAX_PENDING_PROGRESS = 94;
@@ -8,8 +7,8 @@ let sharedLaunchProgress = 0;
 let sharedLaunchStartedAt = 0;
 
 function nextPendingProgress(elapsedMs: number) {
-  // Monotonic progress while the Telegram session is being authenticated. It
-  // never loops or moves backwards.
+  // Monotonic, deliberately slows down near completion while the app finishes
+  // authentication/preloading. It never loops or moves backwards.
   const normalized = 1 - Math.exp(-elapsedMs / 1100);
   return Math.min(MAX_PENDING_PROGRESS, Math.max(4, Math.round(normalized * MAX_PENDING_PROGRESS)));
 }
@@ -26,8 +25,8 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
       sharedLaunchProgress = 100;
       setProgress(100);
 
-      const leaveTimer = window.setTimeout(() => setLeaving(true), 80);
-      const unmountTimer = window.setTimeout(() => setMounted(false), 360);
+      const leaveTimer = window.setTimeout(() => setLeaving(true), 190);
+      const unmountTimer = window.setTimeout(() => setMounted(false), 850);
       return () => {
         window.clearTimeout(leaveTimer);
         window.clearTimeout(unmountTimer);
@@ -54,8 +53,7 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
   return (
     <div className={`mxm-launch-screen ${leaving ? "is-leaving" : ""}`} aria-label="Загрузка MemeX Market" aria-live="polite">
       <div className="mxm-launch-content">
-        <div className="mxm-launch-logo"><Image src="/icon.svg" alt="" width={54} height={54} priority /></div>
-        <div className="mxm-launch-brand"><b>MXM</b><span>MEMEX MARKET</span></div>
+        <div className="mxm-launch-brand">MEMEX MARKET</div>
       </div>
 
       <div className="mxm-launch-footer">
@@ -63,7 +61,7 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
           <span style={{ width: `${progress}%` }} />
         </div>
         <div className="mxm-launch-status">
-          <span>Запускаем рынок</span>
+          <span>Загрузка</span>
           <span>{progress}%</span>
         </div>
       </div>

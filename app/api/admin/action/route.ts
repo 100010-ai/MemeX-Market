@@ -1,6 +1,6 @@
 import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
-import { ADMIN_PERMISSIONS, adminCan, requireAdminProfile, type AdminPermission, type AdminRole } from "@/lib/admin";
+import { requireAdminProfile } from "@/lib/admin";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { enforceRateLimit, sameOriginMutation, validUuidLike } from "@/lib/security";
 import { syncGiftCatalog } from "@/lib/gift-catalog";
@@ -12,18 +12,6 @@ export const runtime = "nodejs";
 
 function text(value: unknown, max = 500) { return String(value ?? "").trim().slice(0, max); }
 function number(value: unknown) { const result = Number(value); return Number.isFinite(result) ? result : null; }
-
-function permissionForAction(action: string): AdminPermission | null {
-  if (action.startsWith("admin.member.")) return "admins.manage";
-  if (action.startsWith("balance.") || action.startsWith("profile.")) return "players.manage";
-  if (action.startsWith("mission.")) return "missions.manage";
-  if (action.startsWith("coin.") || action.startsWith("verification.")) return "coins.manage";
-  if (action.startsWith("gift.")) return "gifts.manage";
-  if (action.startsWith("catalog.") || action.startsWith("npc.")) return "catalog.manage";
-  if (action.startsWith("promo.")) return "promos.manage";
-  if (action.startsWith("stars.") || action.startsWith("economy.")) return "economy.manage";
-  return null;
-}
 
 async function audit(actor: string, action: string, targetType?: string, targetId?: string, payload: Record<string, unknown> = {}) {
   const supabase = getSupabaseAdmin();
@@ -40,8 +28,6 @@ async function POSTHandler(request: Request) {
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const action = text(body.action, 80);
-  const requiredPermission = permissionForAction(action);
-  if (requiredPermission && !adminCan(admin, requiredPermission)) return NextResponse.json({ error: "Недостаточно полномочий для этой операции" }, { status: 403 });
   const supabase = getSupabaseAdmin();
 
   try {
@@ -146,19 +132,6 @@ async function POSTHandler(request: Request) {
       if (error) throw error;
       await audit(actor, "mission.delete", "mission", id);
       return NextResponse.json({ ok: true });
-    }
-
-    if (action === "verification.review") {
-      const requestId = text(body.requestId, 80);
-      const decision = body.decision === "approved" ? "approved" : body.decision === "rejected" ? "rejected" : null;
-      const tier = body.tier === "notable" ? "notable" : "verified";
-      const note = text(body.note, 600);
-      if (!validUuidLike(requestId) || !decision) return NextResponse.json({ error: "Некорректное решение по заявке" }, { status: 400 });
-      if (decision === "rejected" && note.length < 5) return NextResponse.json({ error: "Укажите причину отказа" }, { status: 400 });
-      const { data, error } = await supabase.rpc("review_verification_request_v071", { p_request_id: requestId, p_reviewer_profile_id: admin.id, p_decision: decision, p_note: note, p_tier: tier });
-      if (error) throw error;
-      await audit(actor, "verification.review", "verification_request", requestId, { decision, tier, note });
-      return NextResponse.json({ ok: true, result: data });
     }
 
     if (action === "coin.create") {
@@ -487,46 +460,6 @@ async function POSTHandler(request: Request) {
       if (settings.error) throw settings.error;
       await audit(actor, "economy.update", "economy_settings", "singleton", patch);
       return NextResponse.json({ ok: true, economy: settings.data });
-    }
-
-    if (action === "admin.member.upsert") {
-      const profileId = text(body.profileId, 80);
-      const role = text(body.role, 20) as AdminRole;
-      const allowedRoles: AdminRole[] = ["owner", "operator", "moderator", "analyst"];
-      const allowedPermissions = new Set<string>(ADMIN_PERMISSIONS);
-      const permissions = Array.isArray(body.permissions)
-        ? [...new Set(body.permissions.filter((permission): permission is AdminPermission => typeof permission === "string" && allowedPermissions.has(permission)))]
-        : [];
-      if (!validUuidLike(profileId) || !allowedRoles.includes(role) || !permissions.length) return NextResponse.json({ error: "Выберите профиль, роль и хотя бы одно разрешение" }, { status: 400 });
-      if (role === "owner" && admin.adminRole !== "owner") return NextResponse.json({ error: "Только владелец может назначить другого владельца" }, { status: 403 });
-      if (admin.adminRole !== "owner" && permissions.some((permission) => !admin.adminPermissions.includes(permission))) return NextResponse.json({ error: "Нельзя выдать полномочия выше собственных" }, { status: 403 });
-      const target = await supabase.from("profiles").select("id,is_system,telegram_id").eq("id", profileId).maybeSingle();
-      if (target.error) throw target.error;
-      if (!target.data || target.data.is_system) return NextResponse.json({ error: "Профиль игрока не найден" }, { status: 404 });
-      const updatedAt = new Date().toISOString();
-      const membership = await supabase.from("admin_members_v067").upsert({
-        profile_id: profileId,
-        role,
-        permissions,
-        active: true,
-        created_by: admin.id,
-        updated_by: admin.id,
-        updated_at: updatedAt,
-      }, { onConflict: "profile_id" });
-      if (membership.error) throw membership.error;
-      await audit(actor, "admin.member.upsert", "admin_member", profileId, { role, permissions, telegramId: target.data.telegram_id });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (action === "admin.member.revoke") {
-      const profileId = text(body.profileId, 80);
-      if (!validUuidLike(profileId)) return NextResponse.json({ error: "Администратор не выбран" }, { status: 400 });
-      if (profileId === admin.id) return NextResponse.json({ error: "Нельзя отозвать собственный активный доступ" }, { status: 409 });
-      const membership = await supabase.from("admin_members_v067").update({ active: false, updated_by: admin.id, updated_at: new Date().toISOString() }).eq("profile_id", profileId).select("profile_id").maybeSingle();
-      if (membership.error) throw membership.error;
-      if (!membership.data) return NextResponse.json({ error: "Администратор не найден" }, { status: 404 });
-      await audit(actor, "admin.member.revoke", "admin_member", profileId);
-      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });

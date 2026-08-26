@@ -4,7 +4,6 @@ import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeStoreProduct } from "@/lib/store";
 import { getRuntimeConfig } from "@/lib/runtime-config";
-import { isInspectionSession } from "@/lib/session";
 
 type StoreStaticCatalog = {
   products: Array<Record<string, unknown>>;
@@ -38,7 +37,6 @@ async function getStoreStaticCatalog() {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-  const inspection = await isInspectionSession();
   const runtimeConfig = await getRuntimeConfig().catch((error) => {
     console.error("store runtime config", error);
     return null;
@@ -48,7 +46,7 @@ async function GETHandler() {
   const supabase = getSupabaseAdmin();
   // Expired reservation cleanup is maintenance, not part of the user's read.
   // Running it after the response removes up to 1.5s from first store paint.
-  if (!inspection) after(async () => {
+  after(async () => {
     try {
       const cleanupResult = await getSupabaseAdmin()
         .rpc("release_expired_star_authorizations_v200", { p_limit: 25 })
