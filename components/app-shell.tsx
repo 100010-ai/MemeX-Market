@@ -153,12 +153,12 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         </nav>
         <p className="mxm-nav-eyebrow mt-5">Инструменты</p>
         <nav className="space-y-1">
-          <Link href="/store" className={`mxm-side-link ${pathname.startsWith("/store") ? "is-active" : ""}`}><Gem size={17} />Магазин MXM</Link>
-          <Link href="/season" className={`mxm-side-link ${pathname.startsWith("/season") ? "is-active" : ""}`}><Crown size={17} />Боевой пропуск</Link>
-          <Link href="/cases" className={`mxm-side-link ${pathname.startsWith("/cases") ? "is-active" : ""}`}><PackageOpen size={17} />Кейсы</Link>
-          <Link href="/leaderboard" className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
-          <Link href="/watchlist" className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
-          <Link href="/notifications" className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
+          <Link href="/store" aria-current={pathname.startsWith("/store") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/store") ? "is-active" : ""}`}><Gem size={17} />Магазин MXM</Link>
+          <Link href="/season" aria-current={pathname.startsWith("/season") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/season") ? "is-active" : ""}`}><Crown size={17} />Боевой пропуск</Link>
+          <Link href="/cases" aria-current={pathname.startsWith("/cases") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/cases") ? "is-active" : ""}`}><PackageOpen size={17} />Кейсы</Link>
+          <Link href="/leaderboard" aria-current={pathname.startsWith("/leaderboard") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/leaderboard") ? "is-active" : ""}`}><Trophy size={17} />Рейтинг</Link>
+          <Link href="/watchlist" aria-current={pathname.startsWith("/watchlist") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/watchlist") ? "is-active" : ""}`}><Star size={17} />Избранное</Link>
+          <Link href="/notifications" aria-current={pathname.startsWith("/notifications") ? "page" : undefined} className={`mxm-side-link ${pathname.startsWith("/notifications") ? "is-active" : ""}`}><Bell size={17} />Уведомления</Link>
         </nav>
 
         <Link href="/create" className="mxm-sidebar-cta"><span><Plus size={15}/></span><div><b>Запустить мемкоин</b></div></Link>
