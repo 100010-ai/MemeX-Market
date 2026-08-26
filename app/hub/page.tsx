@@ -89,7 +89,7 @@ export default function HubPage() {
   const hotCoins = useMemo(() => [...data.coins].sort((a, b) => (b.volume24h + Math.max(0, b.change24h) * 2) - (a.volume24h + Math.max(0, a.change24h) * 2)).slice(0, 3), [data.coins]);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mxm-hub-page mx-auto max-w-6xl">
       <RealtimeRefresh channelName="mxm-hub-v0645" tables={realtimeTables} onChange={realtimeReload} debounceMs={2_000} />
 
       <header className="mxm-home-hero mb-3">

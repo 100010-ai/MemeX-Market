@@ -151,7 +151,7 @@ export default function VaultPage() {
   const cashPct = data.profile.netWorth > 0 ? data.profile.balance / data.profile.netWorth * 100 : 0;
 
   return (
-    <div className="mx-auto max-w-5xl mxm-page-enter">
+    <div className="mxm-vault-page mx-auto max-w-5xl mxm-page-enter">
       <RealtimeRefresh channelName="mxm-vault" tables={realtimeTables} filters={realtimeFilters} onChange={realtimeReload} debounceMs={1000} />
       {data.profile.id ? <RealtimeRefresh channelName="mxm-vault-gift-buys" tables={realtimeGiftTradeTables} filters={{ gift_trades: `buyer_profile_id=eq.${data.profile.id}` }} onChange={realtimeReload} debounceMs={700} /> : null}
       {data.profile.id ? <RealtimeRefresh channelName="mxm-vault-gift-sales" tables={realtimeGiftTradeTables} filters={{ gift_trades: `seller_profile_id=eq.${data.profile.id}` }} onChange={realtimeReload} debounceMs={700} /> : null}
