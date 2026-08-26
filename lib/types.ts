@@ -53,6 +53,10 @@ export type Coin = {
   tokenReserve: number;
   quoteReserve: number;
   boostedUntil?: string | null;
+  verified?: boolean;
+  verificationTier?: string | null;
+  creatorVerified?: boolean;
+  creatorVerificationTier?: string | null;
   sparkline?: number[];
 };
 

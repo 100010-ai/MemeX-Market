@@ -14,6 +14,7 @@ const LIST_LIMITS = {
   catalogSources: 100,
   promoCodes: 500,
   refundReconciliation: 100,
+  verificationRequests: 100,
 } as const;
 
 
@@ -32,7 +33,7 @@ async function GETHandler() {
   const can = (permission: AdminPermission) => admin.adminPermissions.includes(permission);
   const supabase = getSupabaseAdmin();
   try {
-    const [profiles, missions, coins, gifts, audit, catalogSources, npcState, npcLog, promoCodes, refundReconciliation, adminMembers] = await Promise.all([
+    const [profiles, missions, coins, gifts, audit, catalogSources, npcState, npcLog, promoCodes, refundReconciliation, adminMembers, verificationRequests] = await Promise.all([
       supabase.from("profiles")
         .select("id,telegram_id,username,first_name,balance,xp,is_banned,ban_reason,banned_until,hidden_from_leaderboard,is_system,created_at")
         .order("created_at", { ascending: false }).limit(LIST_LIMITS.profiles),
@@ -71,9 +72,14 @@ async function GETHandler() {
         .order("active", { ascending: false })
         .order("updated_at", { ascending: false })
         .limit(100),
+      supabase.from("verification_requests_v071")
+        .select("id,profile_id,target_type,coin_id,evidence,status,requested_at,reviewed_at,review_note,tier,profiles!verification_requests_v071_profile_id_fkey(username,first_name,telegram_id),coins(name,symbol)")
+        .eq("status", "pending")
+        .order("requested_at", { ascending: true })
+        .limit(LIST_LIMITS.verificationRequests),
     ]);
 
-    const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error || adminMembers.error;
+    const primaryError = profiles.error || missions.error || coins.error || gifts.error || audit.error || catalogSources.error || npcState.error || npcLog.error || refundReconciliation.error || adminMembers.error || verificationRequests.error;
     if (primaryError) throw primaryError;
     if (promoCodes.error) throw promoCodes.error;
 
@@ -126,6 +132,7 @@ async function GETHandler() {
       profiles: can("players.manage") || can("coins.manage") || can("gifts.manage") || can("admins.manage") ? profiles.data || [] : [],
       missions: can("missions.manage") ? missions.data || [] : [],
       coins: can("coins.manage") ? coins.data || [] : [],
+      verificationRequests: can("coins.manage") ? verificationRequests.data || [] : [],
       gifts: can("gifts.manage") ? gifts.data || [] : [],
       audit: can("audit.read") ? audit.data || [] : [],
       catalogSources: can("catalog.manage") || can("gifts.manage") ? catalogSources.data || [] : [],

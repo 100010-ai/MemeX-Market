@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, CircleCheck, RotateCcw, Share2, ShieldCheck, Star, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BarChart3, CircleCheck, RotateCcw, Share2, ShieldCheck, Star, X } from "lucide-react";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { useTelegramProfile } from "@/components/telegram-provider";
@@ -43,7 +43,7 @@ type CoinEconomy = {
   genesisBadge: { ordinal: number; label: string } | null;
 };
 type Payload = {
-  coin: Coin;
+  coin: Coin & { verified:boolean; verificationTier:string|null; creatorVerified:boolean; creatorVerificationTier:string|null };
   candles: Candle[];
   trades: Trade[];
   economy: CoinEconomy;
@@ -377,8 +377,8 @@ export default function CoinPage() {
       <section className="mxm-coin-identity">
         <CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} size="lg" />
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-[15px] font-semibold tracking-[-.02em]">{coin.name}</h1><span className="shrink-0 text-[9px] text-[var(--muted)]">${coin.symbol}</span></div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5"><span className="text-[12px] font-semibold tabular-nums">{price(coin.currentPrice)}</span><span className={`text-[9px] font-medium ${visibleChange >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(visibleChange)}</span>{pristineMarket ? <span className="text-[8px] text-[var(--muted-2)]">Новый рынок</span> : <><span className="text-[8px] text-[var(--muted-2)]">{money(coin.volume24h)} 24ч</span><span className="text-[8px] text-[var(--muted-2)]">{publicTradeCount} сделок</span></>}</div>
+          <div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-[15px] font-semibold tracking-[-.02em]">{coin.name}</h1><span className="shrink-0 text-[9px] text-[var(--muted)]">${coin.symbol}</span>{coin.verified?<span className="mxm-verified-badge" title="Мемкоин проверен"><BadgeCheck size={12}/>{coin.verificationTier==="notable"?"Известный":"Проверен"}</span>:null}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5"><span className="text-[12px] font-semibold tabular-nums">{price(coin.currentPrice)}</span><span className={`text-[9px] font-medium ${visibleChange >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(visibleChange)}</span>{coin.creatorVerified?<span className="inline-flex items-center gap-1 text-[8px] text-[#70aaff]"><BadgeCheck size={10}/>автор проверен</span>:null}{pristineMarket ? <span className="text-[8px] text-[var(--muted-2)]">Новый рынок</span> : <><span className="text-[8px] text-[var(--muted-2)]">{money(coin.volume24h)} 24ч</span><span className="text-[8px] text-[var(--muted-2)]">{publicTradeCount} сделок</span></>}</div>
         </div>
       </section>
 

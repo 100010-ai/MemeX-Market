@@ -126,7 +126,7 @@ async function fetchCandidate(
         redirect: "manual",
         headers: {
           accept,
-          "user-agent": "MXM-Market/0.70.1",
+          "user-agent": "MXM-Market/0.71.0",
           referer: "https://fragment.com/",
         },
       });
