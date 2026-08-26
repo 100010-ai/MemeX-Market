@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 const MAX_PENDING_PROGRESS = 94;
@@ -53,7 +54,8 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
   return (
     <div className={`mxm-launch-screen ${leaving ? "is-leaving" : ""}`} aria-label="Загрузка MemeX Market" aria-live="polite">
       <div className="mxm-launch-content">
-        <div className="mxm-launch-brand">MEMEX MARKET</div>
+        <div className="mxm-launch-logo"><Image src="/icon.svg" alt="" width={54} height={54} priority /></div>
+        <div className="mxm-launch-brand"><b>MXM</b><span>MEMEX MARKET</span></div>
       </div>
 
       <div className="mxm-launch-footer">
@@ -61,7 +63,7 @@ export function AppLaunchScreen({ ready }: { ready: boolean }) {
           <span style={{ width: `${progress}%` }} />
         </div>
         <div className="mxm-launch-status">
-          <span>Загрузка</span>
+          <span>Запускаем рынок</span>
           <span>{progress}%</span>
         </div>
       </div>

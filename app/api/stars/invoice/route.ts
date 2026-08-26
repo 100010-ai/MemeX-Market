@@ -72,13 +72,16 @@ async function POSTHandler(request: Request) {
     productContext = { termsAcceptedAt: new Date().toISOString() };
     const productResult = await supabase
       .from("store_products")
-      .select("sku,title,description,stars_price,reward_label,metadata")
+      .select("sku,category,title,description,stars_price,reward_label,metadata")
       .eq("sku", sku)
       .eq("active", true)
       .maybeSingle();
     if (productResult.error) return apiFailure(productResult.error, "Не удалось загрузить товар");
     if (!productResult.data) return NextResponse.json({ error: "Товар недоступен" }, { status: 404 });
     const product = productResult.data as Record<string, unknown>;
+    if (product.category !== "currency") {
+      return NextResponse.json({ error: "Telegram Stars используются только для пополнения MXM" }, { status: 400 });
+    }
     const metadata = product.metadata && typeof product.metadata === "object" && !Array.isArray(product.metadata)
       ? product.metadata as Record<string, unknown>
       : {};

@@ -539,7 +539,7 @@ export default function MarketPage() {
   }, [cartIds, collectionCartBusy]);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mxm-market-page mx-auto max-w-6xl">
       <RealtimeRefresh channelName={realtimeChannelName} tables={realtimeTables} onChange={realtimeReload} debounceMs={1800} />
 
       <div className="mxm-market-head mb-3">
