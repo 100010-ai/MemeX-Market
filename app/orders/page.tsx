@@ -72,7 +72,7 @@ export default function OrdersPage() {
   const outgoingValue = data.outgoing.reduce((total, offer) => total + Math.max(0, offer.amount), 0);
   const listingValue = data.listings.reduce((total, gift) => total + Math.max(0, gift.listingPrice || 0), 0);
   return (
-    <div className="mx-auto max-w-5xl mxm-page-enter">
+    <div className="mxm-orders-page mx-auto max-w-5xl mxm-page-enter">
       <RealtimeRefresh
         channelName="mxm-orders-gifts"
         tables={realtimeGiftTables}

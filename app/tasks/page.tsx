@@ -145,7 +145,7 @@ export default function TasksPage() {
   const available = useMemo(() => missions.filter((mission) => !mission.claimed).reduce((sum, mission) => sum + mission.reward, 0), [missions]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mxm-tasks-page mx-auto max-w-3xl">
       <div className="mb-4 flex items-end justify-between gap-4 border-b border-[var(--border-soft)] pb-3">
         <h1 className="text-[20px] font-semibold tracking-[-.035em]">Задания</h1>
         <div className="text-right"><p className="flex items-center justify-end gap-1 text-[13px] font-semibold"><Gem size={12} className="text-[var(--accent)]" fill="currentColor" />{money(available)}</p>{claimable.length ? <button type="button" disabled={busy !== null || channelBusy} onClick={() => void claimAll()} className="mt-1 text-[8px] font-semibold text-[var(--accent)] disabled:opacity-40">{busy === "all" ? "Получаем…" : `Забрать · ${claimable.length}`}</button> : null}</div>
