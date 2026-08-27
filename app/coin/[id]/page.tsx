@@ -305,18 +305,18 @@ export default function CoinPage() {
   const visibleChange = pristineMarket ? 0 : coin.change24h;
 
   const tradePanel = (
-    <section className="mxm-trade-panel mxm-coin-trade-panel">
+    <section className="mxm-coin-trade-panel">
       <div className="grid grid-cols-2 border-b border-[var(--border-soft)]">
         <button disabled={busy} onClick={() => switchSide("buy")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "buy" ? "border-b-2 border-[var(--positive)] text-white" : "text-[var(--muted)]"}`}>КУПИТЬ</button>
         <button disabled={busy} onClick={() => switchSide("sell")} className={`mxm-pressable py-2 text-[11px] font-semibold transition ${side === "sell" ? "border-b-2 border-[var(--negative)] text-white" : "text-[var(--muted)]"}`}>ПРОДАТЬ</button>
       </div>
       <div className="mt-2 flex items-center justify-between text-[9px]"><span className="text-[var(--muted)]">Доступно</span><span className="font-medium">{side === "buy" ? money(data.availableBalance) : `${compact(data.holding.availableQuantity)} ${coin.symbol}`}</span></div>
-      <div className="mt-1.5 flex items-center rounded-[11px] bg-white/[.025] px-2.5 ring-1 ring-inset ring-white/[.045]">
+      <div className="mxm-coin-amount mt-1.5 flex items-center px-0.5">
         <input value={amount} onChange={(event) => { tradeRequestId.current = null; setImpactArmed(false); setTradeNotice(null); setAmount(event.target.value.replace(",", ".")); setSellAll(false); }} inputMode="decimal" placeholder={side === "buy" ? String(MIN_COIN_BUY_TON) : "0"} className="min-w-0 flex-1 bg-transparent py-2.5 text-base font-medium outline-none" />
         <span className="text-[10px] text-[var(--muted)]">{side === "buy" ? "TON" : coin.symbol}</span>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <div className="flex gap-3">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)} className="py-1 text-[9px] text-[var(--muted)] hover:text-white">{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="mxm-coin-fractions flex gap-1">{[0.1, 0.25, 0.5, 1].map((fraction) => <button key={fraction} type="button" onClick={() => applyFraction(fraction)}>{fraction === 1 ? "МАКС" : `${fraction * 100}%`}</button>)}</div>
         <div className="flex items-center gap-2 text-[8px] text-[var(--muted)]"><span>Slippage</span>{[0.5, 1, 2, 5].map((value) => <button key={value} type="button" onClick={() => { setImpactArmed(false); setTradeNotice(null); setSlippage(value); }} className={slippage === value ? "text-white" : "hover:text-white"}>{value}%</button>)}</div>
       </div>
 
@@ -387,7 +387,7 @@ export default function CoinPage() {
 
 function MetricsSheet({ coin, economy, flow, buyShare, publicTradeCount, pristine, onClose }: { coin: Coin; economy: CoinEconomy; flow: number; buyShare: number; publicTradeCount: number; pristine: boolean; onClose: () => void }) {
   return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55 px-2 pb-[max(8px,env(safe-area-inset-bottom))] md:items-center" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-    <section role="dialog" aria-modal="true" aria-label="Метрики мемкоина" className="mxm-coin-metrics-sheet w-full max-w-lg rounded-[22px] border border-[var(--border)] bg-[var(--bg)] p-3 shadow-[0_-18px_60px_rgba(0,0,0,.5)]">
+    <section role="dialog" aria-modal="true" aria-label="Метрики мемкоина" className="mxm-coin-metrics-sheet w-full max-w-lg rounded-t-[22px] bg-[var(--bg)] px-4 pb-4 pt-3 shadow-[0_-18px_60px_rgba(0,0,0,.5)] md:rounded-[22px]">
       <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold">Метрики</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">${coin.symbol} · рынок</p></div><button type="button" onClick={onClose} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-full bg-white/[.035] text-[var(--muted)]"><X size={14} /></button></div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Капитализация" value={money(coin.marketCap)} />
@@ -409,7 +409,7 @@ function MetricsSheet({ coin, economy, flow, buyShare, publicTradeCount, pristin
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-[12px] bg-white/[.025] px-2.5 py-2 ring-1 ring-inset ring-white/[.035]"><p className="text-[7px] text-[var(--muted)]">{label}</p><p className="mt-1 truncate text-[10px] font-semibold tabular-nums">{value}</p></div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="border-b border-[var(--border-soft)] px-0.5 py-2.5"><p className="text-[8px] text-[var(--muted)]">{label}</p><p className="mt-1 truncate text-[11px] font-semibold tabular-nums">{value}</p></div>; }
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: number }) { return <div><p className="text-[7px] text-[var(--muted)]">{label}</p><p className={`mt-0.5 truncate text-[9px] font-medium tabular-nums ${tone == null ? "" : tone >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{value}</p></div>; }
 function QuoteCompact({ label, value, warning }: { label: string; value: string; warning?: boolean }) { return <div className="min-w-0"><p className="text-[7px] text-[var(--muted)]">{label}</p><p className={`mt-0.5 truncate text-[9px] font-medium tabular-nums ${warning ? "text-[var(--negative)]" : ""}`}>{value}</p></div>; }
 function Empty({ text }: { text: string }) { return <div className="grid h-full min-h-20 place-items-center text-[9px] text-[var(--muted)]">{text}</div>; }
