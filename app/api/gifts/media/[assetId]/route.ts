@@ -13,6 +13,7 @@ export const maxDuration = 20;
 const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
 const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
+const MEDIA_CANDIDATE_TIMEOUT_MS = 3_500;
 
 type GiftMediaRow = {
   model_media_url: string | null;
@@ -91,75 +92,105 @@ async function liveTonApiPreviewUrls(chainAddress: string | null) {
 }
 
 async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
-  const response = await fetch(url, {
-    signal,
-    cache: "force-cache",
-    headers: {
-      accept,
-      "user-agent": "MXM-Market/0.64.9",
-      referer: "https://fragment.com/",
-    },
-  });
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined);
-    return null;
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (signal.aborted) controller.abort();
+  else signal.addEventListener("abort", abortFromParent, { once: true });
+  const timeout = setTimeout(() => controller.abort(), MEDIA_CANDIDATE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: "force-cache",
+      headers: {
+        accept,
+        "user-agent": "MXM-Market/0.64.9",
+        referer: "https://fragment.com/",
+      },
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    return response;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", abortFromParent);
   }
-  return response;
+}
+
+function mediaCandidateWarning(kind: "preview" | "animation", candidate: URL, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`gift media ${kind} candidate skipped`, { host: candidate.hostname, message });
 }
 
 async function previewResponse(candidates: Array<URL | null>, signal: AbortSignal) {
   const seen = new Set<string>();
+  const unavailableHosts = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate.href)) continue;
+    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
     seen.add(candidate.href);
-    const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
-    if (!upstream) continue;
-    const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.startsWith("image/")) {
-      await upstream.body?.cancel().catch(() => undefined);
-      continue;
+    try {
+      const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
+      if (!upstream) continue;
+      const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.startsWith("image/")) {
+        await upstream.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
+      if (!limited) continue;
+      return new Response(toBodyArrayBuffer(limited), {
+        status: 200,
+        headers: {
+          "content-type": contentType.split(";")[0] || "image/jpeg",
+          "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      unavailableHosts.add(candidate.hostname);
+      mediaCandidateWarning("preview", candidate, error);
     }
-    const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
-    if (!limited) continue;
-    return new Response(toBodyArrayBuffer(limited), {
-      status: 200,
-      headers: {
-        "content-type": contentType.split(";")[0] || "image/jpeg",
-        "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
-        "x-content-type-options": "nosniff",
-      },
-    });
   }
   return null;
 }
 
 async function animationResponse(candidates: Array<URL | null>, signal: AbortSignal) {
   const seen = new Set<string>();
+  const unavailableHosts = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate.href)) continue;
+    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
     seen.add(candidate.href);
-    const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
-    if (!upstream) continue;
-    const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
-    if (!limited) continue;
-    const compressed = Buffer.from(limited);
-
     try {
-      const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
-      const jsonBytes = isGzip
-        ? gunzipSync(compressed, { maxOutputLength: MAX_ANIMATION_BYTES })
-        : compressed;
-      if (!jsonBytes.length || jsonBytes.length > MAX_ANIMATION_BYTES) continue;
-      const animation = JSON.parse(jsonBytes.toString("utf8")) as Record<string, unknown>;
-      if (!animation || typeof animation !== "object" || !Array.isArray(animation.layers)) continue;
-      return NextResponse.json(animation, {
-        headers: {
-          "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
-          "x-content-type-options": "nosniff",
-        },
-      });
-    } catch {
-      // Try the next official source rather than returning a broken Lottie.
+      const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
+      if (!upstream) continue;
+      const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
+      if (!limited) continue;
+      const compressed = Buffer.from(limited);
+
+      try {
+        const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
+        const jsonBytes = isGzip
+          ? gunzipSync(compressed, { maxOutputLength: MAX_ANIMATION_BYTES })
+          : compressed;
+        if (!jsonBytes.length || jsonBytes.length > MAX_ANIMATION_BYTES) continue;
+        const animation = JSON.parse(jsonBytes.toString("utf8")) as Record<string, unknown>;
+        if (!animation || typeof animation !== "object" || !Array.isArray(animation.layers)) continue;
+        return NextResponse.json(animation, {
+          headers: {
+            "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+            "x-content-type-options": "nosniff",
+          },
+        });
+      } catch {
+        // Try the next official source rather than returning a broken Lottie.
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      unavailableHosts.add(candidate.hostname);
+      mediaCandidateWarning("animation", candidate, error);
     }
   }
   return null;
