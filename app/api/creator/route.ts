@@ -1,6 +1,7 @@
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
+import { mapCreatorReputation } from "@/lib/coin-pulse";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { finiteNumber, nullableNumber, nullableText, record, safeIsoDate, text } from "@/lib/safe-data";
 
@@ -19,8 +20,12 @@ function creatorDashboardSnapshot(value: unknown) {
       creatorFeeBps: Math.max(0, finiteNumber(level.creatorFeeBps)),
       platformFeeBps: Math.max(0, finiteNumber(level.platformFeeBps)),
       holderCount: Math.max(0, finiteNumber(level.holderCount)),
+      traderCount: Math.max(0, finiteNumber(level.traderCount)),
       volume: Math.max(0, finiteNumber(level.volume)),
       nextVolume: nullableNumber(level.nextVolume),
+      nextHolders: nullableNumber(level.nextHolders),
+      nextTraders: nullableNumber(level.nextTraders),
+      antiWash: level.antiWash === true,
     },
     totals: {
       coins: Math.max(0, finiteNumber(totals.coins)),
@@ -67,10 +72,15 @@ function creatorDashboardSnapshot(value: unknown) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-  const { data, error } = await getSupabaseAdmin().rpc("creator_dashboard_v200", { p_profile_id: profile.id });
-  if (error) return apiFailure(error, "Не удалось загрузить кабинет создателя");
-  const snapshot = creatorDashboardSnapshot(data);
+  const supabase = getSupabaseAdmin();
+  const [dashboardResult, reputationResult] = await Promise.all([
+    supabase.rpc("creator_dashboard_v200", { p_profile_id: profile.id }),
+    supabase.rpc("creator_reputation_v0730", { p_profile_id: profile.id }),
+  ]);
+  const firstError = dashboardResult.error || reputationResult.error;
+  if (firstError) return apiFailure(firstError, "Не удалось загрузить кабинет создателя");
+  const snapshot = creatorDashboardSnapshot(dashboardResult.data);
   if (!snapshot) return NextResponse.json({ error: "Некорректные данные кабинета автора", code: "DATA_INTEGRITY" }, { status: 500 });
-  return NextResponse.json(snapshot, { headers: { "cache-control": "private, no-store" } });
+  return NextResponse.json({ ...snapshot, reputation: mapCreatorReputation(reputationResult.data) }, { headers: { "cache-control": "private, no-store" } });
 }
 export const GET = withApiErrors("app/api/creator/route.ts:GET", GETHandler);
