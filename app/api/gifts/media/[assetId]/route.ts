@@ -46,7 +46,10 @@ function trustedMediaHost(hostname: string) {
     || host.endsWith(".cdn-telegram.org")
     || host === "telesco.pe"
     || host.endsWith(".telesco.pe")
-    || host === "ipfs.io";
+    || host === "ipfs.io"
+    || host === "headgun.org"
+    || host === "s.getgems.io"
+    || host === "chat-mafia.com";
 }
 
 function trustedUrl(source: unknown) {
@@ -215,17 +218,20 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     const fragment = slug ? fragmentGiftMedia(slug) : null;
 
     if (variant === "preview") {
+      // The immutable NFT metadata URL is usually the fastest and most exact
+      // source for partner collections. Try it before a synthesized Fragment
+      // slug, which is only guaranteed for native Telegram collectibles.
       const storedCandidates = size === "medium" ? [
+        trustedUrl(row.model_preview_url),
+        row.model_is_animated ? null : trustedUrl(row.model_media_url),
         trustedUrl(fragment?.medium),
         trustedUrl(fragment?.small),
         trustedUrl(fragment?.large),
+      ] : [
         trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
-      ] : [
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
-        trustedUrl(row.model_preview_url),
-        row.model_is_animated ? null : trustedUrl(row.model_media_url),
       ];
       const storedResponse = await previewResponse(storedCandidates, controller.signal);
       if (storedResponse) return storedResponse;
