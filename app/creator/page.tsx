@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, BadgeCheck, Coins, RefreshCw, Rocket, ShoppingBag, Sparkles, TrendingUp, Users } from "lucide-react";
+import { Activity, BarChart3, BadgeCheck, Coins, RefreshCw, Rocket, ShieldCheck, ShoppingBag, Sparkles, TrendingUp, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { compact, money, price } from "@/lib/format";
 import { rankLabel } from "@/lib/ui-copy";
@@ -12,9 +12,17 @@ type CreatorCoin = {
   floorPrice:number|null; floorActive:boolean; holders:number; volume:number; creatorFees:number; boostedUntil:string|null; createdAt:string;
   uniqueBuyers?:number|null; buyerRetentionPct?:number|null; buySellRatio?:number|null;
 };
+type Reputation = {
+  score:number; grade:string; coinCount:number; activeCoins:number; externalHolders:number; uniqueTraders:number;
+  externalVolume:number; marketAgeDays:number; verified:boolean; verificationTier:string|null; antiWash:boolean;
+};
 type Payload = {
   verified:boolean; analyticsUnlocked:boolean;
-  level:{ name:string; creatorFeeBps:number; platformFeeBps:number; holderCount:number; volume:number; nextVolume:number|null };
+  level:{
+    name:string; creatorFeeBps:number; platformFeeBps:number; holderCount:number; traderCount:number; volume:number;
+    nextVolume:number|null; nextHolders:number|null; nextTraders:number|null; antiWash:boolean;
+  };
+  reputation:Reputation;
   totals:{ coins:number; holders:number; volume:number; creatorFees:number };
   entitlements:Array<{key:string;expiresAt:string|null}>; coins:CreatorCoin[];
 };
@@ -28,6 +36,17 @@ function entitlementLabel(key:string) {
   return labels[key] || key.replaceAll("_", " ");
 }
 
+function reputationLabel(grade:string) {
+  const labels:Record<string,string>={ Starter:"Новичок",Builder:"Создатель",Proven:"Проверенный рынком",Trusted:"Надёжный",Elite:"Элита" };
+  return labels[grade] || grade;
+}
+
+function progress(current:number,target:number|null) {
+  if(target==null) return 1;
+  if(!Number.isFinite(target)||target<=0) return 0;
+  return Math.min(1,Math.max(0,current/target));
+}
+
 export default function CreatorDashboardPage() {
   const [data,setData]=useState<Payload|null>(null);
   const [loading,setLoading]=useState(true);
@@ -39,17 +58,20 @@ export default function CreatorDashboardPage() {
     finally{setLoading(false);}
   },[]);
   useEffect(()=>{void load();},[load]);
-  const levelProgress=useMemo(()=>{
-    if(!data?.level.nextVolume) return 1;
-    const current=Math.max(0,Number(data.level.volume)||0);
-    const next=Math.max(current,Number(data.level.nextVolume)||current);
-    return next<=0?0:Math.min(1,current/next);
-  },[data]);
+
+  const levelAxes=useMemo(()=>data ? [
+    {key:"volume",label:"Объём от других игроков",current:data.level.volume,target:data.level.nextVolume,display:money(data.level.volume)},
+    {key:"holders",label:"Внешние владельцы",current:data.level.holderCount,target:data.level.nextHolders,display:compact(data.level.holderCount)},
+    {key:"traders",label:"Уникальные трейдеры",current:data.level.traderCount,target:data.level.nextTraders,display:compact(data.level.traderCount)},
+  ] : [],[data]);
+
   if (!data && loading) return <div className="mx-auto max-w-5xl"><div className="mxm-skeleton h-36 rounded-[18px]"/><div className="mxm-skeleton mt-3 h-56 rounded-[18px]"/></div>;
   if (!data) return <div className="mxm-card mx-auto max-w-xl p-6 text-center"><p className="text-xs text-[var(--negative)]">{error||"Кабинет недоступен"}</p><button type="button" onClick={()=>void load()} className="mxm-secondary-action mt-4"><RefreshCw size={12}/>Повторить</button></div>;
+
+  const maxLevel=data.level.nextVolume==null&&data.level.nextHolders==null&&data.level.nextTraders==null;
   return <div className="mx-auto max-w-5xl">
     <header className="mxm-compact-page-head">
-      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<BadgeCheck size={16} className="text-[#63a7ff]" aria-label="Проверенный автор"/>:null}</div></div>
+      <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="mxm-page-title">Центр автора</h1>{data.verified?<BadgeCheck size={16} className="text-[#63a7ff]" aria-label="Проверенный автор"/>:null}</div><p className="mt-1 text-[9px] text-[var(--muted)]">Уровень растёт только от реальной аудитории и рынка.</p></div>
       <div className="flex shrink-0 gap-2"><Link href="/store?category=creator" className="mxm-compact-link"><ShoppingBag size={12}/>Инструменты</Link><Link href="/create" className="mxm-compact-link"><Rocket size={12}/>Запустить</Link></div>
     </header>
 
@@ -57,14 +79,34 @@ export default function CreatorDashboardPage() {
 
     <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <Metric icon={<TrendingUp size={12}/>} label="Уровень" value={rankLabel(data.level.name)}/>
-      <Metric icon={<Coins size={12}/>} label="Доля комиссии" value={`${data.level.creatorFeeBps/100}%`}/>
-      <Metric icon={<Users size={12}/>} label="Владельцы" value={compact(data.totals.holders)}/>
+      <Metric icon={<ShieldCheck size={12}/>} label="Репутация" value={`${data.reputation.score}/100`}/>
+      <Metric icon={<Activity size={12}/>} label="Трейдеры" value={compact(data.reputation.uniqueTraders)}/>
       <Metric icon={<BarChart3 size={12}/>} label="Заработано" value={money(data.totals.creatorFees)}/>
     </section>
 
+    <section className="mt-3 rounded-[16px] border border-[var(--border)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-[11px] font-semibold">Репутация · {reputationLabel(data.reputation.grade)}</p><p className="mt-1 text-[8px] leading-4 text-[var(--muted)]">Считаются внешние владельцы, уникальные трейдеры, возраст рынков и реальный объём. Самоторговля не прокачивает уровень.</p></div>
+        <strong className="shrink-0 text-[16px] tabular-nums">{data.reputation.score}</strong>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[.055]"><div className="h-full rounded-full bg-[var(--accent)]" style={{width:`${data.reputation.score}%`}}/></div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <MiniMetric label="Внешние холдеры" value={compact(data.reputation.externalHolders)}/>
+        <MiniMetric label="Уник. трейдеры" value={compact(data.reputation.uniqueTraders)}/>
+        <MiniMetric label="Возраст рынка" value={`${Math.floor(data.reputation.marketAgeDays)}д`}/>
+      </div>
+    </section>
+
     <section className="mt-3 border-y border-[var(--border-soft)] py-3">
-      <div className="flex items-center justify-between gap-3 text-[9px]"><span className="text-[var(--muted)]">Прогресс уровня · объём {money(data.level.volume)}</span><span>{data.level.nextVolume?`${money(Math.max(0,data.level.nextVolume-data.level.volume))} до следующего`:"максимальный уровень"}</span></div>
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[.055]"><div className="h-full rounded-full bg-[var(--accent)]" style={{width:`${Math.round(levelProgress*100)}%`}}/></div>
+      <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold">Рост уровня</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">Нужно выполнить все три условия, а не одно.</p></div><span className="text-[9px] text-[var(--muted)]">{maxLevel?"максимальный уровень":`${data.level.creatorFeeBps/100}% автору`}</span></div>
+      <div className="space-y-2.5">{levelAxes.map((axis)=>{
+        const pct=progress(axis.current,axis.target);
+        const done=axis.target==null||axis.current>=axis.target;
+        return <div key={axis.key}>
+          <div className="flex items-center justify-between gap-3 text-[8px]"><span className="text-[var(--muted)]">{axis.label}</span><span className={done?"text-[var(--positive)]":"text-white"}>{axis.display}{axis.target!=null?` / ${axis.key==="volume"?money(axis.target):compact(axis.target)}`:" · готово"}</span></div>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[.055]"><div className="h-full rounded-full bg-[var(--accent)]" style={{width:`${Math.round(pct*100)}%`}}/></div>
+        </div>;
+      })}</div>
     </section>
 
     <section className="mt-3">
@@ -88,4 +130,5 @@ export default function CreatorDashboardPage() {
   </div>;
 }
 
+function MiniMetric({label,value}:{label:string;value:string}) { return <div className="rounded-[12px] bg-white/[.025] px-2 py-2"><p className="text-[7px] text-[var(--muted)]">{label}</p><p className="mt-1 text-[10px] font-semibold">{value}</p></div>; }
 function Metric({icon,label,value}:{icon:React.ReactNode;label:string;value:string}) { return <div className="mxm-card p-3"><div className="flex items-center gap-1.5 text-[8px] text-[var(--muted)]">{icon}{label}</div><p className="mt-1.5 text-[13px] font-semibold">{value}</p></div>; }

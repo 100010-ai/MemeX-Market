@@ -2,13 +2,14 @@ import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextResponse } from "next/server";
 import { getProfileSnapshot, requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { mapCoinPulse } from "@/lib/coin-pulse";
 import { mapCoin } from "@/lib/mappers";
 import { validUuidLike } from "@/lib/security";
 import { finiteNumber, safeIsoDate } from "@/lib/safe-data";
 
 type DbRow = Record<string, unknown>;
 
-function relationOne(value: unknown, label: string): DbRow {
+function relationOne(value: unknown, _label: string): DbRow {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== "object") return {};
   return row as DbRow;
@@ -28,7 +29,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный идентификатор мемкоина" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   try {
-    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult] = await Promise.all([
+    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult, pulseResult] = await Promise.all([
       supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").eq("id", id).single(),
       supabase.from("candles").select("bucket_start,open,high,low,close,volume").eq("coin_id", id).order("bucket_start", { ascending: false }).limit(480),
       supabase.from("trades").select("id,profile_id,side,quote_amount,token_amount,price,created_at,profiles(username,first_name)").eq("coin_id", id).eq("is_launch_seed", false).order("created_at", { ascending: false }).limit(30),
@@ -37,9 +38,10 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "coin").eq("coin_id", id).maybeSingle(),
       getProfileSnapshot(profile as Record<string, unknown>),
       supabase.rpc("coin_economy_snapshot_v200", { p_profile_id: profile.id, p_coin_id: id }),
+      supabase.rpc("coin_pulse_snapshot_v0730", { p_coin_id: id, p_profile_id: profile.id }),
     ]);
     if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Мемкоин не найден" }, { status: 404 });
-    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error;
+    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error || pulseResult.error;
     if (otherError) throw otherError;
     const tradeRows = (tradeResult.data || []) as DbRow[];
     const topHolderRows = (topHoldersResult.data || []) as DbRow[];
@@ -55,6 +57,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     const earlyOrdinals = new Map((earlyBuyersResult.data || []).map((row) => [String(row.profile_id), Number(row.ordinal)]));
     return NextResponse.json({
       coin: mapCoin(coinResult.data),
+      pulse: mapCoinPulse(pulseResult.data),
       candles: [...((candleResult.data || []) as DbRow[])].reverse().map((candle) => ({
         time: Math.floor(Date.parse(safeIsoDate(candle.bucket_start)) / 1000),
         open: finiteNumber(candle.open), high: finiteNumber(candle.high), low: finiteNumber(candle.low), close: finiteNumber(candle.close), volume: Math.max(0, finiteNumber(candle.volume)),
