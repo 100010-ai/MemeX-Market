@@ -3220,6 +3220,112 @@ button:disabled { -webkit-text-fill-color: currentColor; }
 @media (min-width:1024px){.mxm-gift-trade-panel{position:sticky;top:calc(var(--mxm-fixed-header-offset,0px) + 10px);z-index:3}}
 @media (prefers-reduced-motion:reduce){.mxm-season-level-card.is-current{box-shadow:inset 0 0 0 1px rgba(139,164,255,.18)}}
 
+/* v0.64.10 — flat market and focused coin workspace. */
+.mxm-market-page .mxm-segment {
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.mxm-market-page .mxm-segment-button {
+  min-height: 42px;
+  border-radius: 0;
+  background: transparent;
+}
+.mxm-market-page .mxm-segment-button.is-active {
+  background: transparent;
+  box-shadow: inset 0 -2px var(--accent);
+}
+.mxm-market-page .mxm-market-searchbar {
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 2px;
+}
+.mxm-market-page .mxm-filter-chip,
+.mxm-market-page .mxm-market-filter-trigger {
+  border-color: transparent;
+  background: transparent;
+}
+.mxm-market-page .mxm-filter-chip.is-active,
+.mxm-market-page .mxm-market-filter-trigger.is-active {
+  border-color: transparent;
+  background: rgba(166,181,255,.07);
+}
+.mxm-inline-result {
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-soft);
+  padding: 7px 12px 7px 0;
+  font-size: 10px;
+}
+.mxm-market-page .mxm-market-pulse a {
+  border-radius: 0 !important;
+  background: transparent !important;
+  border-right: 1px solid var(--border-soft);
+  padding-left: 0 !important;
+}
+.mxm-market-page .mxm-collection-card {
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+.mxm-market-page .mxm-feed-row { border-radius: 0; background: transparent; }
+
+.mxm-coin-screen { max-width: 780px; }
+.mxm-coin-head { padding-block: 4px 8px; }
+.mxm-coin-identity {
+  min-height: 68px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-block: 10px;
+}
+.mxm-coin-chart-slot { padding-block: 8px 10px; }
+.mxm-coin-tabs { min-height: 40px; }
+.mxm-coin-tabs button { padding-block: 10px; font-size: 9px; }
+.mxm-coin-trade-panel {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 12px 0 18px;
+}
+.mxm-coin-amount {
+  min-height: 50px;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+  background: transparent;
+}
+.mxm-coin-amount:focus-within { border-color: var(--accent); }
+.mxm-coin-fractions button {
+  min-width: 48px;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 6px 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.mxm-coin-fractions button:active { border-color: var(--accent); color: white; }
+.mxm-coin-tab-slot { border-bottom: 1px solid var(--border-soft); }
+
+@media (max-width:1023px) {
+  .mxm-coin-screen {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .mxm-coin-layout {
+    display: grid;
+    overflow: visible;
+    grid-template-rows: auto auto auto;
+  }
+  .mxm-coin-trade-slot,
+  .mxm-coin-tab-slot { grid-row: auto; overflow: visible; }
+  .mxm-coin-trade-panel { height: auto; overflow: visible; }
+  .mxm-coin-chart-slot .mxm-coin-chart-compact { min-height: 190px; }
+}
+
 
 /* v0.64.9 final profile/frame consistency */
 .mxm-profile-more > summary { list-style:none; color:var(--muted); }
