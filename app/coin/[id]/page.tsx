@@ -4,12 +4,13 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Share2, Star, Users, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Share2, Star, X } from "lucide-react";
 import { CoinAvatar, PrimaryButton } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { apiFetch } from "@/lib/api";
-import { calculateCoinQuote, COIN_FEE_RATE } from "@/lib/amm";
+import { calculateCoinQuote } from "@/lib/amm";
+import type { CoinPulse } from "@/lib/coin-pulse";
 import { compact, money, percent, price } from "@/lib/format";
 import { MIN_COIN_BUY_TON, nonNegativeEconomyValue, parseEconomyAmount } from "@/lib/economy";
 import type { Candle, Coin, CoinQuote, Trade } from "@/lib/types";
@@ -26,6 +27,7 @@ const CoinConditionalOrders = dynamic(() => import("@/components/coin-conditiona
 
 const realtimeTables = ["coins", "trades"];
 type MarketTab = "overview" | "orders" | "holders" | "activity";
+type CoinTrade = Trade & { genesisOrdinal: number | null };
 type CoinEconomy = {
   startPrice: number;
   floorPrice: number | null;
@@ -44,8 +46,9 @@ type CoinEconomy = {
 };
 type Payload = {
   coin: Coin;
+  pulse: CoinPulse;
   candles: Candle[];
-  trades: Trade[];
+  trades: CoinTrade[];
   economy: CoinEconomy;
   holding: { quantity: number; availableQuantity: number; costBasis: number };
   balance: number;
@@ -70,6 +73,29 @@ function makeTradeRequestId() {
   const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+function heatLabel(value: CoinPulse["heat"]["tier"]) {
+  return { quiet: "Тихо", moving: "Движение", trending: "Тренд", hot: "Горячо", viral: "Вирусно" }[value];
+}
+function levelLabel(value: CoinPulse["level"]["key"]) {
+  return { launch: "Launch", established: "Established", trending: "Trending", viral: "Viral", legend: "Legend" }[value];
+}
+function healthLabel(value: CoinPulse["health"]["grade"]) {
+  return { strong: "Сильный", balanced: "Баланс", watch: "Риск", fragile: "Хрупкий" }[value];
+}
+function flagLabel(value: string) {
+  const labels: Record<string, string> = {
+    low_holder_count: "Мало владельцев",
+    holder_concentration: "Высокая концентрация",
+    single_trader_activity: "Объём у одного трейдера",
+    creator_concentration: "Большая доля автора",
+    thin_liquidity: "Тонкая ликвидность",
+    low_participation: "Мало участников",
+    new_market: "Новый рынок",
+  };
+  return labels[value] || value.replaceAll("_", " ");
+}
+function bps(value: number) { return `${(Math.max(0, value) / 100).toFixed(value % 100 === 0 ? 0 : 1)}%`; }
 
 export default function CoinPage() {
   const { id } = useParams<{ id: string }>();
@@ -167,7 +193,6 @@ export default function CoinPage() {
     const previous = data;
     const requestedInputAmount = sellAll && side === "sell" ? data.holding.availableQuantity : numericAmount;
     const wasSellAll = side === "sell" && sellAll;
-
     tradeInFlight.current = true;
     setBusy(true);
     setError(null);
@@ -291,7 +316,7 @@ export default function CoinPage() {
   }
 
   if (!data) return <div className="mx-auto max-w-6xl"><div className="mxm-skeleton h-[520px] rounded-xl" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
-  const { coin } = data;
+  const { coin, pulse } = data;
   const holdingValue = data.holding.quantity * coin.currentPrice;
   const holdingPnl = holdingValue - data.holding.costBasis;
   const flow = coin.buyVolume24h + coin.sellVolume24h;
@@ -354,10 +379,17 @@ export default function CoinPage() {
       <section className="mxm-coin-identity">
         <CoinAvatar symbol={coin.symbol} imageUrl={coin.imageUrl} size="lg" />
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-[15px] font-semibold tracking-[-.02em]">{coin.name}</h1><span className="shrink-0 text-[9px] text-[var(--muted)]">${coin.symbol}</span></div>
+          <div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-[15px] font-semibold tracking-[-.02em]">{coin.name}</h1><span className="shrink-0 text-[9px] text-[var(--muted)]">${coin.symbol}</span>{pulse.verification.coinVerified?<span className="shrink-0 text-[8px] font-medium text-[#63a7ff]">VERIFIED</span>:null}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5"><span className="text-[12px] font-semibold tabular-nums">{price(coin.currentPrice)}</span><span className={`text-[9px] font-medium ${visibleChange >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{percent(visibleChange)}</span>{pristineMarket ? <span className="text-[8px] text-[var(--muted-2)]">Новый рынок</span> : <><span className="text-[8px] text-[var(--muted-2)]">{money(coin.volume24h)} 24ч</span><span className="text-[8px] text-[var(--muted-2)]">{publicTradeCount} сделок</span></>}</div>
         </div>
       </section>
+
+      <button type="button" onClick={() => setMetricsOpen(true)} className="mb-3 grid w-full grid-cols-4 border-y border-[var(--border-soft)] py-2 text-left">
+        <PulseMini label="HEAT" value={`${pulse.heat.score}`} detail={heatLabel(pulse.heat.tier)} tone={pulse.heat.score>=60?1:undefined}/>
+        <PulseMini label="УРОВЕНЬ" value={`L${pulse.level.number}`} detail={levelLabel(pulse.level.key)}/>
+        <PulseMini label="HEALTH" value={`${pulse.health.score}`} detail={healthLabel(pulse.health.grade)} tone={pulse.health.score<40?-1:pulse.health.score>=80?1:undefined}/>
+        <PulseMini label="OG" value={pulse.og.userOrdinal?`#${pulse.og.userOrdinal}`:`${pulse.og.count}/${pulse.og.limit}`} detail={pulse.og.userOrdinal?"Ты ранний":"Genesis"}/>
+      </button>
 
       <div className="mxm-coin-layout">
         <section className="mxm-coin-chart-slot">
@@ -365,50 +397,75 @@ export default function CoinPage() {
         </section>
 
         <div className="mxm-coin-tabs" role="tablist" aria-label="Разделы мемкоина">
-          {([[
-            "overview", "Торговать",
-          ], ["orders", "Заявки"], ["holders", "Владельцы"], ["activity", "Сделки"]] as Array<[MarketTab, string]>).map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={marketTab === key} onClick={() => setMarketTab(key)} className={marketTab === key ? "is-active" : ""}>{label}</button>)}
+          {([["overview", "Торговать"], ["orders", "Заявки"], ["holders", "Владельцы"], ["activity", "Сделки"]] as Array<[MarketTab, string]>).map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={marketTab === key} onClick={() => setMarketTab(key)} className={marketTab === key ? "is-active" : ""}>{label}</button>)}
         </div>
 
         <div className={`mxm-coin-trade-slot ${marketTab === "overview" ? "" : "is-tab-hidden-mobile"}`}>{tradePanel}</div>
 
         <section className={`mxm-coin-tab-slot ${marketTab === "overview" ? "is-overview" : ""}`}>
           {marketTab === "orders" ? <CoinConditionalOrders coin={coin} holdingQuantity={data.holding.availableQuantity} availableBalance={data.availableBalance} compact onBalanceChange={() => { void refreshProfile(); void load(true); }} /> : null}
-          {marketTab === "holders" ? (data.topHolders.length ? <div className="mxm-coin-list">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="mxm-coin-list-row"><span className="w-4 text-[var(--muted-2)]">{index + 1}</span><span className="min-w-0 flex-1 truncate">{holder.name}</span>{holder.genesisOrdinal ? <span className="text-[7px] text-[#d9c27a]">#{holder.genesisOrdinal}</span> : null}<strong>{compact(holder.quantity)}</strong></Link>)}</div> : <Empty text="Владельцев пока нет" />) : null}
-          {marketTab === "activity" ? (data.trades.length ? <div className="mxm-coin-list">{data.trades.map((trade) => <div key={trade.id} className="mxm-coin-list-row"><span className={trade.side === "buy" ? "text-[var(--positive)]" : "text-[var(--negative)]"}>{trade.side === "buy" ? "Покупка" : "Продажа"}</span><span className="min-w-0 flex-1 truncate text-[var(--muted)]">{trade.traderName}</span><strong>{money(trade.quoteAmount)}</strong></div>)}</div> : <Empty text="Сделок пока нет" />) : null}
+          {marketTab === "holders" ? (data.topHolders.length ? <div className="mxm-coin-list">{data.topHolders.map((holder, index) => <Link href={`/u/${holder.id}`} key={holder.id} className="mxm-coin-list-row"><span className="w-4 text-[var(--muted-2)]">{index + 1}</span><span className="min-w-0 flex-1 truncate">{holder.name}</span>{holder.genesisOrdinal ? <span className="text-[7px] text-[#d9c27a]">OG #{holder.genesisOrdinal}</span> : null}<strong>{compact(holder.quantity)}</strong></Link>)}</div> : <Empty text="Владельцев пока нет" />) : null}
+          {marketTab === "activity" ? (data.trades.length ? <div className="mxm-coin-list">{data.trades.map((trade) => <div key={trade.id} className="mxm-coin-list-row"><span className={trade.side === "buy" ? "text-[var(--positive)]" : "text-[var(--negative)]"}>{trade.side === "buy" ? "Покупка" : "Продажа"}</span><span className="min-w-0 flex-1 truncate text-[var(--muted)]">{trade.traderName}{trade.genesisOrdinal?` · OG #${trade.genesisOrdinal}`:""}</span><strong>{money(trade.quoteAmount)}</strong></div>)}</div> : <Empty text="Сделок пока нет" />) : null}
           {marketTab === "overview" ? <div className="hidden h-full lg:grid lg:place-items-center"><button type="button" onClick={() => setMetricsOpen(true)} className="inline-flex items-center gap-2 text-[10px] text-[var(--muted)] hover:text-white"><BarChart3 size={13} />Открыть метрики рынка</button></div> : null}
         </section>
       </div>
 
-      {metricsOpen ? <MetricsSheet coin={coin} economy={data.economy} flow={flow} buyShare={buyShare} publicTradeCount={publicTradeCount} pristine={pristineMarket} onClose={() => setMetricsOpen(false)} /> : null}
+      {metricsOpen ? <MetricsSheet coin={coin} economy={data.economy} pulse={pulse} flow={flow} buyShare={buyShare} publicTradeCount={publicTradeCount} pristine={pristineMarket} onClose={() => setMetricsOpen(false)} /> : null}
     </div>
   );
 }
 
-function MetricsSheet({ coin, economy, flow, buyShare, publicTradeCount, pristine, onClose }: { coin: Coin; economy: CoinEconomy; flow: number; buyShare: number; publicTradeCount: number; pristine: boolean; onClose: () => void }) {
+function MetricsSheet({ coin, economy, pulse, flow, buyShare, publicTradeCount, pristine, onClose }: { coin: Coin; economy: CoinEconomy; pulse: CoinPulse; flow: number; buyShare: number; publicTradeCount: number; pristine: boolean; onClose: () => void }) {
+  const targets=pulse.level.targets;
   return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55 px-2 pb-[max(8px,env(safe-area-inset-bottom))] md:items-center" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-    <section role="dialog" aria-modal="true" aria-label="Метрики мемкоина" className="mxm-coin-metrics-sheet w-full max-w-lg rounded-t-[22px] bg-[var(--bg)] px-4 pb-4 pt-3 shadow-[0_-18px_60px_rgba(0,0,0,.5)] md:rounded-[22px]">
-      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold">Метрики</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">${coin.symbol} · рынок</p></div><button type="button" onClick={onClose} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-full bg-white/[.035] text-[var(--muted)]"><X size={14} /></button></div>
+    <section role="dialog" aria-modal="true" aria-label="Метрики мемкоина" className="mxm-coin-metrics-sheet max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-[22px] bg-[var(--bg)] px-4 pb-4 pt-3 shadow-[0_-18px_60px_rgba(0,0,0,.5)] md:rounded-[22px]">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold">Pulse · ${coin.symbol}</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">Живая активность, прогресс и здоровье рынка</p></div><button type="button" onClick={onClose} aria-label="Закрыть" className="grid h-8 w-8 place-items-center rounded-full bg-white/[.035] text-[var(--muted)]"><X size={14} /></button></div>
+
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        <PulseMetric label="Heat" value={`${pulse.heat.score}/100`} detail={heatLabel(pulse.heat.tier)}/>
+        <PulseMetric label="Уровень" value={`L${pulse.level.number}`} detail={levelLabel(pulse.level.key)}/>
+        <PulseMetric label="Health" value={`${pulse.health.score}/100`} detail={healthLabel(pulse.health.grade)}/>
+        <PulseMetric label="Genesis" value={`${pulse.og.count}/${pulse.og.limit}`} detail={pulse.og.userOrdinal?`ты #${pulse.og.userOrdinal}`:`ещё ${pulse.og.remaining}`}/>
+      </div>
+
+      {targets?<div className="mt-3 rounded-[14px] border border-[var(--border-soft)] p-3">
+        <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold">До L{Math.min(5,pulse.level.number+1)}</p><p className="mt-0.5 text-[8px] text-[var(--muted)]">Для уровня нужны все три условия.</p></div><strong className="text-[11px]">{pulse.level.progressPct}%</strong></div>
+        <ProgressAxis label="Владельцы" current={targets.holders.current} target={targets.holders.target} value={`${compact(targets.holders.current)} / ${compact(targets.holders.target)}`}/>
+        <ProgressAxis label="Трейдеры" current={targets.traders.current} target={targets.traders.target} value={`${compact(targets.traders.current)} / ${compact(targets.traders.target)}`}/>
+        <ProgressAxis label="Объём" current={targets.volume.current} target={targets.volume.target} value={`${money(targets.volume.current)} / ${money(targets.volume.target)}`}/>
+      </div>:<div className="mt-3 rounded-[14px] border border-[var(--border-soft)] p-3 text-[9px] text-[var(--positive)]">Максимальный уровень рынка достигнут.</div>}
+
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Капитализация" value={money(coin.marketCap)} />
         <Metric label="Ликвидность" value={money(coin.liquidity)} />
         <Metric label="Объём 24ч" value={pristine ? "0 TON" : money(coin.volume24h)} />
         <Metric label="Сделки" value={String(publicTradeCount)} />
         <Metric label="Владельцы" value={String(coin.holderCount)} />
+        <Metric label="Трейдеры 24ч" value={String(pulse.heat.uniqueTraders24h)} />
         <Metric label="Макс. цена" value={price(coin.athPrice)} />
         <Metric label="Старт рынка" value={price(economy.marketOpenPrice || economy.startPrice)} />
-        <Metric label="Мин. цена" value={economy.floorActive && economy.floorPrice ? price(economy.floorPrice) : "—"} />
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2"><Metric label="Автор" value={`${economy.creatorFeeBps / 100}% комиссии`} /><Metric label="Заблокировано" value={economy.lock ? `${compact(economy.lock.remaining)} ${coin.symbol}` : "—"} /></div>
+
+      <div className="mt-3 border-t border-[var(--border-soft)] pt-3">
+        <div className="mb-2 flex items-center justify-between"><p className="text-[9px] font-semibold">Распределение</p><span className="text-[8px] text-[var(--muted)]">прозрачность рынка</span></div>
+        <div className="grid grid-cols-2 gap-x-4"><Metric label="Крупнейший холдер" value={bps(pulse.distribution.topHolderShareBps)} /><Metric label="Топ-3" value={bps(pulse.distribution.top3ShareBps)} /><Metric label="Доля автора" value={bps(pulse.distribution.creatorShareBps)} /><Metric label="Заблокировано у автора" value={bps(pulse.distribution.creatorLockedShareBps)} /></div>
+        {pulse.health.flags.length?<div className="mt-2 flex flex-wrap gap-1.5">{pulse.health.flags.map((flag)=><span key={flag} className="rounded-full bg-white/[.04] px-2 py-1 text-[7px] text-[var(--muted)]">{flagLabel(flag)}</span>)}</div>:<p className="mt-2 text-[8px] text-[var(--positive)]">Критичных флагов рынка нет.</p>}
+      </div>
+
       <div className="mt-3 border-t border-[var(--border-soft)] pt-3">
         <div className="mb-1.5 flex items-center justify-between text-[8px] text-[var(--muted)]"><span>Поток 24ч</span><span>{flow > 0 ? `${buyShare.toFixed(0)}% покупок` : "Нет объёма"}</span></div>
         <div className="flex h-1 overflow-hidden rounded-full bg-[#15191d]"><span className="bg-[var(--positive)]" style={{ width: `${buyShare}%` }} /><span className="bg-[var(--negative)]" style={{ width: `${flow > 0 ? 100 - buyShare : 0}%` }} /></div>
         <div className="mt-1.5 flex justify-between text-[8px]"><span className="text-[var(--positive)]">Покупки {pristine ? "0 TON" : money(coin.buyVolume24h)}</span><span className="text-[var(--negative)]">Продажи {pristine ? "0 TON" : money(coin.sellVolume24h)}</span></div>
       </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border-soft)] pt-3"><Metric label="Репутация автора" value={`${pulse.creatorReputation.score}/100 · ${pulse.creatorReputation.grade}`} /><Metric label="Комиссия автора" value={`${economy.creatorFeeBps / 100}%`} /></div>
     </section>
   </div>;
 }
 
+function ProgressAxis({label,current,target,value}:{label:string;current:number;target:number;value:string}) { const pct=target>0?Math.min(100,Math.max(0,current/target*100)):0; return <div className="mt-2"><div className="flex justify-between gap-2 text-[8px]"><span className="text-[var(--muted)]">{label}</span><span>{value}</span></div><div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[.055]"><div className="h-full rounded-full bg-[var(--accent)]" style={{width:`${pct}%`}}/></div></div>; }
+function PulseMetric({label,value,detail}:{label:string;value:string;detail:string}) { return <div className="rounded-[12px] bg-white/[.025] px-2 py-2"><p className="text-[7px] text-[var(--muted)]">{label}</p><p className="mt-0.5 text-[11px] font-semibold tabular-nums">{value}</p><p className="mt-0.5 truncate text-[7px] text-[var(--muted)]">{detail}</p></div>; }
+function PulseMini({label,value,detail,tone}:{label:string;value:string;detail:string;tone?:number}) { return <div className="min-w-0 px-2 first:pl-0 last:pr-0"><p className="text-[6px] tracking-[.12em] text-[var(--muted-2)]">{label}</p><p className={`mt-0.5 text-[11px] font-semibold tabular-nums ${tone==null?"":tone>0?"text-[var(--positive)]":"text-[var(--negative)]"}`}>{value}</p><p className="mt-0.5 truncate text-[7px] text-[var(--muted)]">{detail}</p></div>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="border-b border-[var(--border-soft)] px-0.5 py-2.5"><p className="text-[8px] text-[var(--muted)]">{label}</p><p className="mt-1 truncate text-[11px] font-semibold tabular-nums">{value}</p></div>; }
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: number }) { return <div><p className="text-[7px] text-[var(--muted)]">{label}</p><p className={`mt-0.5 truncate text-[9px] font-medium tabular-nums ${tone == null ? "" : tone >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>{value}</p></div>; }
 function QuoteCompact({ label, value, warning }: { label: string; value: string; warning?: boolean }) { return <div className="min-w-0"><p className="text-[7px] text-[var(--muted)]">{label}</p><p className={`mt-0.5 truncate text-[9px] font-medium tabular-nums ${warning ? "text-[var(--negative)]" : ""}`}>{value}</p></div>; }
