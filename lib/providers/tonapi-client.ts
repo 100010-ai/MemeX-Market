@@ -1,5 +1,6 @@
 const TONAPI_BASE = "https://tonapi.io";
-const DEFAULT_TIMEOUT_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_ATTEMPTS = 2;
 const PUBLIC_INTERVAL_MS = 4_150;
 const CACHE_LIMIT = 300;
 
@@ -125,7 +126,7 @@ export async function tonApiGet<T>(path: string, options: TonApiRequestOptions =
     const configuredKey = process.env.TONAPI_KEY?.trim();
     let authenticated = Boolean(configuredKey);
     let authFallbackUsed = false;
-    const attempts = Math.max(1, Math.min(5, options.attempts ?? 4));
+    const attempts = Math.max(1, Math.min(5, options.attempts ?? DEFAULT_ATTEMPTS));
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -202,4 +203,3 @@ export function tonApiHealth() {
 export function clearTonApiMemoryCache() {
   cache.clear();
 }
-

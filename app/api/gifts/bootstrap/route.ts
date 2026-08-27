@@ -41,10 +41,10 @@ async function recentTonApiFailure() {
   return String(result.data.last_error);
 }
 
-async function waitForConcurrentBootstrap(maxWaitMs = 18_000) {
+async function waitForConcurrentBootstrap(maxWaitMs = 6_000) {
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     const count = await listedCount();
     if (count > 0) return count;
   }
@@ -77,31 +77,30 @@ async function POSTHandler(request: Request) {
       );
     }
 
-    // Keep this request deliberately bounded. A previous production version
-    // attempted up to 18 collections x 500 items after three discovery pages
-    // and hit Vercel's 60-second function timeout. Bootstrap is incremental,
-    // so smaller batches are safer and later calls continue from next_offset.
+    // Bootstrap is deliberately incremental. Keep both the external request
+    // count and the database batch small enough to leave headroom below the
+    // 60-second Vercel function limit even when TonAPI retries once.
     const hasTonApiKey = Boolean(process.env.TONAPI_KEY?.trim());
     const catalog = await syncTonApiGiftCatalog({
       bootstrapOnly: false,
       discoverPages: 1,
-      maxCollections: hasTonApiKey ? 6 : 3,
-      itemsPerCollection: hasTonApiKey ? 240 : 120,
+      maxCollections: hasTonApiKey ? 2 : 1,
+      itemsPerCollection: hasTonApiKey ? 160 : 80,
     });
     const { errors: catalogErrors, ...publicCatalog } = catalog;
 
-    // Another request may already own the global TonAPI lock. Do not race it
-    // with an empty Genesis initialization; briefly wait for that bootstrap to
-    // publish listings and then return the shared result.
+    // Another request may already own the global TonAPI lock. Do not spend a
+    // large part of this request polling: return 202 quickly and let the client
+    // retry while the lock owner publishes the shared catalogue.
     if (catalog.skipped) {
       const concurrentListed = await waitForConcurrentBootstrap();
       if (concurrentListed > 0) return NextResponse.json({ ok: true, skipped: true, listed: concurrentListed, catalog: publicCatalog });
       return NextResponse.json({ ok: true, pending: true, skipped: true, listed: 0, catalog: publicCatalog, retryAfterMs: 5000 }, { status: 202, headers: { "retry-after": "5" } });
     }
 
-    // Genesis is incremental too. Avoid making the same request perform a
-    // second oversized database batch after the network import has completed.
-    const genesis = await ensureGenesisGiftMarket({ batchSize: 350, force: true });
+    // Genesis is incremental too. Keep this follow-up batch bounded so the
+    // request cannot turn a successful network import into a serverless timeout.
+    const genesis = await ensureGenesisGiftMarket({ batchSize: 200, force: true });
     const listed = await listedCount();
 
     if (listed <= 0) {
