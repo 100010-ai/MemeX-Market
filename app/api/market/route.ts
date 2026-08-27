@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const revalidate = 10;
 
-const coinMarketSelect = "id,creator_profile_id,name,symbol,description,current_price,market_cap,status,created_at,total_supply,token_reserve,quote_reserve,volume_24h,change_24h,holder_count,trade_count_24h,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,image_url";
+const coinMarketSelect = "id,creator_profile_id,name,symbol,description,current_price,market_cap,status,created_at,total_supply,token_reserve,quote_reserve,volume_24h,change_24h,holder_count,trade_count_24h,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,image_url,unique_traders_24h,unique_traders_all,top_trader_share_bps,heat_score,heat_tier,coin_level,coin_level_key,last_public_trade_at";
 
 type SharedMarketCache<T> = { expiresAt: number; value: T };
 
@@ -19,6 +19,29 @@ let filterOptionsCache: SharedMarketCache<unknown> | null = null;
 let filterOptionsInFlight: Promise<unknown> | null = null;
 let collectionOverviewCache: SharedMarketCache<Array<Record<string, unknown>>> | null = null;
 let collectionOverviewInFlight: Promise<Array<Record<string, unknown>>> | null = null;
+
+function finite(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function mapDiscoveryCoin(row: Record<string, unknown>, boostedUntil: string | null = null) {
+  const coin = mapCoin(row);
+  const heatTier = typeof row.heat_tier === "string" ? row.heat_tier : "quiet";
+  const levelKey = typeof row.coin_level_key === "string" ? row.coin_level_key : "launch";
+  return {
+    ...coin,
+    boostedUntil,
+    heatScore: Math.min(100, Math.max(0, Math.floor(finite(row.heat_score)))),
+    heatTier,
+    coinLevel: Math.min(5, Math.max(1, Math.floor(finite(row.coin_level, 1)))),
+    coinLevelKey: levelKey,
+    uniqueTraders24h: Math.max(0, Math.floor(finite(row.unique_traders_24h))),
+    uniqueTradersAll: Math.max(0, Math.floor(finite(row.unique_traders_all))),
+    topTraderShareBps: Math.min(10_000, Math.max(0, Math.floor(finite(row.top_trader_share_bps)))),
+    lastPublicTradeAt: typeof row.last_public_trade_at === "string" ? row.last_public_trade_at : null,
+  };
+}
 
 async function getCachedGiftFilterOptions() {
   const now = Date.now();
@@ -85,7 +108,6 @@ function parseGiftMarketPage(value: unknown): Required<GiftMarketPage> {
   };
 }
 
-
 async function GETHandler(request: NextRequest) {
   const startedAt = Date.now();
   const session = await requireSession();
@@ -97,8 +119,6 @@ async function GETHandler(request: NextRequest) {
   if (scope === "coins" && !runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Мемкоины временно отключены" }, { status: 503 });
   if (scope === "gifts" && !runtimeConfig.featureFlags.gifts) return NextResponse.json({ error: "Торговля подарками временно отключена" }, { status: 503 });
 
-  // Expiry is already enforced in every market view/RPC. Cleanup therefore
-  // happens after the response and can never extend first paint latency.
   if (scope === "gifts") after(() => maybeMaintainGiftMarket());
 
   try {
@@ -106,16 +126,17 @@ async function GETHandler(request: NextRequest) {
       const coinLimit = intParam(request.nextUrl.searchParams.get("limit"), 72, 6, 72);
       const compact = request.nextUrl.searchParams.get("compact") === "1";
       if (compact) {
-        const coinsResult = await supabase.from("market_overview")
+        const coinsResult = await supabase.from("coin_discovery_v0730")
           .select(coinMarketSelect)
           .eq("status", "active")
+          .order("heat_score", { ascending: false })
           .order("volume_24h", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(coinLimit);
         if (coinsResult.error) throw coinsResult.error;
         return NextResponse.json({
           scope,
-          coins: (coinsResult.data || []).map((row) => mapCoin(row as Record<string, unknown>)),
+          coins: (coinsResult.data || []).map((row) => mapDiscoveryCoin(row as Record<string, unknown>)),
         }, { headers: { "cache-control": "private, max-age=0, must-revalidate", "server-timing": `mxm-market-coins-compact;dur=${Date.now() - startedAt}` } });
       }
 
@@ -123,10 +144,8 @@ async function GETHandler(request: NextRequest) {
       if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
       const newCoinLimit = Math.min(48, Math.max(12, coinLimit));
       const [coinsResult, newCoinsResult, boostsResult, watchlistResult] = await Promise.all([
-        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(coinLimit),
-        // Discovery must not be derived from the volume leaderboard: a freshly
-        // launched coin can legitimately have no trades yet.
-        supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").order("created_at", { ascending: false }).limit(newCoinLimit),
+        supabase.from("coin_discovery_v0730").select(coinMarketSelect).eq("status", "active").order("heat_score", { ascending: false }).order("volume_24h", { ascending: false }).order("created_at", { ascending: false }).limit(coinLimit),
+        supabase.from("coin_discovery_v0730").select(coinMarketSelect).eq("status", "active").order("created_at", { ascending: false }).limit(newCoinLimit),
         supabase.from("active_coin_boosts_v200").select("coin_id,boosted_until").order("boosted_until", { ascending: false }).limit(newCoinLimit),
         supabase.from("user_watchlist").select("kind,coin_id,gift_collection,virtual_gift_id").eq("profile_id", profile.id).limit(500),
       ]);
@@ -137,14 +156,11 @@ async function GETHandler(request: NextRequest) {
       const boostedCoinIds = [...boostByCoin.keys()];
       let boostedCoinRows: Record<string, unknown>[] = [];
       if (boostedCoinIds.length) {
-        const boostedCoinsResult = await supabase.from("market_overview").select(coinMarketSelect).eq("status", "active").in("id", boostedCoinIds);
+        const boostedCoinsResult = await supabase.from("coin_discovery_v0730").select(coinMarketSelect).eq("status", "active").in("id", boostedCoinIds);
         if (boostedCoinsResult.error) throw boostedCoinsResult.error;
         boostedCoinRows = (boostedCoinsResult.data || []) as Record<string, unknown>[];
       }
-      const mapMarketCoin = (row: Record<string, unknown>) => {
-        const coin = mapCoin(row);
-        return { ...coin, boostedUntil: boostByCoin.get(coin.id) || null };
-      };
+      const mapMarketCoin = (row: Record<string, unknown>) => mapDiscoveryCoin(row, boostByCoin.get(String(row.id || "")) || null);
       const newestCoins = (newCoinsResult.data || []).map((row) => mapMarketCoin(row as Record<string, unknown>));
       const promotedCoins = boostedCoinRows
         .map(mapMarketCoin)
@@ -189,8 +205,6 @@ async function GETHandler(request: NextRequest) {
       || giftPageArgs.p_price_band !== "all" || giftPageArgs.p_view !== "all" || giftPageArgs.p_sort !== "random"
     );
 
-    // Infinite-scroll requests only need the next cards. Avoid watchlist/cart,
-    // collection analytics, genesis and COUNT(*) on every page.
     if (offset > 0 || request.nextUrl.searchParams.get("lean") === "1") {
       const giftsResult = await supabase.rpc("gift_market_filtered_page_v200", giftPageArgs);
       if (giftsResult.error) throw giftsResult.error;
@@ -228,9 +242,6 @@ async function GETHandler(request: NextRequest) {
       totalGifts: page.totalGifts,
       nextOffset: page.nextOffset,
       marketSeed,
-      // A one-item catalogue used to prevent every later TonAPI bootstrap.
-      // Continue the real catalogue import until the market has a useful
-      // first page instead of getting permanently stuck on PEPE.
       bootstrapRecommended: page.totalGifts < 24 && !hasCatalogFilters && !Boolean((liquidityResult.data as { playerOnly?: boolean } | null)?.playerOnly),
       genesis: genesisResult.data || null,
       liquidity: liquidityResult.data || null,
