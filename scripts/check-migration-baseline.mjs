@@ -19,6 +19,7 @@ const required = [
   "100036_social_schema_reload_v0722.sql",
   "110000_missing_fk_indexes_v0723.sql",
   "110001_cron_history_retention_v0723.sql",
+  "120000_memecoin_pulse_v0730.sql",
 ];
 
 const missing = required.filter((name) => !fs.existsSync(path.join(migrationDir, name)));
