@@ -546,7 +546,7 @@ export default function MarketPage() {
   }, [cartIds, collectionCartBusy]);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mxm-market-page mx-auto max-w-6xl">
       <RealtimeRefresh channelName={realtimeChannelName} tables={realtimeTables} onChange={realtimeReload} debounceMs={1800} />
 
       <div className="mxm-market-head mb-4">
@@ -574,9 +574,9 @@ export default function MarketPage() {
 
       {query.trim().length >= 2 && remoteSearch && (remoteSearch.collections.length || remoteSearch.users.length || (tab === "gifts" && remoteSearch.coins.length)) ? <div className="mb-4 border-y border-[var(--border-soft)] py-2">
         <div className="mxm-hscroll gap-2">
-          {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">от {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
-          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="flex shrink-0 items-center gap-2 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]">{telegramAvatarProxyUrl(user.photoUrl) ? <Image unoptimized src={telegramAvatarProxyUrl(user.photoUrl)!} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
-          {tab === "gifts" ? remoteSearch.coins.slice(0, 4).map((coin) => <Link key={`coin:${coin.id}`} href={`/coin/${coin.id}`} className="shrink-0 rounded-[13px] bg-[var(--panel-2)] px-3 py-2 text-[10px]"><span className="font-medium">${coin.symbol}</span><span className="ml-2 text-[var(--muted)]">{percent(coin.change24h)}</span></Link>) : null}
+          {remoteSearch.collections.slice(0, 4).map((item) => <Link key={`collection:${item.baseName}`} href={`/collections/${encodeURIComponent(item.baseName)}`} className="mxm-inline-result"><span className="font-medium">{item.baseName}</span><span className="ml-2 text-[var(--muted)]">от {item.floorPrice == null ? "—" : money(item.floorPrice)}</span></Link>)}
+          {remoteSearch.users.slice(0, 4).map((user) => <Link key={`user:${user.id}`} href={`/u/${user.id}`} className="mxm-inline-result flex items-center gap-2">{telegramAvatarProxyUrl(user.photoUrl) ? <Image unoptimized src={telegramAvatarProxyUrl(user.photoUrl)!} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" /> : null}<span className="font-medium">{user.name}</span><span className="text-[var(--muted)]">профиль</span></Link>)}
+          {tab === "gifts" ? remoteSearch.coins.slice(0, 4).map((coin) => <Link key={`coin:${coin.id}`} href={`/coin/${coin.id}`} className="mxm-inline-result"><span className="font-medium">${coin.symbol}</span><span className="ml-2 text-[var(--muted)]">{percent(coin.change24h)}</span></Link>) : null}
         </div>
       </div> : null}
 
@@ -711,7 +711,7 @@ function MarketFeedView({ items, loading, error, onRetry }: { items: ActivityIte
   if (loading) return <RowsSkeleton />;
   if (error) return <div className="mxm-alert mxm-alert-error flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={onRetry} className="rounded-xl border border-[var(--border)] px-2.5 py-1.5 text-[10px]">Повторить</button></div>;
   if (!items.length) return <EmptyMarket icon={<List />} title="Лента пока пуста" text="Здесь появятся новые сделки и лоты." action={<button type="button" onClick={onRetry} className="rounded-[13px] bg-[var(--panel-3)] px-3 py-2 text-[10px]">Обновить</button>} />;
-  return <div className="space-y-1.5">{items.map((item) => <Link href={item.href} key={item.id} className="mxm-feed-row grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[14px] border border-[var(--border-soft)] bg-[var(--panel)] px-2.5 py-2">
+  return <div>{items.map((item) => <Link href={item.href} key={item.id} className="mxm-feed-row grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[var(--border-soft)] px-0.5 py-2.5">
     <div className="relative h-[38px] w-[38px] overflow-hidden rounded-[10px] bg-[var(--panel-2)]"><div className="absolute inset-0 grid place-items-center text-[var(--muted)]">{item.kind === "coin" || item.kind === "launch" ? <Coins size={14} /> : <Gift size={14} />}</div>{item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.opacity = "0"; }} className="relative h-full w-full object-cover" /> : null}</div>
     <div className="min-w-0"><p className="truncate text-[11px] font-medium">{item.detail}</p><p className={`mt-1 truncate text-[9px] ${item.kind === "listing" ? "text-[var(--accent)]" : item.kind === "reprice" ? "text-[#8eb8d8]" : "text-[var(--muted)]"}`}>{item.label}</p></div>
     <div className="shrink-0 text-right">{item.amount != null && Number.isFinite(item.amount) ? <p className="text-[11px] font-medium">{money(item.amount)}</p> : null}<p className="mt-1 text-[8px] text-[var(--muted-2)]">{formatMarketTime(item.createdAt)}</p></div>
