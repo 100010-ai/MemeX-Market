@@ -34,17 +34,10 @@ async function GETHandler(request: NextRequest, { params }: { params: Promise<{ 
 
   const offset = intParam(request.nextUrl.searchParams.get("offset"), 0, 0, 100_000);
   const limit = intParam(request.nextUrl.searchParams.get("limit"), 36, 12, 60);
-  const result = await getSupabaseAdmin().rpc("gift_market_filtered_page_v200", {
-    p_seed: `collection:${baseName}`,
+  const result = await getSupabaseAdmin().rpc("gift_collection_listing_page_v0790", {
+    p_base_name: baseName,
     p_offset: offset,
     p_limit: limit,
-    p_collection: baseName,
-    p_model: null,
-    p_backdrop: null,
-    p_symbol: null,
-    p_price_band: "all",
-    p_view: "all",
-    p_sort: "price",
   });
 
   if (result.error) return apiFailure(result.error, "Не удалось выполнить запрос");

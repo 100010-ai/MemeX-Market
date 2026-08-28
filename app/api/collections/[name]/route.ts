@@ -50,12 +50,9 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ nam
 
   try {
     const [collectionResult, traitStatsResult, listedResult, candlesResult, salesResult, activityResult, watchedResult] = await Promise.all([
-      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
+      supabase.rpc("gift_collection_snapshot_v0790", { p_base_name: baseName }),
       supabase.rpc("gift_collection_trait_stats", { p_base_name: baseName }),
-      supabase.rpc("gift_market_filtered_page_v200", {
-        p_seed: `collection:${baseName}`, p_offset: 0, p_limit: INITIAL_LISTING_LIMIT, p_collection: baseName,
-        p_model: null, p_backdrop: null, p_symbol: null, p_price_band: "all", p_view: "all", p_sort: "price",
-      }),
+      supabase.rpc("gift_collection_listing_page_v0790", { p_base_name: baseName, p_offset: 0, p_limit: INITIAL_LISTING_LIMIT }),
       supabase.from("gift_collection_candles").select("bucket_start,open,high,low,close,volume").eq("base_name", baseName).order("bucket_start", { ascending: false }).limit(480),
       supabase.from("gift_trades").select("id,price,created_at,buyer_profile_id,seller_profile_id,gift_assets!inner(base_name,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(24),
       supabase.from("gift_listing_events").select("id,virtual_gift_id,actor_profile_id,kind,price,previous_price,created_at,gift_assets!inner(base_name,gift_number,is_burned)").eq("gift_assets.base_name", baseName).eq("gift_assets.is_burned", false).order("created_at", { ascending: false }).limit(50),
