@@ -57,7 +57,7 @@ export default function AdminHealthPage() {
       {data ? <>
         <div className="grid gap-3 md:grid-cols-3">
           <Metric label="Общий статус" value={data.health === "healthy" ? "Healthy" : data.health === "degraded" ? "Degraded" : "Critical"} />
-          <Metric label="Ошибок за 24ч" value={String(data.counters.recentErrors24h)} />
+          <Metric label="Групп ошибок за 24ч" value={String(data.counters.recentErrors24h)} />
           <Metric label="Условных ордеров" value={String(data.counters.activeConditionalOrders)} />
         </div>
         <div className="mt-4 overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--panel)]">
