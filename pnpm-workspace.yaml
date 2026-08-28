@@ -1,2 +1,7 @@
-allowBuilds:
-  unrs-resolver: set this to true or false
+# Keep dependency lifecycle scripts denied by default on the pinned pnpm 10.x
+# toolchain. unrs-resolver's compatibility postinstall is not required by this
+# app, so record it as intentionally ignored rather than leaving an unresolved
+# approve-builds placeholder in source control.
+onlyBuiltDependencies: []
+ignoredBuiltDependencies:
+  - unrs-resolver
