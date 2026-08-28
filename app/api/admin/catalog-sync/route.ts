@@ -17,7 +17,10 @@ async function POSTHandler(request: Request) {
   }
   try {
     const catalog = await syncGiftCatalog();
-    const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 1000 });
+    // Genesis publication is cursor/state driven too. A 1,000-item batch could
+    // outlive both the 60s request and the short NPC maintenance lease. Advance
+    // it in bounded passes just like the public bootstrap route does.
+    const liquidity = await ensureNpcMarketLiquidity({ force: true, targetListings: 200 });
     return NextResponse.json({ results: catalog.bot.results, catalog, liquidity });
   } catch (error) {
     console.error("Telegram hybrid catalog sync", error);
