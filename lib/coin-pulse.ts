@@ -3,6 +3,8 @@ import { finiteNumber, nullableNumber, record, safeIsoDate, text } from "@/lib/s
 export type CoinHeatTier = "quiet" | "moving" | "trending" | "hot" | "viral";
 export type CoinLevelKey = "launch" | "established" | "trending" | "viral" | "legend";
 export type CoinHealthGrade = "strong" | "balanced" | "watch" | "fragile";
+export type CoinLifecycleKey = "prelaunch" | "launch" | "growth" | "graduated" | "elite" | "legendary";
+export type CoinRiskGrade = "low" | "medium" | "high" | "critical";
 
 export type CreatorReputation = {
   score: number;
@@ -39,6 +41,18 @@ export type CoinPulse = {
       volume: CoinProgressTarget;
     };
   };
+  lifecycle: {
+    key: CoinLifecycleKey;
+    tradingOpen: boolean;
+    opensAt: string | null;
+    graduatedAt: string | null;
+    graduationProgressPct: number;
+    targets: {
+      holders: CoinProgressTarget;
+      traders: CoinProgressTarget;
+      volume: CoinProgressTarget;
+    };
+  };
   og: {
     count: number;
     limit: number;
@@ -56,6 +70,21 @@ export type CoinPulse = {
     grade: CoinHealthGrade;
     flags: string[];
   };
+  risk: {
+    score: number;
+    grade: CoinRiskGrade;
+    flags: string[];
+    drawdownBps: number;
+    creatorSellShareBps: number;
+  };
+  signals: {
+    trendScore: number;
+    whaleThreshold: number;
+    whaleTrades24h: number;
+    lastWhaleAt: string | null;
+    uniqueBuyers24h: number;
+    uniqueSellers24h: number;
+  };
   verification: {
     coinVerified: boolean;
     coinTier: string | null;
@@ -69,6 +98,8 @@ export type CoinPulse = {
 const heatTiers = new Set<CoinHeatTier>(["quiet", "moving", "trending", "hot", "viral"]);
 const levelKeys = new Set<CoinLevelKey>(["launch", "established", "trending", "viral", "legend"]);
 const healthGrades = new Set<CoinHealthGrade>(["strong", "balanced", "watch", "fragile"]);
+const lifecycleKeys = new Set<CoinLifecycleKey>(["prelaunch", "launch", "growth", "graduated", "elite", "legendary"]);
+const riskGrades = new Set<CoinRiskGrade>(["low", "medium", "high", "critical"]);
 
 function int(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER) {
   return Math.min(max, Math.max(min, Math.floor(finiteNumber(value))));
@@ -92,6 +123,12 @@ function progressTarget(value: unknown): CoinProgressTarget {
   };
 }
 
+function flagsFrom(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => text(item, "", 64)).filter(Boolean).slice(0, 20)
+    : [];
+}
+
 export function mapCreatorReputation(value: unknown): CreatorReputation {
   const row = record(value) ?? {};
   return {
@@ -113,18 +150,22 @@ export function mapCoinPulse(value: unknown): CoinPulse {
   const root = record(value) ?? {};
   const heat = record(root.heat) ?? {};
   const level = record(root.level) ?? {};
+  const lifecycle = record(root.lifecycle) ?? {};
   const og = record(root.og) ?? {};
   const distribution = record(root.distribution) ?? {};
   const health = record(root.health) ?? {};
+  const risk = record(root.risk) ?? {};
+  const signals = record(root.signals) ?? {};
   const verification = record(root.verification) ?? {};
   const targets = record(level.targets);
+  const lifecycleTargets = record(lifecycle.targets) ?? {};
   const rawHeatTier = text(heat.tier, "quiet", 20) as CoinHeatTier;
   const rawLevelKey = text(level.key, "launch", 24) as CoinLevelKey;
   const rawHealthGrade = text(health.grade, "fragile", 24) as CoinHealthGrade;
-  const flags = Array.isArray(health.flags)
-    ? health.flags.map((item) => text(item, "", 64)).filter(Boolean).slice(0, 20)
-    : [];
+  const rawLifecycleKey = text(lifecycle.key, "launch", 24) as CoinLifecycleKey;
+  const rawRiskGrade = text(risk.grade, "low", 24) as CoinRiskGrade;
   const userOrdinal = nullableNumber(og.userOrdinal);
+  const legacyHealthScore = int(health.score, 0, 100);
 
   return {
     heat: {
@@ -145,6 +186,18 @@ export function mapCoinPulse(value: unknown): CoinPulse {
         volume: progressTarget(targets.volume),
       } : null,
     },
+    lifecycle: {
+      key: lifecycleKeys.has(rawLifecycleKey) ? rawLifecycleKey : "launch",
+      tradingOpen: lifecycle.tradingOpen !== false,
+      opensAt: optionalIso(lifecycle.opensAt),
+      graduatedAt: optionalIso(lifecycle.graduatedAt),
+      graduationProgressPct: int(lifecycle.graduationProgressPct, 0, 100),
+      targets: {
+        holders: progressTarget(lifecycleTargets.holders),
+        traders: progressTarget(lifecycleTargets.traders),
+        volume: progressTarget(lifecycleTargets.volume),
+      },
+    },
     og: {
       count: int(og.count),
       limit: Math.max(1, int(og.limit, 1, 1000)),
@@ -158,9 +211,24 @@ export function mapCoinPulse(value: unknown): CoinPulse {
       creatorLockedShareBps: int(distribution.creatorLockedShareBps, 0, 10_000),
     },
     health: {
-      score: int(health.score, 0, 100),
+      score: legacyHealthScore,
       grade: healthGrades.has(rawHealthGrade) ? rawHealthGrade : "fragile",
-      flags,
+      flags: flagsFrom(health.flags),
+    },
+    risk: {
+      score: risk.score == null ? Math.max(0, 100 - legacyHealthScore) : int(risk.score, 0, 100),
+      grade: riskGrades.has(rawRiskGrade) ? rawRiskGrade : "low",
+      flags: flagsFrom(risk.flags),
+      drawdownBps: int(risk.drawdownBps, 0, 10_000),
+      creatorSellShareBps: int(risk.creatorSellShareBps, 0, 10_000),
+    },
+    signals: {
+      trendScore: signals.trendScore == null ? int(heat.score, 0, 100) : int(signals.trendScore, 0, 100),
+      whaleThreshold: Math.max(0, finiteNumber(signals.whaleThreshold)),
+      whaleTrades24h: int(signals.whaleTrades24h),
+      lastWhaleAt: optionalIso(signals.lastWhaleAt),
+      uniqueBuyers24h: int(signals.uniqueBuyers24h),
+      uniqueSellers24h: int(signals.uniqueSellers24h),
     },
     verification: {
       coinVerified: verification.coinVerified === true,
