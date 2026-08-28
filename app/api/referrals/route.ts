@@ -24,19 +24,25 @@ async function GETHandler() {
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.referrals) return NextResponse.json({ error: "Реферальная программа временно отключена" }, { status: 503 });
   const supabase = getSupabaseAdmin();
-  const [meResult, rosterResult, rewardsResult, reversalsResult, settingsResult, partnerResult] = await Promise.all([
+  const [meResult, rosterResult, rewardsResult, settingsResult, partnerResult] = await Promise.all([
     supabase.from("profiles").select("referral_code,referrer_profile_id").eq("id", profile.id).single(),
     supabase.rpc("referral_roster_v074", { p_referrer_profile_id: profile.id, p_limit: 50 }),
     supabase.from("referral_rewards").select("id,referred_profile_id,source_kind,source_amount,reward_amount,created_at").eq("referrer_profile_id", profile.id).order("created_at", { ascending: false }).limit(100),
-    supabase.from("referral_reward_reversals_v074").select("reward_id,deficit,unit").eq("referrer_profile_id", profile.id).limit(100),
     supabase.from("economy_settings").select("referral_bonus_bps").eq("singleton", true).single(),
     supabase.rpc("referral_partner_status_v200", { p_profile_id: profile.id }),
   ]);
-  const firstError = meResult.error || rosterResult.error || rewardsResult.error || reversalsResult.error || settingsResult.error || partnerResult.error;
+  const firstError = meResult.error || rosterResult.error || rewardsResult.error || settingsResult.error || partnerResult.error;
   if (firstError) return apiFailure(firstError, "Не удалось загрузить реферальную систему");
   if (!partnerResult.data || typeof partnerResult.data !== "object" || Array.isArray(partnerResult.data)) {
     return NextResponse.json({ error: "Реферальные данные повреждены", code: "DATA_INTEGRITY" }, { status: 500 });
   }
+
+  const rewardRows = rewardsResult.data || [];
+  const rewardIds = rewardRows.map((row) => String(row.id)).filter(Boolean);
+  const reversalsResult = rewardIds.length
+    ? await supabase.from("referral_reward_reversals_v074").select("reward_id,deficit,unit").eq("referrer_profile_id", profile.id).in("reward_id", rewardIds)
+    : { data: [] as Array<{ reward_id: string; deficit: number; unit: string }>, error: null };
+  if (reversalsResult.error) return apiFailure(reversalsResult.error, "Не удалось проверить возвраты реферальных наград");
 
   const partner = partnerResult.data as Record<string, unknown>;
   const partnerInvited = Math.max(0, Math.floor(finiteNumber(partner.invited)));
@@ -66,7 +72,7 @@ async function GETHandler() {
   }) : [];
   const people = new Map(roster.map((row) => [row.id, row]));
   const reversed = new Map((reversalsResult.data || []).map((row) => [String(row.reward_id), { deficit: Math.max(0, finiteNumber(row.deficit)), unit: String(row.unit || "") }]));
-  const rewards = (rewardsResult.data || []).flatMap((row) => {
+  const rewards = rewardRows.flatMap((row) => {
     const reversal = reversed.get(String(row.id));
     if (reversal) return [];
     return [{
