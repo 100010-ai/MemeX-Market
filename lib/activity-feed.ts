@@ -7,6 +7,12 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function compactEventNumber(value: unknown) {
+  const number = finiteNumber(value, NaN);
+  if (!Number.isFinite(number)) return "";
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2, notation: Math.abs(number) >= 10_000 ? "compact" : "standard" }).format(number);
+}
+
 export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit = 30): Promise<ActivityItem[]> {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit || 30), 100));
   const { data, error } = await supabase.rpc("activity_feed_snapshot_v074", { p_limit: safeLimit });
@@ -29,6 +35,7 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
     const importance = Math.max(0, Math.min(100, Math.floor(finiteNumber(row.importance))));
     const coinId = nonEmptyId(row.coinId);
     const symbol = text(row.symbol, "", 24).toUpperCase();
+    const coinImageUrl = typeof row.coinImageUrl === "string" ? row.coinImageUrl : null;
     const giftId = nonEmptyId(row.virtualGiftId);
     const baseName = text(row.baseName, "", 120);
     const giftNumber = finiteNumber(row.giftNumber, NaN);
@@ -44,9 +51,23 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
     let item: ActivityItem | null = null;
 
     if ((eventKind === "coin_buy" || eventKind === "coin_sell") && coinId && symbol) {
-      item = { ...base, kind: "coin", label: `${actorName} ${eventKind === "coin_buy" ? "купил" : "продал"}`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null };
+      item = { ...base, kind: "coin", label: `${actorName} ${eventKind === "coin_buy" ? "купил" : "продал"}`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
     } else if (eventKind === "coin_launch" && coinId && symbol) {
-      item = { ...base, kind: "launch", label: `${actorName} запустил`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null };
+      item = { ...base, kind: "launch", label: `${actorName} запустил`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_whale_buy" && coinId && symbol) {
+      item = { ...base, kind: "coin", label: "Крупная покупка", detail: `${actorName} · $${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_whale_sell" && coinId && symbol) {
+      item = { ...base, kind: "coin", label: "Крупная продажа", detail: `${actorName} · $${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_ath" && coinId && symbol) {
+      item = { ...base, kind: "coin", label: "Новый максимум цены", detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_graduated" && coinId && symbol) {
+      item = { ...base, kind: "launch", label: "Вышел на основной рынок", detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_holder_milestone" && coinId && symbol) {
+      const target = compactEventNumber(metadata.target || amount);
+      item = { ...base, kind: "coin", label: target ? `${target} владельцев` : "Новый рубеж владельцев", detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
+    } else if (eventKind === "coin_volume_milestone" && coinId && symbol) {
+      const target = compactEventNumber(metadata.target || amount);
+      item = { ...base, kind: "coin", label: target ? `Объём превысил ${target} TON` : "Новый рубеж объёма", detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: coinImageUrl };
     } else if (giftId && baseName && Number.isFinite(giftNumber)) {
       const detail = `${baseName} #${Math.floor(giftNumber)}`;
       if (eventKind === "gift_sale") item = { ...base, kind: "gift", label: `${actorName} купил`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
