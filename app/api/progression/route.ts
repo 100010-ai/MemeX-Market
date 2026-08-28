@@ -45,16 +45,19 @@ function progressionSnapshot(value: unknown) {
   }) : [];
   const nextRewardRaw = object(streakRaw.nextReward);
   const seasonId = text(seasonRaw.id, "", 80);
+  const accountXp = finiteNumber(accountRaw.xp);
+  const accountLevel = finiteNumber(accountRaw.level, 1);
+  const accountPrestige = finiteNumber(accountRaw.prestigeLevel);
 
   return {
     account: {
-      xp: Math.max(0, Math.floor(finiteNumber(accountRaw.xp))),
-      level: Math.max(1, Math.min(100, Math.floor(finiteNumber(accountRaw.level, 1)))),
+      xp: Math.max(0, Math.floor(accountXp)),
+      level: Math.max(1, Math.min(100, Math.floor(accountLevel))),
       levelProgress: Math.max(0, Math.min(1, finiteNumber(accountRaw.levelProgress))),
       levelStartXp: Math.max(0, Math.floor(finiteNumber(accountRaw.levelStartXp))),
       nextLevelXp: Math.max(0, Math.floor(finiteNumber(accountRaw.nextLevelXp))),
       xpForNext: Math.max(0, Math.floor(finiteNumber(accountRaw.xpForNext))),
-      prestigeLevel: Math.max(0, Math.floor(finiteNumber(accountRaw.prestigeLevel))),
+      prestigeLevel: Math.max(0, Math.floor(accountPrestige)),
       rewards: accountRewards,
     },
     streak: {
@@ -72,9 +75,9 @@ function progressionSnapshot(value: unknown) {
     newlyUnlocked: Math.max(0, Math.floor(finiteNumber(root.newlyUnlocked))),
     journey: {
       reputation: {
-        xp: Math.max(0, Math.floor(finiteNumber(reputationRaw.xp, accountRaw.xp))),
-        level: Math.max(1, Math.floor(finiteNumber(reputationRaw.level, accountRaw.level || 1))),
-        prestigeLevel: Math.max(0, Math.floor(finiteNumber(reputationRaw.prestigeLevel, accountRaw.prestigeLevel))),
+        xp: Math.max(0, Math.floor(finiteNumber(reputationRaw.xp, accountXp))),
+        level: Math.max(1, Math.floor(finiteNumber(reputationRaw.level, accountLevel))),
+        prestigeLevel: Math.max(0, Math.floor(finiteNumber(reputationRaw.prestigeLevel, accountPrestige))),
       },
       season: seasonId ? {
         id: seasonId,
