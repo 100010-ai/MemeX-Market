@@ -50,7 +50,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ nam
 
   try {
     const [collectionResult, traitStatsResult, listedResult, candlesResult, salesResult, activityResult, watchedResult] = await Promise.all([
-      supabase.from("gift_collection_overview").select("base_name,item_count,holder_count,listed_count,floor_price,last_sale_price,volume_24h,change_24h,trade_count_24h,volume_7d,trade_count_7d,listed_pct,all_time_volume,total_sales,high_sale,external_floor").eq("base_name", baseName).maybeSingle(),
+      supabase.rpc("gift_collection_snapshot_v0790", { p_base_name: baseName }),
       supabase.rpc("gift_collection_trait_stats", { p_base_name: baseName }),
       supabase.rpc("gift_market_filtered_page_v200", {
         p_seed: `collection:${baseName}`, p_offset: 0, p_limit: INITIAL_LISTING_LIMIT, p_collection: baseName,
