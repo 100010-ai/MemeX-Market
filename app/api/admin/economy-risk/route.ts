@@ -18,33 +18,29 @@ async function GETHandler() {
   if (!admin) return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   const supabase = getSupabaseAdmin();
   try {
-    const [overview, activity, errors, runtime] = await Promise.all([
+    const [overview, activity, errors, flow, catalogHealth, runtime] = await Promise.all([
       supabase.rpc("admin_economy_overview_v028"),
       supabase.rpc("admin_economy_activity_v028"),
-      supabase.from("app_error_inbox_v056")
-        .select("route,error_name,message,count,affected_users,first_seen_at,last_seen_at")
-        .order("last_seen_at", { ascending: false })
-        .limit(40),
+      supabase.from("app_error_inbox_v056").select("route,error_name,message,count,affected_users,first_seen_at,last_seen_at").order("last_seen_at", { ascending: false }).limit(40),
+      supabase.rpc("economy_flow_snapshot_v074", { p_days: 30 }),
+      supabase.rpc("store_catalog_health_v074"),
       getRuntimeConfig(),
     ]);
-    const firstError = overview.error || activity.error || errors.error;
+    const firstError = overview.error || activity.error || errors.error || flow.error || catalogHealth.error;
     if (firstError) throw firstError;
 
     const activityData = objectPayload(activity.data);
     const washPairs = Array.isArray(activityData.washPairs) ? activityData.washPairs : [];
     const topRecipients = Array.isArray(activityData.topRecipients) ? activityData.topRecipients : [];
-    const ids = [...new Set([
-      ...washPairs.flatMap((row) => [String(row.a), String(row.b)]),
-      ...topRecipients.map((row) => String(row.profileId)),
-    ])];
-    const people = ids.length
-      ? await supabase.from("profiles").select("id,username,first_name").in("id", ids)
-      : { data: [], error: null };
+    const ids = [...new Set([...washPairs.flatMap((row) => [String(row.a), String(row.b)]), ...topRecipients.map((row) => String(row.profileId))])];
+    const people = ids.length ? await supabase.from("profiles").select("id,username,first_name").in("id", ids) : { data: [], error: null };
     if (people.error) throw people.error;
     const names = new Map((people.data || []).map((row) => [String(row.id), row.username ? `@${row.username}` : row.first_name]));
 
     return NextResponse.json({
       metrics: overview.data || {},
+      flow30d: flow.data || {},
+      catalogHealth: catalogHealth.data || {},
       daily: Array.isArray(activityData.daily) ? activityData.daily : [],
       risks: {
         washPairs: washPairs.map((row) => ({ ...row, aName: names.get(String(row.a)) || row.a, bName: names.get(String(row.b)) || row.b })),
