@@ -51,7 +51,7 @@ function snapshot(value: unknown) {
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-  const { data, error } = await getSupabaseAdmin().rpc("collection_book_snapshot_v064", { p_profile_id: profile.id });
+  const { data, error } = await getSupabaseAdmin().rpc("collection_book_snapshot_v0790", { p_profile_id: profile.id });
   if (error) return apiFailure(error, "Не удалось загрузить Collection Book");
   return NextResponse.json(snapshot(data), { headers: { "cache-control": "private, no-store" } });
 }
