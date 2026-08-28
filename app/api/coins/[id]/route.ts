@@ -29,7 +29,7 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
   if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный идентификатор мемкоина" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   try {
-    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult, pulseResult] = await Promise.all([
+    const [coinResult, candleResult, tradeResult, holdingResult, topHoldersResult, watchedResult, profileSnapshot, economyResult, pulseResult, milestoneResult] = await Promise.all([
       supabase.from("market_overview").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve").eq("id", id).single(),
       supabase.from("candles").select("bucket_start,open,high,low,close,volume").eq("coin_id", id).order("bucket_start", { ascending: false }).limit(480),
       supabase.from("trades").select("id,profile_id,side,quote_amount,token_amount,price,created_at,profiles(username,first_name)").eq("coin_id", id).eq("is_launch_seed", false).order("created_at", { ascending: false }).limit(30),
@@ -38,10 +38,11 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
       supabase.from("user_watchlist").select("id").eq("profile_id", profile.id).eq("kind", "coin").eq("coin_id", id).maybeSingle(),
       getProfileSnapshot(profile as Record<string, unknown>),
       supabase.rpc("coin_economy_snapshot_v200", { p_profile_id: profile.id, p_coin_id: id }),
-      supabase.rpc("coin_pulse_snapshot_v0730", { p_coin_id: id, p_profile_id: profile.id }),
+      supabase.rpc("coin_pulse_snapshot_v0780", { p_coin_id: id, p_profile_id: profile.id }),
+      supabase.from("coin_milestones_v078").select("id,kind,actor_profile_id,amount,metadata,created_at,profiles(username,first_name)").eq("coin_id", id).order("created_at", { ascending: false }).limit(24),
     ]);
     if (coinResult.error || !coinResult.data) return NextResponse.json({ error: "Мемкоин не найден" }, { status: 404 });
-    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error || pulseResult.error;
+    const otherError = candleResult.error || tradeResult.error || holdingResult.error || topHoldersResult.error || watchedResult.error || economyResult.error || pulseResult.error || milestoneResult.error;
     if (otherError) throw otherError;
     const tradeRows = (tradeResult.data || []) as DbRow[];
     const topHolderRows = (topHoldersResult.data || []) as DbRow[];
@@ -72,6 +73,22 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
         return [{
           id: tradeId, side, quoteAmount: Math.max(0, finiteNumber(trade.quote_amount)), tokenAmount: Math.max(0, finiteNumber(trade.token_amount)), price: Math.max(0, finiteNumber(trade.price)), createdAt,
           traderId, traderName: profileName(trader), genesisOrdinal: earlyOrdinals.get(traderId) || null,
+        }];
+      }),
+      events: ((milestoneResult.data || []) as DbRow[]).flatMap((event) => {
+        const eventId = typeof event.id === "string" ? event.id : "";
+        const kind = typeof event.kind === "string" ? event.kind : "";
+        const createdAt = safeIsoDate(event.created_at, "");
+        if (!eventId || !kind || !createdAt) return [];
+        const actor = relationOne(event.profiles, "Milestone profile");
+        return [{
+          id: eventId,
+          kind,
+          actorId: typeof event.actor_profile_id === "string" ? event.actor_profile_id : null,
+          actorName: profileName(actor),
+          amount: event.amount == null ? null : Math.max(0, finiteNumber(event.amount)),
+          metadata: event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata) ? event.metadata : {},
+          createdAt,
         }];
       }),
       holding: { quantity: holdingQuantity, availableQuantity: Math.max(0, finiteNumber(economy.availableQuantity, holdingQuantity)), costBasis: Math.max(0, finiteNumber(holdingResult.data?.cost_basis)) },
