@@ -14,7 +14,7 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   const runtimeConfig = await getRuntimeConfig();
   if (!runtimeConfig.featureFlags.memecoins) return NextResponse.json({ error: "Торговля мемкоинами временно отключена" }, { status: 503 });
   const { id } = await params;
-  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный coin ID" }, { status: 400 });
+  if (!validUuidLike(id)) return NextResponse.json({ error: "Некорректный идентификатор мемкоина" }, { status: 400 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const side = body.side === "buy" ? "buy" : body.side === "sell" ? "sell" : null;
@@ -23,6 +23,16 @@ async function POSTHandler(request: Request, { params }: { params: Promise<{ id:
   if (side === "buy" && amount < MIN_COIN_BUY_TON) return NextResponse.json({ error: `Минимальная покупка — ${MIN_COIN_BUY_TON} TON` }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
+  const state = await supabase.from("coins").select("status,launch_opens_at").eq("id", id).maybeSingle();
+  if (state.error) return apiFailure(state.error, "Не удалось проверить состояние торгов");
+  if (!state.data || state.data.status !== "active") return NextResponse.json({ error: "Мемкоин недоступен для торговли" }, { status: 409 });
+  const opensAt = typeof state.data.launch_opens_at === "string" ? state.data.launch_opens_at : null;
+  const opensMs = opensAt ? Date.parse(opensAt) : Number.NaN;
+  if (Number.isFinite(opensMs) && opensMs > Date.now()) {
+    const seconds = Math.max(1, Math.ceil((opensMs - Date.now()) / 1000));
+    return NextResponse.json({ error: `Торги откроются через ${seconds} сек.`, code: "COIN_PRELAUNCH", opensAt }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
   const { data, error } = await supabase.rpc("quote_coin_trade_v202", {
     p_profile_id: profile.id,
     p_coin_id: id,
