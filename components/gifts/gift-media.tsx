@@ -302,14 +302,21 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   const [animationFailedKey, setAnimationFailedKey] = useState<string | null>(null);
   const [animationReadyKey, setAnimationReadyKey] = useState<string | null>(null);
   const [previewFailedKey, setPreviewFailedKey] = useState<string | null>(null);
+  const [interactionActive, setInteractionActive] = useState(!compact);
   const { near, active } = useViewportState(compact, holderRef);
-  const wantsAnimation = gift.mediaKind === "animated";
+  const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
+  const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
+  const wantsAnimation = gift.mediaKind === "animated" || Boolean(fragmentMedia?.animation);
+  const animationRequested = !compact || interactionActive;
   const animationFailed = animationFailedKey === gift.id;
   const animationReady = animationReadyKey === gift.id;
   const previewFailed = previewFailedKey === gift.id;
-  const permitted = useAnimationPermit(active && wantsAnimation && !animationFailed, `tonapi:${gift.id}`, compact);
-  const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
-  const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
+  const permitted = useAnimationPermit(active && animationRequested && wantsAnimation && !animationFailed, `tonapi:${gift.id}`, compact);
+
+  useEffect(() => {
+    setInteractionActive(!compact);
+  }, [compact, gift.id]);
+
   // Always use our media proxy for Telegram collectible previews. Fragment URLs
   // can reject embedded WebView requests and expose CORS/referrer issues.
   // The proxy validates the source and serves the original collectible render.
@@ -325,29 +332,29 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
     const slug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
     const slugQuery = slug ? `&slug=${encodeURIComponent(slug)}` : "";
     const animationSource = `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=animation${slugQuery}`;
-    const settleDelay = compact ? 180 : 0;
+    const settleDelay = compact ? 60 : 0;
     const timer = window.setTimeout(() => {
       Promise.all([loadLottieModule(), loadLottieJson(animationSource)]).then(([module, animationData]) => {
-      if (destroyed || !lottieRef.current) return;
-      animation = module.default.loadAnimation({
-        container: lottieRef.current,
-        renderer: compact ? "canvas" : "svg",
-        loop: true,
-        autoplay: false,
-        animationData,
-        rendererSettings: { preserveAspectRatio: "xMidYMid meet" },
-      }) as LottieAnimation;
-      animationRef.current = animation;
-      const onReady = () => {
-        if (!destroyed) setAnimationReadyKey(gift.id);
-      };
-      animation.addEventListener?.("DOMLoaded", onReady);
-      window.requestAnimationFrame(onReady);
-      unsubscribeMotion = subscribeMotion((paused) => {
-        if (!animation) return;
-        if (paused) animation.pause();
-        else animation.play();
-      });
+        if (destroyed || !lottieRef.current) return;
+        animation = module.default.loadAnimation({
+          container: lottieRef.current,
+          renderer: compact ? "canvas" : "svg",
+          loop: true,
+          autoplay: false,
+          animationData,
+          rendererSettings: { preserveAspectRatio: "xMidYMid meet" },
+        }) as LottieAnimation;
+        animationRef.current = animation;
+        const onReady = () => {
+          if (!destroyed) setAnimationReadyKey(gift.id);
+        };
+        animation.addEventListener?.("DOMLoaded", onReady);
+        window.requestAnimationFrame(onReady);
+        unsubscribeMotion = subscribeMotion((paused) => {
+          if (!animation) return;
+          if (paused) animation.pause();
+          else animation.play();
+        });
       }).catch(() => {
         if (!destroyed) setAnimationFailedKey(gift.id);
       });
@@ -363,10 +370,28 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
   const storedPreview = gift.modelPreviewUrl || gift.modelMediaUrl || gift.symbolMediaUrl || gift.imageUrl;
-  const showAnimation = wantsAnimation && permitted && !animationFailed;
+  const showAnimation = wantsAnimation && animationRequested && permitted && !animationFailed;
 
   return (
-    <div ref={holderRef} className="mxm-gift-media relative h-full w-full overflow-hidden bg-[#0b0d0f]">
+    <div
+      ref={holderRef}
+      className="mxm-gift-media relative h-full w-full overflow-hidden bg-[#0b0d0f]"
+      onPointerEnter={(event) => {
+        if (compact && event.pointerType === "mouse") setInteractionActive(true);
+      }}
+      onPointerLeave={(event) => {
+        if (compact && event.pointerType === "mouse") setInteractionActive(false);
+      }}
+      onPointerDown={(event) => {
+        if (compact && event.pointerType !== "mouse") setInteractionActive(true);
+      }}
+      onFocus={() => {
+        if (compact) setInteractionActive(true);
+      }}
+      onBlur={() => {
+        if (compact) setInteractionActive(false);
+      }}
+    >
       {!previewFailed ? (
         <Image
           src={previewSource}
@@ -403,7 +428,7 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
         />
       ) : null}
 
-      {previewFailed && !storedPreview && (!wantsAnimation || animationFailed || !near) ? (
+      {previewFailed && !storedPreview && (!wantsAnimation || !animationRequested || animationFailed || !near) ? (
         <div className="absolute inset-0 grid place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>
       ) : null}
     </div>
