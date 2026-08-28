@@ -105,7 +105,15 @@ async function POSTHandler(request: Request) {
       const message = text(body.body, 1000);
       if (!validUuidLike(profileId) || !title || !message) return NextResponse.json({ error: "Проверьте профиль и текст" }, { status: 400 });
       const dedupe = `admin-direct-${Date.now()}-${profileId}`;
-      const { data, error } = await supabase.rpc("create_notification_v074", { p_profile_id: profileId, p_kind: "admin", p_title: title, p_body: message, p_href: text(body.href, 500) || "/hub", p_metadata: { actor }, p_dedupe_key: dedupe });
+      const { data, error } = await supabase.rpc("create_notification_v074", {
+        p_profile_id: profileId,
+        p_kind: "system",
+        p_title: title,
+        p_body: message,
+        p_href: text(body.href, 500) || "/hub",
+        p_metadata: { actor, source: "admin_direct" },
+        p_dedupe_key: dedupe,
+      });
       if (error) throw error;
       await audit(actor, "notification.send", "profile", profileId, { title, href: text(body.href, 500) || "/hub" });
       return NextResponse.json({ ok: true, id: data });
