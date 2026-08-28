@@ -2,10 +2,10 @@ import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { NextRequest, NextResponse } from "next/server";
 import { requireProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getMarketActivity } from "@/lib/feed";
+import { getUnifiedMarketActivity } from "@/lib/activity-feed";
 
-const feedCache = new Map<number, { expiresAt: number; activity: Awaited<ReturnType<typeof getMarketActivity>> }>();
-const feedInFlight = new Map<number, Promise<Awaited<ReturnType<typeof getMarketActivity>>>>();
+const feedCache = new Map<number, { expiresAt: number; activity: Awaited<ReturnType<typeof getUnifiedMarketActivity>> }>();
+const feedInFlight = new Map<number, Promise<Awaited<ReturnType<typeof getUnifiedMarketActivity>>>>();
 
 async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
@@ -17,10 +17,10 @@ async function GETHandler(request: NextRequest) {
     if (cached && cached.expiresAt > Date.now()) return NextResponse.json({ activity: cached.activity }, { headers: { "cache-control": "private, no-store", "x-mxm-cache": "hit" } });
     let pending = feedInFlight.get(limit);
     if (!pending) {
-      pending = getMarketActivity(getSupabaseAdmin(), limit);
+      pending = getUnifiedMarketActivity(getSupabaseAdmin(), limit);
       feedInFlight.set(limit, pending);
     }
-    let activity: Awaited<ReturnType<typeof getMarketActivity>>;
+    let activity: Awaited<ReturnType<typeof getUnifiedMarketActivity>>;
     try { activity = await pending; }
     finally { if (feedInFlight.get(limit) === pending) feedInFlight.delete(limit); }
     feedCache.set(limit, { expiresAt: Date.now() + 2_500, activity });
