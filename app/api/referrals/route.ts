@@ -41,6 +41,8 @@ async function GETHandler() {
   const partner = partnerResult.data as Record<string, unknown>;
   const partnerInvited = Math.max(0, Math.floor(finiteNumber(partner.invited)));
   const partnerQualified = Math.max(0, Math.floor(finiteNumber(partner.qualified)));
+  const partnerEarnedVirtualTon = Math.max(0, finiteNumber(partner.earnedVirtualTon));
+  const partnerEarnedMxmCoins = Math.max(0, finiteNumber(partner.earnedMxmCoins));
   const roster = Array.isArray(rosterResult.data) ? rosterResult.data.flatMap((raw) => {
     const row = object(raw);
     const id = text(row.id, "", 80);
@@ -89,12 +91,13 @@ async function GETHandler() {
       qualified: partnerQualified,
       pending: Math.max(0, Math.floor(finiteNumber(partner.pending, partnerInvited - partnerQualified))),
       nextQualified: partner.nextQualified == null ? null : Math.max(0, Math.floor(finiteNumber(partner.nextQualified))),
-      earnedVirtualTon: Math.max(0, finiteNumber(partner.earnedVirtualTon)),
-      earnedMxmCoins: Math.max(0, finiteNumber(partner.earnedMxmCoins)),
+      earnedVirtualTon: partnerEarnedVirtualTon,
+      earnedMxmCoins: partnerEarnedMxmCoins,
       qualificationModel: text(partner.qualificationModel, "quality-v074", 64),
     },
+    // Keep legacy totals sourced from the full partner aggregate, not the bounded roster/reward lists.
     invitedCount: partnerInvited,
-    totalEarned: Math.max(0, finiteNumber(partner.earnedVirtualTon)),
+    totalEarned: partnerEarnedVirtualTon,
     referred: roster,
     rewards,
   }, { headers: { "cache-control": "private, no-store" } });
