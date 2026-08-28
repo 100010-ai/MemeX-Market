@@ -32,6 +32,16 @@ async function POSTHandler(request: Request) {
     }
 
     const supabase = getSupabaseAdmin();
+    const state = await supabase.from("coins").select("status,launch_opens_at").eq("id", coinId).maybeSingle();
+    if (state.error) return apiFailure(state.error, "Не удалось проверить состояние торгов");
+    if (!state.data || state.data.status !== "active") return NextResponse.json({ error: "Мемкоин недоступен для торговли" }, { status: 409 });
+    const opensAt = typeof state.data.launch_opens_at === "string" ? state.data.launch_opens_at : null;
+    const opensMs = opensAt ? Date.parse(opensAt) : Number.NaN;
+    if (Number.isFinite(opensMs) && opensMs > Date.now()) {
+      const seconds = Math.max(1, Math.ceil((opensMs - Date.now()) / 1000));
+      return NextResponse.json({ error: `Торги откроются через ${seconds} сек.`, code: "COIN_PRELAUNCH", opensAt }, { status: 409, headers: { "cache-control": "no-store" } });
+    }
+
     const args = {
       p_request_id: requestId,
       p_profile_id: profile.id,
@@ -48,8 +58,6 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ error: publicBusinessError(error, "Сделку не удалось выполнить. Обновите данные и повторите попытку.") }, { status: 400 });
     }
 
-    // A price-changing trade can activate conditional orders immediately.
-    // Supabase Cron remains the durable fallback for expiry and retry handling.
     after(async () => {
       try {
         const processed = await getSupabaseAdmin().rpc("process_coin_conditional_orders_v056", { p_limit: 100 });
