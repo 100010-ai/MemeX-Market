@@ -1,2 +1,6 @@
-allowBuilds:
-  unrs-resolver: set this to true or false
+# pnpm 10.15 blocks dependency lifecycle scripts by default.
+# unrs-resolver uses napi-postinstall as a compatibility helper; the app builds
+# and type-checks without running it, so explicitly ignore it instead of leaving
+# pnpm's unresolved approval placeholder in source control.
+ignoredBuiltDependencies:
+  - unrs-resolver
