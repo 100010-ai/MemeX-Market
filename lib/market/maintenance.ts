@@ -1,33 +1,32 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { syncTonApiGiftCatalog } from "@/lib/tonapi-gifts";
-import { ensureGenesisGiftMarket } from "@/lib/npc-market";
 
 let nextMaintenanceAt = 0;
-let nextCatalogExpandAt = 0;
 let maintenancePromise: Promise<void> | null = null;
 
-
-/** Opportunistic housekeeping + gradual catalog expansion. */
+/**
+ * Request-adjacent market housekeeping must stay short and deterministic.
+ *
+ * Heavy catalogue discovery/import is intentionally not performed here. This
+ * function is invoked from Next.js `after()`, and Vercel still counts that work
+ * against the function duration. Running TonAPI discovery and NPC bootstrap in
+ * this path could return a successful `/api/market` response and then keep the
+ * invocation alive until the 60 second runtime timeout.
+ *
+ * Catalogue synchronization remains available through the dedicated admin
+ * catalogue-sync flow, where it has its own rate limit and execution budget.
+ */
 export async function maybeMaintainGiftMarket(intervalMs = 60_000) {
   const now = Date.now();
   if (now < nextMaintenanceAt) return;
   if (maintenancePromise) return maintenancePromise;
+
   nextMaintenanceAt = now + Math.max(15_000, intervalMs);
   maintenancePromise = (async () => {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.rpc("expire_market_orders");
+    const { error } = await getSupabaseAdmin().rpc("expire_market_orders");
     if (error) throw error;
+  })().finally(() => {
+    maintenancePromise = null;
+  });
 
-    if (Date.now() >= nextCatalogExpandAt) {
-      nextCatalogExpandAt = Date.now() + 5 * 60_000;
-      try {
-        const hasKey = Boolean(process.env.TONAPI_KEY?.trim());
-        await syncTonApiGiftCatalog({ discoverPages: 1, maxCollections: hasKey ? 5 : 2, itemsPerCollection: hasKey ? 400 : 120 });
-        await ensureGenesisGiftMarket({ batchSize: hasKey ? 500 : 160, force: false });
-      } catch (catalogError) {
-        console.warn("gift catalog background expansion", catalogError instanceof Error ? catalogError.message : catalogError);
-      }
-    }
-  })().finally(() => { maintenancePromise = null; });
   return maintenancePromise;
 }

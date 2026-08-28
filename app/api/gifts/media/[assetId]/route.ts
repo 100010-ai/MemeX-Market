@@ -101,7 +101,10 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      cache: "force-cache",
+      // Large gift previews can exceed Next.js' 2 MB Data Cache item limit.
+      // The proxy response already has an explicit public HTTP cache policy,
+      // so keep upstream bodies out of the framework Data Cache.
+      cache: "no-store",
       headers: {
         accept,
         "user-agent": "MXM-Market/0.64.9",
