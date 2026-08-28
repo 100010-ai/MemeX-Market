@@ -20,6 +20,19 @@ const required = [
   "110000_missing_fk_indexes_v0723.sql",
   "110001_cron_history_retention_v0723.sql",
   "120000_memecoin_pulse_v0730.sql",
+  "130000_activity_event_ledger_v0740.sql",
+  "130001_league_rollups_v0740.sql",
+  "130002_profile_activity_totals_v0740.sql",
+  "130003_progression_fast_v0740.sql",
+  "130004_stars_reversal_v0740.sql",
+  "130005_case_collectibles_v0740.sql",
+  "130006_store_economy_v0740.sql",
+  "130007_referral_quality_v0740.sql",
+  "130008_notification_dedupe_v0740.sql",
+  "130009_referral_roster_v0740.sql",
+  "130010_meta_systems_hardening_v0740.sql",
+  "130011_admin_ops_v0750.sql",
+  "130012_admin_ops_notification_compat_v0750.sql",
 ];
 
 const missing = required.filter((name) => !fs.existsSync(path.join(migrationDir, name)));

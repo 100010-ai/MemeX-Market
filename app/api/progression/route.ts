@@ -20,18 +20,15 @@ function progressionSnapshot(value: unknown) {
   const root = object(value);
   const accountRaw = object(root.account);
   const streakRaw = object(root.streak);
+  const journeyRaw = object(root.journey);
+  const reputationRaw = object(journeyRaw.reputation);
+  const activityRaw = object(journeyRaw.activity);
+  const seasonRaw = object(journeyRaw.season);
   const accountRewards = Array.isArray(accountRaw.rewards) ? accountRaw.rewards.flatMap((raw) => {
     const row = object(raw);
     const level = Math.floor(finiteNumber(row.level));
     if (level < 2 || level > 100) return [];
-    return [{
-      level,
-      kind: text(row.kind, "mxm_coins", 64),
-      label: text(row.label, "Награда", 160),
-      amount: Math.max(0, Math.floor(finiteNumber(row.amount))),
-      unlocked: Boolean(row.unlocked),
-      claimed: Boolean(row.claimed),
-    }];
+    return [{ level, kind: text(row.kind, "mxm_coins", 64), label: text(row.label, "Награда", 160), amount: Math.max(0, Math.floor(finiteNumber(row.amount))), unlocked: Boolean(row.unlocked), claimed: Boolean(row.claimed) }];
   }) : [];
   const calendar = Array.isArray(streakRaw.calendar) ? streakRaw.calendar.flatMap((raw) => {
     const row = object(raw);
@@ -44,31 +41,23 @@ function progressionSnapshot(value: unknown) {
     const key = text(row.key, "", 100);
     if (!key) return [];
     const target = Math.max(1, finiteNumber(row.target, 1));
-    return [{
-      key,
-      title: text(row.title, "Достижение", 140),
-      description: text(row.description, "", 400),
-      icon: text(row.icon, "award", 40),
-      xpReward: Math.max(0, Math.floor(finiteNumber(row.xpReward))),
-      category: text(row.category, "other", 40),
-      rarity: text(row.rarity, "common", 32),
-      progress: Math.max(0, Math.min(target, finiteNumber(row.progress))),
-      target,
-      unlocked: Boolean(row.unlocked),
-      unlockedAt: row.unlockedAt ? safeIsoDate(row.unlockedAt) : null,
-    }];
+    return [{ key, title: text(row.title, "Достижение", 140), description: text(row.description, "", 400), icon: text(row.icon, "award", 40), xpReward: Math.max(0, Math.floor(finiteNumber(row.xpReward))), category: text(row.category, "other", 40), rarity: text(row.rarity, "common", 32), progress: Math.max(0, Math.min(target, finiteNumber(row.progress))), target, unlocked: Boolean(row.unlocked), unlockedAt: row.unlockedAt ? safeIsoDate(row.unlockedAt) : null }];
   }) : [];
-
   const nextRewardRaw = object(streakRaw.nextReward);
+  const seasonId = text(seasonRaw.id, "", 80);
+  const accountXp = finiteNumber(accountRaw.xp);
+  const accountLevel = finiteNumber(accountRaw.level, 1);
+  const accountPrestige = finiteNumber(accountRaw.prestigeLevel);
+
   return {
     account: {
-      xp: Math.max(0, Math.floor(finiteNumber(accountRaw.xp))),
-      level: Math.max(1, Math.min(100, Math.floor(finiteNumber(accountRaw.level, 1)))),
+      xp: Math.max(0, Math.floor(accountXp)),
+      level: Math.max(1, Math.min(100, Math.floor(accountLevel))),
       levelProgress: Math.max(0, Math.min(1, finiteNumber(accountRaw.levelProgress))),
       levelStartXp: Math.max(0, Math.floor(finiteNumber(accountRaw.levelStartXp))),
       nextLevelXp: Math.max(0, Math.floor(finiteNumber(accountRaw.nextLevelXp))),
       xpForNext: Math.max(0, Math.floor(finiteNumber(accountRaw.xpForNext))),
-      prestigeLevel: Math.max(0, Math.floor(finiteNumber(accountRaw.prestigeLevel))),
+      prestigeLevel: Math.max(0, Math.floor(accountPrestige)),
       rewards: accountRewards,
     },
     streak: {
@@ -84,6 +73,25 @@ function progressionSnapshot(value: unknown) {
     },
     achievements,
     newlyUnlocked: Math.max(0, Math.floor(finiteNumber(root.newlyUnlocked))),
+    journey: {
+      reputation: {
+        xp: Math.max(0, Math.floor(finiteNumber(reputationRaw.xp, accountXp))),
+        level: Math.max(1, Math.floor(finiteNumber(reputationRaw.level, accountLevel))),
+        prestigeLevel: Math.max(0, Math.floor(finiteNumber(reputationRaw.prestigeLevel, accountPrestige))),
+      },
+      season: seasonId ? {
+        id: seasonId,
+        title: text(seasonRaw.title, "Сезон MXM", 160),
+        xp: Math.max(0, Math.floor(finiteNumber(seasonRaw.xp))),
+        level: Math.max(1, Math.floor(finiteNumber(seasonRaw.level, 1))),
+        claims: Math.max(0, Math.floor(finiteNumber(seasonRaw.claims))),
+        endsAt: safeIsoDate(seasonRaw.endsAt),
+      } : null,
+      activity: {
+        activeDays: Math.max(0, Math.floor(finiteNumber(activityRaw.activeDays))),
+        starsPaid: Math.max(0, Math.floor(finiteNumber(activityRaw.starsPaid))),
+      },
+    },
   };
 }
 
@@ -99,19 +107,15 @@ async function POSTHandler(request: Request) {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
   if (!sameOriginMutation(request)) return NextResponse.json({ error: "Недопустимый источник запроса" }, { status: 403 });
-  if (!(await enforceRateLimit(request, "progression-claim", String(profile.id), 30, 60))) {
-    return NextResponse.json({ error: "Слишком много запросов. Подождите минуту." }, { status: 429 });
-  }
+  if (!(await enforceRateLimit(request, "progression-claim", String(profile.id), 30, 60))) return NextResponse.json({ error: "Слишком много запросов. Подождите минуту." }, { status: 429 });
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   const supabase = getSupabaseAdmin();
-
   if (body.action === "claim_streak") {
     const { data, error } = await supabase.rpc("claim_daily_streak_v064", { p_profile_id: profile.id });
     if (error) return apiFailure(error, "Не удалось получить ежедневную награду", 400);
     return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
   }
-
   if (body.action === "claim_level") {
     const level = Number(body.level);
     if (!Number.isInteger(level) || level < 2 || level > 100) return NextResponse.json({ error: "Некорректный уровень" }, { status: 400 });
@@ -124,7 +128,6 @@ async function POSTHandler(request: Request) {
     }
     return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
   }
-
   return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
 }
 
