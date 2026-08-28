@@ -3,7 +3,8 @@ import { requireAdminProfile } from "@/lib/admin";
 import { apiFailure, withApiErrors } from "@/lib/api-route";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-function cleanQuery(value: string) { return value.trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ").slice(0, 80); }
+function cleanQuery(value: string) { return value.normalize("NFKC").trim().replace(/[^\p{L}\p{N}\s@#$._-]/gu, " ").replace(/\s+/g, " ").slice(0, 80); }
+function escapeLikePattern(value: string) { return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_"); }
 function isUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 
 async function GETHandler(request: NextRequest) {
@@ -13,8 +14,10 @@ async function GETHandler(request: NextRequest) {
   if (q.length < 2) return NextResponse.json({ results: [] }, { headers: { "cache-control": "private, no-store" } });
 
   const supabase = getSupabaseAdmin();
-  const pattern = `%${q}%`;
+  const term = escapeLikePattern(q.replace(/^[@$#]/, ""));
+  const pattern = `%${term}%`;
   const numeric = /^\d{3,20}$/.test(q) ? q : null;
+  const giftNumber = /^#?\d+$/.test(q) ? Number(q.replace(/^#/, "")) : null;
 
   try {
     const profileQuery = supabase.from("profiles")
@@ -28,7 +31,7 @@ async function GETHandler(request: NextRequest) {
       .limit(8);
     const giftQuery = supabase.from("gift_assets")
       .select("id,base_name,gift_number,model_name,symbol_name,backdrop_name,catalog_source,chain_verified")
-      .or(`base_name.ilike.${pattern},model_name.ilike.${pattern},symbol_name.ilike.${pattern}${/^\d+$/.test(q) ? `,gift_number.eq.${q}` : ""}`)
+      .or(`base_name.ilike.${pattern},model_name.ilike.${pattern},symbol_name.ilike.${pattern}${Number.isSafeInteger(giftNumber) && Number(giftNumber) > 0 ? `,gift_number.eq.${giftNumber}` : ""}`)
       .limit(8);
     const storeQuery = supabase.from("store_products")
       .select("sku,title,category,stars_price,active,badge")
