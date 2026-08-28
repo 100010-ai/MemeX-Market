@@ -76,7 +76,10 @@ async function GETHandler() {
     const caseRows = rows(cases);
     const stars24h = paidRows.reduce((sum, row) => sum + number(row.stars), 0);
     const refundedStars24h = refundRows.reduce((sum, row) => sum + number(row.stars), 0);
-    const errors15m = errors.filter((row) => new Date(String(row.last_seen_at)).getTime() >= new Date(since15m).getTime()).reduce((sum, row) => sum + number(row.count), 0);
+    // app_error_inbox_v056.count is a lifetime aggregate for the error hash.
+    // For a 15-minute alert, count distinct groups that were actually seen in
+    // the window instead of pretending the lifetime total happened recently.
+    const errorGroups15m = errors.filter((row) => new Date(String(row.last_seen_at)).getTime() >= new Date(since15m).getTime()).length;
     const lowStockCases = caseRows.filter((row) => row.active && row.remaining_supply != null && number(row.remaining_supply) <= 50);
     const latestSyncState = String(latestGiftSync.data?.status || "");
     const latestSyncStartedAt = latestGiftSync.data?.started_at ? Date.parse(String(latestGiftSync.data.started_at)) : Number.NaN;
@@ -85,7 +88,7 @@ async function GETHandler() {
     const alerts: Array<{ id: string; level: "info" | "warn" | "critical"; title: string; detail: string; href?: string }> = [];
     if (runtime.maintenanceMode) alerts.push({ id: "maintenance", level: "warn", title: "Maintenance включён", detail: runtime.maintenanceMessage });
     if (reversals.length) alerts.push({ id: "reversals", level: "critical", title: `Возвраты требуют внимания: ${reversals.length}`, detail: "Есть partial/manual_review/failed reversal операции." });
-    if (errors15m >= 5) alerts.push({ id: "errors", level: "critical", title: `Всплеск ошибок: ${errors15m}`, detail: "Ошибки за последние 15 минут выше безопасного порога." });
+    if (errorGroups15m >= 5) alerts.push({ id: "errors", level: "critical", title: `Групп ошибок за 15 минут: ${errorGroups15m}`, detail: "Число разных ошибок, замеченных за последние 15 минут, выше безопасного порога." });
     if (latestSyncState === "failed") {
       alerts.push({ id: "gift-sync", level: "warn", title: "Последний Gift Sync неуспешен", detail: String(latestGiftSync.data?.error_message || latestSyncState) });
     } else if (latestSyncState === "running" && latestSyncAgeMinutes != null && latestSyncAgeMinutes > 15) {
