@@ -39,37 +39,14 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
       model_media_url: row.modelMediaUrl,
       symbol_media_url: row.symbolMediaUrl,
     }) : null;
-
-    const base = {
-      id: `activity-${id}`,
-      actorId,
-      amount,
-      createdAt,
-      importance,
-    };
+    const base = { id: `activity-${id}`, actorId, amount, createdAt, importance };
 
     if ((eventKind === "coin_buy" || eventKind === "coin_sell") && coinId && symbol) {
-      return [{
-        ...base,
-        kind: "coin" as const,
-        label: `${actorName} ${eventKind === "coin_buy" ? "купил" : "продал"}`,
-        detail: `$${symbol}`,
-        href: `/coin/${coinId}`,
-        imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null,
-      }];
+      return [{ ...base, kind: "coin" as const, label: `${actorName} ${eventKind === "coin_buy" ? "купил" : "продал"}`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null }];
     }
-
     if (eventKind === "coin_launch" && coinId && symbol) {
-      return [{
-        ...base,
-        kind: "launch" as const,
-        label: `${actorName} запустил`,
-        detail: `$${symbol}`,
-        href: `/coin/${coinId}`,
-        imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null,
-      }];
+      return [{ ...base, kind: "launch" as const, label: `${actorName} запустил`, detail: `$${symbol}`, href: `/coin/${coinId}`, imageUrl: typeof row.coinImageUrl === "string" ? row.coinImageUrl : null }];
     }
-
     if (giftId && baseName && Number.isFinite(giftNumber)) {
       const detail = `${baseName} #${Math.floor(giftNumber)}`;
       if (eventKind === "gift_sale") return [{ ...base, kind: "gift" as const, label: `${actorName} купил`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage }];
@@ -78,21 +55,12 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
       if (eventKind === "gift_unlisted" || eventKind === "gift_expired") return [{ ...base, kind: "unlist" as const, label: eventKind === "gift_expired" ? `${actorName} · срок продажи истёк` : `${actorName} снял с продажи`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage }];
       if (eventKind === "gift_offer") return [{ ...base, kind: "offer" as const, label: `${actorName} предложил`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage }];
     }
-
     if (eventKind === "case_drop") {
       const rewardLabel = text(metadata.rewardLabel, "Редкая награда", 160);
       const rarity = text(metadata.rarity, "epic", 32);
       const serial = Math.max(0, Math.floor(finiteNumber(metadata.serialNumber)));
-      return [{
-        ...base,
-        kind: "case" as ActivityItem["kind"],
-        label: `${actorName} выбил ${rarity === "legendary" ? "легендарную" : "эпическую"} награду`,
-        detail: serial > 0 ? `${rewardLabel} · #${serial}` : rewardLabel,
-        href: "/cases",
-        imageUrl: null,
-      }];
+      return [{ ...base, kind: "launch" as const, label: `${actorName} выбил ${rarity === "legendary" ? "легендарную" : "эпическую"} награду`, detail: serial > 0 ? `${rewardLabel} · #${serial}` : rewardLabel, href: "/cases", imageUrl: null }];
     }
-
     return [];
   });
 }
