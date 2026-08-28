@@ -64,8 +64,8 @@ begin
   if length(trim(coalesce(p_body,''))) < 1 or length(p_body) > 1000 then raise exception 'invalid_body'; end if;
 
   insert into public.user_notifications(profile_id, kind, title, body, href, metadata, dedupe_key)
-  select p.id, 'admin_broadcast', trim(p_title), trim(p_body), coalesce(nullif(trim(p_href),''), '/hub'),
-         jsonb_build_object('audience', p_audience), v_base || ':' || p.id::text
+  select p.id, 'system', trim(p_title), trim(p_body), coalesce(nullif(trim(p_href),''), '/hub'),
+         jsonb_build_object('audience', p_audience, 'source', 'admin_broadcast'), v_base || ':' || p.id::text
   from public.profiles p
   left join public.profile_activity_totals_v074 a on a.profile_id = p.id
   where p.is_system = false
