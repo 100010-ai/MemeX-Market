@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, Flame, Gift, ListChecks, Trophy } from "lucide-react";
+import { Activity, ArrowUpRight, BarChart3, CheckCircle2, ChevronRight, Flame, Gift, ListChecks, Shield, Trophy } from "lucide-react";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { useTelegramProfile } from "@/components/telegram-provider";
 import { CoinAvatar } from "@/components/ui";
@@ -10,12 +10,13 @@ import { apiFetch } from "@/lib/api";
 import { ago, money, percent, price } from "@/lib/format";
 import type { ActivityItem, Coin, LeaderboardPlayer, Mission } from "@/lib/types";
 
-const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events"];
+const realtimeTables = ["coins", "trades", "virtual_gifts", "gift_trades", "market_events", "activity_events_v074"];
 type FeedPayload = { activity: ActivityItem[] };
 type LeaderboardPayload = { players: LeaderboardPlayer[]; meRank: number };
 type CoinPayload = { coins: Coin[] };
 type TasksPayload = { missions: Mission[] };
 type SeasonPayload = { level: number; xp: number; season: { daysLeft: number } };
+type LeaguePayload = { me: { rank: number | null; score: number; division: { key: string; label: string }; divisionProgress: number }; season: { daysLeft: number } };
 
 type Dashboard = {
   activity: ActivityItem[];
@@ -24,9 +25,10 @@ type Dashboard = {
   coins: Coin[];
   missions: Mission[];
   season: SeasonPayload | null;
+  league: LeaguePayload | null;
 };
 
-const emptyDashboard: Dashboard = { activity: [], leaders: [], meRank: null, coins: [], missions: [], season: null };
+const emptyDashboard: Dashboard = { activity: [], leaders: [], meRank: null, coins: [], missions: [], season: null, league: null };
 
 export default function HubPage() {
   const { profile, appReady } = useTelegramProfile();
@@ -37,12 +39,13 @@ export default function HubPage() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [feed, leaderboard, market, tasks, season] = await Promise.all([
+      const [feed, leaderboard, market, tasks, season, league] = await Promise.all([
         apiFetch<FeedPayload>("/api/feed?limit=12", { cacheMs: 8_000 }),
         apiFetch<LeaderboardPayload>("/api/leaderboard?board=overall&limit=5", { cacheMs: 10_000 }),
         apiFetch<CoinPayload>("/api/market?scope=coins&limit=6&compact=1&t=0", { cacheMs: 12_000 }),
         apiFetch<TasksPayload>("/api/tasks", { cacheMs: 8_000 }),
         apiFetch<SeasonPayload>("/api/season", { cacheMs: 15_000 }).catch(() => null),
+        apiFetch<LeaguePayload>("/api/league", { cacheMs: 10_000 }).catch(() => null),
       ]);
       setData({
         activity: feed.activity.slice(0, 8),
@@ -51,6 +54,7 @@ export default function HubPage() {
         coins: market.coins.slice(0, 6),
         missions: tasks.missions,
         season,
+        league,
       });
       setError(null);
     } catch (cause) {
@@ -73,7 +77,7 @@ export default function HubPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <RealtimeRefresh channelName="mxm-hub-v0645" tables={realtimeTables} onChange={realtimeReload} debounceMs={2_000} />
+      <RealtimeRefresh channelName="mxm-hub-v0740" tables={realtimeTables} onChange={realtimeReload} debounceMs={2_000} />
 
       <header className="mxm-home-hero mb-3">
         <div className="min-w-0">
@@ -81,8 +85,8 @@ export default function HubPage() {
           <h1 className="mt-1 truncate text-[18px] font-semibold tracking-[-.035em]">{profile?.firstName || "Рынок"}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {data.league ? <Link href="/league" className="mxm-home-status"><Shield size={11} /><span>{data.league.me.division.label}{data.league.me.rank ? ` · #${data.league.me.rank}` : ""}</span></Link> : null}
           {data.season ? <Link href="/season" className="mxm-home-status"><Flame size={11} /><span>BP {data.season.level}</span></Link> : null}
-          {data.meRank ? <Link href="/leaderboard" className="mxm-home-status"><Trophy size={11} /><span>#{data.meRank}</span></Link> : null}
         </div>
       </header>
 
@@ -92,6 +96,11 @@ export default function HubPage() {
         <Link href="/market" className="mxm-home-tile is-market">
           <span className="mxm-home-tile-icon"><BarChart3 size={16} /></span>
           <div className="min-w-0"><small>Рынок</small><p>{hotCoins.length ? `${hotCoins.length} в тренде` : "Открыть"}</p></div>
+          <ChevronRight size={14} />
+        </Link>
+        <Link href="/league" className="mxm-home-tile">
+          <span className="mxm-home-tile-icon"><Shield size={16} /></span>
+          <div className="min-w-0"><small>Лига</small><p>{data.league ? `${data.league.me.division.label}${data.league.me.rank ? ` · #${data.league.me.rank}` : ""}` : "Открыть"}</p></div>
           <ChevronRight size={14} />
         </Link>
         <Link href="/tasks" className="mxm-home-tile">
