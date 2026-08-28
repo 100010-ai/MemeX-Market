@@ -60,7 +60,7 @@ async function GETHandler() {
       supabase.from("gift_sync_runs").select("id,status,pages_fetched,unique_received,unique_imported,assets_updated,virtual_created,error_message,started_at,finished_at").order("started_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("league_seasons").select("id,season_key,title,starts_at,ends_at,status").eq("status", "active").order("starts_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("seasons").select("id,season_key,title,starts_at,ends_at,week_number").eq("active", true).order("starts_at", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("coin_conditional_orders_v056").select("id", { count: "exact", head: true }).eq("status", "open"),
+      supabase.from("coin_conditional_orders_v056").select("id", { count: "exact", head: true }).in("status", ["active", "executing"]),
       supabase.rpc("economy_flow_snapshot_v074", { p_days: 7 }),
       supabase.rpc("store_catalog_health_v074"),
     ]);
@@ -90,7 +90,7 @@ async function GETHandler() {
       alerts.push({ id: "gift-sync", level: "warn", title: "Последний Gift Sync неуспешен", detail: String(latestGiftSync.data?.error_message || latestSyncState) });
     } else if (latestSyncState === "running" && latestSyncAgeMinutes != null && latestSyncAgeMinutes > 15) {
       alerts.push({ id: "gift-sync-stuck", level: "warn", title: "Gift Sync, вероятно, завис", detail: `Синхронизация остаётся running уже ${latestSyncAgeMinutes} мин.` });
-    } else if (latestSyncState && !["success", "completed", "running"].includes(latestSyncState)) {
+    } else if (latestSyncState && !["success", "succeeded", "completed", "running"].includes(latestSyncState)) {
       alerts.push({ id: "gift-sync-state", level: "warn", title: "Необычное состояние Gift Sync", detail: latestSyncState });
     }
     if (lowStockCases.length) alerts.push({ id: "case-stock", level: "warn", title: `Заканчиваются кейсы: ${lowStockCases.length}`, detail: lowStockCases.slice(0, 4).map((item) => `${item.title}: ${item.remaining_supply}`).join(" · ") });
