@@ -78,12 +78,21 @@ async function GETHandler() {
     const refundedStars24h = refundRows.reduce((sum, row) => sum + number(row.stars), 0);
     const errors15m = errors.filter((row) => new Date(String(row.last_seen_at)).getTime() >= new Date(since15m).getTime()).reduce((sum, row) => sum + number(row.count), 0);
     const lowStockCases = caseRows.filter((row) => row.active && row.remaining_supply != null && number(row.remaining_supply) <= 50);
+    const latestSyncState = String(latestGiftSync.data?.status || "");
+    const latestSyncStartedAt = latestGiftSync.data?.started_at ? Date.parse(String(latestGiftSync.data.started_at)) : Number.NaN;
+    const latestSyncAgeMinutes = Number.isFinite(latestSyncStartedAt) ? Math.max(0, Math.round((Date.now() - latestSyncStartedAt) / 60_000)) : null;
 
     const alerts: Array<{ id: string; level: "info" | "warn" | "critical"; title: string; detail: string; href?: string }> = [];
     if (runtime.maintenanceMode) alerts.push({ id: "maintenance", level: "warn", title: "Maintenance включён", detail: runtime.maintenanceMessage });
     if (reversals.length) alerts.push({ id: "reversals", level: "critical", title: `Возвраты требуют внимания: ${reversals.length}`, detail: "Есть partial/manual_review/failed reversal операции." });
     if (errors15m >= 5) alerts.push({ id: "errors", level: "critical", title: `Всплеск ошибок: ${errors15m}`, detail: "Ошибки за последние 15 минут выше безопасного порога." });
-    if (latestGiftSync.data?.status && !["success", "completed"].includes(String(latestGiftSync.data.status))) alerts.push({ id: "gift-sync", level: "warn", title: "Последний Gift Sync неуспешен", detail: String(latestGiftSync.data.error_message || latestGiftSync.data.status) });
+    if (latestSyncState === "failed") {
+      alerts.push({ id: "gift-sync", level: "warn", title: "Последний Gift Sync неуспешен", detail: String(latestGiftSync.data?.error_message || latestSyncState) });
+    } else if (latestSyncState === "running" && latestSyncAgeMinutes != null && latestSyncAgeMinutes > 15) {
+      alerts.push({ id: "gift-sync-stuck", level: "warn", title: "Gift Sync, вероятно, завис", detail: `Синхронизация остаётся running уже ${latestSyncAgeMinutes} мин.` });
+    } else if (latestSyncState && !["success", "completed", "running"].includes(latestSyncState)) {
+      alerts.push({ id: "gift-sync-state", level: "warn", title: "Необычное состояние Gift Sync", detail: latestSyncState });
+    }
     if (lowStockCases.length) alerts.push({ id: "case-stock", level: "warn", title: `Заканчиваются кейсы: ${lowStockCases.length}`, detail: lowStockCases.slice(0, 4).map((item) => `${item.title}: ${item.remaining_supply}`).join(" · ") });
     if (!runtime.featureFlags.stars) alerts.push({ id: "stars-off", level: "info", title: "Stars отключены", detail: "Покупки за Telegram Stars сейчас недоступны." });
     if (!runtime.featureFlags.memecoins) alerts.push({ id: "coins-off", level: "info", title: "Мемкоины отключены", detail: "Рынок мемкоинов выключен feature flag." });
@@ -101,7 +110,7 @@ async function GETHandler() {
         users: count(users), newUsers24h: count(newUsers), bannedUsers: count(bannedUsers),
         activeCoins: count(activeCoins), hiddenCoins: count(hiddenCoins), listedGifts: count(listedGifts),
         activeMissions: count(activeMissions), openConditionalOrders: count(conditionalOrders),
-        stars24h, refundedStars24h, netStars24h: Math.max(0, stars24h - refundedStars24h),
+        stars24h, refundedStars24h, netStars24h: stars24h - refundedStars24h,
         activeProducts: storeRows.filter((row) => row.active).length,
         activeCases: caseRows.filter((row) => row.active).length,
         reversalQueue: reversals.length,
