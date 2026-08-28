@@ -61,7 +61,6 @@ export async function syncConfiguredGiftCatalogSources(): Promise<{
   return { sources: sources.length, successful, failed, assetsUpserted, results };
 }
 
-
 export async function syncGiftCatalog(): Promise<{
   bot: Awaited<ReturnType<typeof syncConfiguredGiftCatalogSources>>;
   tonapi: TonApiGiftSyncResult | { error: string };
@@ -70,7 +69,10 @@ export async function syncGiftCatalog(): Promise<{
   const bot = await syncConfiguredGiftCatalogSources();
   let tonapi: TonApiGiftSyncResult | { error: string };
   try {
-    tonapi = await syncTonApiGiftCatalog({ discoverPages: 3, maxCollections: 10, itemsPerCollection: 300 });
+    // Collection discovery and item imports are cursor-backed. Keep each admin
+    // pass incremental so the route stays comfortably below its 60s function
+    // budget instead of trying to sweep thousands of TonAPI items at once.
+    tonapi = await syncTonApiGiftCatalog({ discoverPages: 1, maxCollections: 4, itemsPerCollection: 160 });
   } catch (error) {
     tonapi = { error: error instanceof Error ? error.message : "TonAPI sync failed" };
   }
