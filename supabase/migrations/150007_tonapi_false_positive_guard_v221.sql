@@ -79,7 +79,8 @@ update public.virtual_gifts vg
 set status='owned',
     listing_price=null,
     listed_at=null,
-    listed_by_profile_id=null,
+    listing_updated_at=now(),
+    listing_expires_at=null,
     updated_at=now()
 from public.gift_assets ga, public.profiles owner
 where vg.asset_id=ga.id
