@@ -7,10 +7,18 @@ import { CoinAvatar } from "@/components/ui";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { apiFetch } from "@/lib/api";
 import { compact, money, percent, price } from "@/lib/format";
-import type { Coin } from "@/lib/types";
 
 type Board = "hot" | "gainers" | "new" | "verified";
-type PulseCoin = Coin & {
+type PulseCoin = {
+  id: string;
+  name: string;
+  symbol: string;
+  imageUrl: string | null;
+  currentPrice: number;
+  marketCap: number;
+  volume24h: number;
+  change24h: number;
+  liquidity: number;
   uniqueTraders24h: number;
   uniqueTradersAll: number;
   lastTradeAt: string | null;
