@@ -43,7 +43,7 @@ on conflict(sku) do update set
   title=excluded.title,
   tier=excluded.tier,
   description=excluded.description,
-  remaining_supply=greatest(public.case_definitions.remaining_supply,excluded.remaining_supply),
+  remaining_supply=public.case_definitions.remaining_supply,
   active=excluded.active,
   rare_pity=excluded.rare_pity,
   epic_pity=excluded.epic_pity,
