@@ -68,7 +68,6 @@ async function waitForInitData(timeoutMs = 3500) {
   return window.Telegram?.WebApp ?? null;
 }
 
-
 function telegramUserIdFromInitData(initData: string | null | undefined) {
   if (!initData) return null;
   try {
@@ -174,10 +173,9 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       let forcedIdentitySwitch = false;
       try {
-        // Telegram Desktop can reuse the same origin cookie/storage after the
-        // user switches Telegram accounts. Resolve the current Telegram
-        // identity and the existing signed session in parallel, then only
-        // reuse the session when both identities match.
+        // When Telegram already supplied fresh signed initData, authenticate it
+        // directly. Probing /api/me first only produces an expected 401 for a
+        // missing/stale cookie and delays the actual Telegram login.
         const immediateWebApp = window.Telegram?.WebApp?.initData ? window.Telegram.WebApp : null;
         let webApp = immediateWebApp;
         let currentTelegramId = telegramUserIdFromInitData(immediateWebApp?.initData);
@@ -193,10 +191,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         let sessionProfile: Profile | null = null;
         let sessionError: unknown = null;
 
-        if (immediateWebApp?.initData) {
-          try { sessionProfile = await existingSession(3, currentTelegramId); }
-          catch (cause) { sessionError = cause; }
-        } else {
+        if (!immediateWebApp?.initData) {
           const [webAppResult, sessionResult] = await Promise.allSettled([
             waitForInitData(1_800),
             existingSession(),
@@ -272,7 +267,6 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     // profile patches must never restart Telegram authentication.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isControl, isPublic, authNonce]);
-
 
   useEffect(() => {
     if (isControl || isPublic) return;
