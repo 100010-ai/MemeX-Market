@@ -14,8 +14,10 @@ export const maxDuration = 20;
 const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
 const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
-const MEDIA_CANDIDATE_TIMEOUT_MS = 3_500;
+const MEDIA_CANDIDATE_TIMEOUT_MS = 3_000;
+const SLOW_PARTNER_TIMEOUT_MS = 1_100;
 const MEDIA_REQUEST_TIMEOUT_MS = 10_000;
+const HOST_BREAKER_MS = 60_000;
 
 type GiftMediaRow = {
   model_media_url: string | null;
@@ -41,6 +43,9 @@ type CandidatePayload = {
   contentType: string;
 };
 
+type HostHealth = { blockedUntil: number; failures: number };
+const hostHealth = new Map<string, HostHealth>();
+
 function trustedMediaHost(hostname: string) {
   const host = hostname.toLowerCase();
   return host === "tonapi.io"
@@ -56,6 +61,7 @@ function trustedMediaHost(hostname: string) {
     || host.endsWith(".telesco.pe")
     || host === "ipfs.io"
     || host === "headgun.org"
+    || host.endsWith(".headgun.org")
     || host === "s.getgems.io"
     || host === "chat-mafia.com";
 }
@@ -75,6 +81,43 @@ function trustedUrl(source: unknown) {
 function previewScore(resolution: unknown) {
   const match = String(resolution || "").match(/(\d+)x(\d+)/i);
   return match ? Number(match[1]) * Number(match[2]) : 0;
+}
+
+function hostKey(url: URL) {
+  return url.hostname.toLowerCase();
+}
+
+function hostIsBlocked(url: URL) {
+  const key = hostKey(url);
+  const health = hostHealth.get(key);
+  if (!health) return false;
+  if (health.blockedUntil <= Date.now()) {
+    hostHealth.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function markHostFailure(url: URL) {
+  const key = hostKey(url);
+  const previous = hostHealth.get(key);
+  const failures = Math.min(10, (previous?.failures || 0) + 1);
+  const threshold = key === "headgun.org" || key.endsWith(".headgun.org") ? 1 : 2;
+  hostHealth.set(key, {
+    failures,
+    blockedUntil: failures >= threshold ? Date.now() + HOST_BREAKER_MS : 0,
+  });
+}
+
+function markHostSuccess(url: URL) {
+  hostHealth.delete(hostKey(url));
+}
+
+function candidateTimeout(url: URL) {
+  const host = hostKey(url);
+  return host === "headgun.org" || host.endsWith(".headgun.org")
+    ? SLOW_PARTNER_TIMEOUT_MS
+    : MEDIA_CANDIDATE_TIMEOUT_MS;
 }
 
 async function liveTonApiPreviewUrls(chainAddress: string | null) {
@@ -99,18 +142,16 @@ async function liveTonApiPreviewUrls(chainAddress: string | null) {
 }
 
 async function fetchCandidate(url: URL, signal: AbortSignal, accept: string, maxBytes: number): Promise<CandidatePayload | null> {
+  if (hostIsBlocked(url)) return null;
   const controller = new AbortController();
   const abortFromParent = () => controller.abort();
   if (signal.aborted) controller.abort();
   else signal.addEventListener("abort", abortFromParent, { once: true });
-  const timeout = setTimeout(() => controller.abort(), MEDIA_CANDIDATE_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), candidateTimeout(url));
 
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      // Large gift previews can exceed Next.js' 2 MB Data Cache item limit.
-      // The proxy response already has an explicit public HTTP cache policy,
-      // so keep upstream bodies out of the framework Data Cache.
       cache: "no-store",
       headers: {
         accept,
@@ -123,12 +164,9 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string, max
       return null;
     }
 
-    // Keep the candidate timeout and parent abort wiring alive until the body
-    // is fully consumed. Previously they were cleared as soon as headers
-    // arrived, which allowed a stalled CDN body to pin the route until Vercel
-    // killed the function.
     const bytes = await readResponseBytesLimited(response, maxBytes);
     if (!bytes) return null;
+    markHostSuccess(url);
     return {
       bytes,
       contentType: (response.headers.get("content-type") || "").toLowerCase(),
@@ -148,7 +186,7 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
   const seen = new Set<string>();
   const unavailableHosts = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
+    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname) || hostIsBlocked(candidate)) continue;
     seen.add(candidate.href);
     try {
       const upstream = await fetchCandidate(
@@ -165,11 +203,13 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
           "content-type": upstream.contentType.split(";")[0] || "image/jpeg",
           "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
           "x-content-type-options": "nosniff",
+          "x-mxm-media-status": "ok",
         },
       });
     } catch (error) {
       if (signal.aborted) throw error;
       unavailableHosts.add(candidate.hostname);
+      markHostFailure(candidate);
       mediaCandidateWarning("preview", candidate, error);
     }
   }
@@ -180,7 +220,7 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
   const seen = new Set<string>();
   const unavailableHosts = new Set<string>();
   for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
+    if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname) || hostIsBlocked(candidate)) continue;
     seen.add(candidate.href);
     try {
       const upstream = await fetchCandidate(
@@ -204,6 +244,7 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
           headers: {
             "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
             "x-content-type-options": "nosniff",
+            "x-mxm-media-status": "ok",
           },
         });
       } catch {
@@ -212,10 +253,34 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
     } catch (error) {
       if (signal.aborted) throw error;
       unavailableHosts.add(candidate.hostname);
+      markHostFailure(candidate);
       mediaCandidateWarning("animation", candidate, error);
     }
   }
   return null;
+}
+
+function unavailablePreviewResponse() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#0b0d0f"/><rect x="154" y="177" width="204" height="158" rx="34" fill="#11161b" stroke="#28313a" stroke-width="4"/><circle cx="215" cy="230" r="22" fill="#394653"/><path d="M171 311l64-65 45 45 31-31 30 51H171z" fill="#27323c"/><text x="256" y="386" text-anchor="middle" fill="#687583" font-family="Arial,sans-serif" font-size="21">MEDIA OFFLINE</text></svg>`;
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+      "x-content-type-options": "nosniff",
+      "x-mxm-media-status": "unavailable",
+    },
+  });
+}
+
+function unavailableAnimationResponse() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "cache-control": "public, max-age=300",
+      "x-mxm-media-status": "unavailable",
+    },
+  });
 }
 
 async function GETHandler(request: Request, { params }: { params: Promise<{ assetId: string }> }) {
@@ -227,31 +292,12 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   }
 
   const requestUrl = new URL(request.url);
-  const suppliedSlug = requestUrl.searchParams.get("slug")?.trim() || "";
-  const suppliedFragment = suppliedSlug ? fragmentGiftMedia(suppliedSlug) : null;
   const variant = requestUrl.searchParams.get("variant") === "preview" ? "preview" : "animation";
   const size = requestUrl.searchParams.get("size") === "medium" ? "medium" : "large";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MEDIA_REQUEST_TIMEOUT_MS);
 
   try {
-    // Use a client-supplied canonical Fragment slug first because it is the
-    // cheapest path for already-indexed Telegram collectibles. Crucially, a
-    // Fragment miss no longer ends the request: newly minted/exported gifts
-    // can lag behind Fragment CDN while TonAPI already has a valid preview.
-    if (suppliedFragment) {
-      if (variant === "preview") {
-        const fragmentCandidates = size === "medium"
-          ? [trustedUrl(suppliedFragment.medium), trustedUrl(suppliedFragment.small), trustedUrl(suppliedFragment.large)]
-          : [trustedUrl(suppliedFragment.large), trustedUrl(suppliedFragment.medium)];
-        const response = await previewResponse(fragmentCandidates, controller.signal);
-        if (response) return response;
-      } else {
-        const response = await animationResponse([trustedUrl(suppliedFragment.animation)], controller.signal);
-        if (response) return response;
-      }
-    }
-
     const supabase = getSupabaseAdmin();
     const primary = await supabase
       .from("gift_assets")
@@ -264,16 +310,14 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
 
     if (queryError) return apiFailure(queryError, "Не удалось получить медиа подарка");
     if (!row || row.is_burned || row.catalog_source !== "tonapi") {
-      return NextResponse.json({ error: "Медиа подарка не найдено" }, { status: 404 });
+      return variant === "preview" ? unavailablePreviewResponse() : unavailableAnimationResponse();
     }
 
     const slug = telegramCollectibleSlug(row.telegram_name, row.base_name, row.gift_number);
     const fragment = slug ? fragmentGiftMedia(slug) : null;
 
     if (variant === "preview") {
-      // The immutable NFT metadata URL is usually the fastest and most exact
-      // source for partner collections. Try it before a synthesized Fragment
-      // slug, which is only guaranteed for native Telegram collectibles.
+      const liveTonApiCandidates = await liveTonApiPreviewUrls(row.chain_nft_address);
       const storedCandidates = size === "medium" ? [
         trustedUrl(row.model_preview_url),
         row.model_is_animated ? null : trustedUrl(row.model_media_url),
@@ -286,29 +330,32 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
         trustedUrl(fragment?.large),
         trustedUrl(fragment?.medium),
       ];
-      const storedResponse = await previewResponse(storedCandidates, controller.signal);
-      if (storedResponse) return storedResponse;
-
-      // Older catalogue rows may already contain an optimistic Fragment URL in
-      // model_preview_url. Recover from that stale data by asking TonAPI for
-      // the current verified NFT previews using the immutable chain address.
-      const liveTonApiCandidates = await liveTonApiPreviewUrls(row.chain_nft_address);
-      const liveResponse = await previewResponse(liveTonApiCandidates, controller.signal);
-      return liveResponse || NextResponse.json({ error: "Превью подарка не найдено" }, { status: 404 });
+      const response = await previewResponse([...liveTonApiCandidates, ...storedCandidates], controller.signal);
+      if (response) return response;
+      return unavailablePreviewResponse();
     }
 
+    // Static partner NFTs must not manufacture a Lottie request from a
+    // Telegram-looking slug. Old clients can still hit this route briefly, so
+    // answer quietly while the new client bundle rolls out.
+    if (!row.model_is_animated) return unavailableAnimationResponse();
+
     const animation = await animationResponse([
+      trustedUrl(row.model_media_url),
       trustedUrl(fragment?.animation),
-      row.model_is_animated ? trustedUrl(row.model_media_url) : null,
     ], controller.signal);
-    return animation || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
+    return animation || unavailableAnimationResponse();
   } catch (error) {
     const timedOut = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
     const message = timedOut ? "Media timeout" : "Media fetch failed";
     console.warn("gift media proxy", { assetId, variant, timedOut, error });
-    return NextResponse.json({ error: message }, {
-      status: timedOut ? 504 : 502,
-      headers: timedOut ? { "retry-after": "2" } : undefined,
+    if (variant === "preview") return unavailablePreviewResponse();
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "cache-control": "no-store",
+        "x-mxm-media-status": message.toLowerCase().replaceAll(" ", "-"),
+      },
     });
   } finally {
     clearTimeout(timeout);

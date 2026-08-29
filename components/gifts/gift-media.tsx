@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GiftAsset, GiftMediaKind } from "@/lib/types";
-import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts";
+import { telegramCollectibleSlug } from "@/lib/fragment-gifts";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 
 type LottieAnimation = {
@@ -305,8 +305,10 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
   const [interactionActive, setInteractionActive] = useState(!compact);
   const { near, active } = useViewportState(compact, holderRef);
   const fragmentSlug = telegramCollectibleSlug(gift.telegramName, gift.baseName, gift.number);
-  const fragmentMedia = fragmentSlug ? fragmentGiftMedia(fragmentSlug) : null;
-  const wantsAnimation = gift.mediaKind === "animated" || Boolean(fragmentMedia?.animation);
+  // TonAPI also indexes partner NFTs whose names happen to resemble Telegram
+  // collectibles. A synthetic Fragment slug is not evidence that the NFT is
+  // animated. Trust the normalized media kind from the catalog instead.
+  const wantsAnimation = gift.mediaKind === "animated";
   const animationRequested = !compact || interactionActive;
   const animationFailed = animationFailedKey === gift.id;
   const animationReady = animationReadyKey === gift.id;
@@ -317,9 +319,9 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
     setInteractionActive(!compact);
   }, [compact, gift.id]);
 
-  // Always use our media proxy for Telegram collectible previews. Fragment URLs
-  // can reject embedded WebView requests and expose CORS/referrer issues.
-  // The proxy validates the source and serves the original collectible render.
+  // Keep TonAPI media behind our own proxy. Besides validation and caching,
+  // this prevents a failed proxy request from immediately triggering a second
+  // direct request to the same dead third-party origin in the user's WebView.
   const previewSource = compact
     ? `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=medium${fragmentSlug ? `&slug=${encodeURIComponent(fragmentSlug)}` : ""}`
     : `/api/gifts/media/${encodeURIComponent(gift.id)}?variant=preview&size=large${fragmentSlug ? `&slug=${encodeURIComponent(fragmentSlug)}` : ""}`;
@@ -369,7 +371,6 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
     };
   }, [animationFailed, compact, gift.baseName, gift.id, gift.number, gift.telegramName, near, permitted, wantsAnimation]);
 
-  const storedPreview = gift.modelPreviewUrl || gift.modelMediaUrl || gift.symbolMediaUrl || gift.imageUrl;
   const showAnimation = wantsAnimation && animationRequested && permitted && !animationFailed;
 
   return (
@@ -405,19 +406,6 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
           onError={() => setPreviewFailedKey(gift.id)}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
         />
-      ) : storedPreview ? (
-        <Image
-          src={storedPreview}
-          alt={`${gift.baseName} #${gift.number}`}
-          width={768}
-          height={768}
-          unoptimized
-          loading={priority ? "eager" : compact ? "lazy" : "eager"}
-          decoding="async"
-          fetchPriority={priority || !compact ? "high" : "low"}
-          referrerPolicy="no-referrer"
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${animationReady && showAnimation ? "opacity-0" : "opacity-100"}`}
-        />
       ) : null}
 
       {showAnimation ? (
@@ -428,8 +416,8 @@ function TonApiMedia({ gift, compact, priority }: { gift: GiftAsset; compact: bo
         />
       ) : null}
 
-      {previewFailed && !storedPreview && (!wantsAnimation || !animationRequested || animationFailed || !near) ? (
-        <div className="absolute inset-0 grid place-items-center text-center text-[9px] leading-4 text-white/55">Медиа недоступно</div>
+      {previewFailed && (!wantsAnimation || !animationRequested || animationFailed || !near) ? (
+        <div className="absolute inset-0 grid place-items-center px-4 text-center text-[10px] leading-4 text-white/55">Медиа временно недоступно</div>
       ) : null}
     </div>
   );
