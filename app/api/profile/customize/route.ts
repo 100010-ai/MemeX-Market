@@ -5,13 +5,84 @@ import { enforceRateLimit, sameOriginMutation } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 
+type ProfileItemDefinition = {
+  item_key: string;
+  item_type: string;
+  title: string;
+  rarity: string;
+  active: boolean;
+};
+
+type ProfileItemGrant = {
+  item_key: string;
+  acquired_at: string;
+  source: string | null;
+};
+
 async function GETHandler() {
   const profile = await requireProfile();
   if (!profile) return NextResponse.json({ error: "Нужна авторизация Telegram" }, { status: 401 });
-  const { data, error } = await getSupabaseAdmin().rpc("monetization_snapshot_v200", { p_profile_id: profile.id });
-  if (error) return apiFailure(error, "Не удалось загрузить предметы профиля");
-  const payload = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
-  return NextResponse.json({ wallet: payload.wallet || {}, items: Array.isArray(payload.profileItems) ? payload.profileItems : [] }, { headers: { "cache-control": "private, no-store" } });
+
+  const admin = getSupabaseAdmin();
+  // Wallet/VIP data still comes from the consolidated snapshot, but cosmetics are
+  // read from their canonical inventory table. This makes a frame visible on the
+  // very next request after a case grants it instead of depending on a secondary
+  // snapshot projection being current.
+  const [snapshot, inventory, equipped] = await Promise.all([
+    admin.rpc("monetization_snapshot_v200", { p_profile_id: profile.id }),
+    admin
+      .from("profile_item_inventory")
+      .select("item_key,acquired_at,source")
+      .eq("profile_id", profile.id)
+      .order("acquired_at", { ascending: false })
+      .limit(300),
+    admin.from("profiles").select("equipped_profile_frame").eq("id", profile.id).single(),
+  ]);
+
+  if (snapshot.error) return apiFailure(snapshot.error, "Не удалось загрузить оформление профиля");
+  if (inventory.error) return apiFailure(inventory.error, "Не удалось загрузить полученные предметы");
+  if (equipped.error) return apiFailure(equipped.error, "Не удалось загрузить выбранную рамку");
+
+  const grants = (inventory.data || []) as ProfileItemGrant[];
+  const itemKeys = [...new Set(grants.map((item) => item.item_key).filter(Boolean))];
+  let definitions: ProfileItemDefinition[] = [];
+  if (itemKeys.length) {
+    const definitionResult = await admin
+      .from("profile_items")
+      .select("item_key,item_type,title,rarity,active")
+      .in("item_key", itemKeys)
+      .eq("active", true);
+    if (definitionResult.error) return apiFailure(definitionResult.error, "Не удалось загрузить каталог оформления");
+    definitions = (definitionResult.data || []) as ProfileItemDefinition[];
+  }
+
+  const definitionByKey = new Map(definitions.map((item) => [item.item_key, item]));
+  const equippedFrame = typeof equipped.data?.equipped_profile_frame === "string" ? equipped.data.equipped_profile_frame : null;
+  const items = grants.flatMap((grant) => {
+    const definition = definitionByKey.get(grant.item_key);
+    if (!definition) return [];
+    return [{
+      key: definition.item_key,
+      type: definition.item_type,
+      title: definition.title,
+      rarity: definition.rarity,
+      equipped: definition.item_type === "frame" && definition.item_key === equippedFrame,
+      acquiredAt: grant.acquired_at,
+      source: grant.source,
+    }];
+  }).sort((left, right) => {
+    if (left.type === "frame" && right.type !== "frame") return -1;
+    if (left.type !== "frame" && right.type === "frame") return 1;
+    return String(right.acquiredAt).localeCompare(String(left.acquiredAt));
+  });
+
+  const payload = snapshot.data && typeof snapshot.data === "object" && !Array.isArray(snapshot.data)
+    ? snapshot.data as Record<string, unknown>
+    : {};
+  return NextResponse.json(
+    { wallet: payload.wallet || {}, items },
+    { headers: { "cache-control": "private, no-store, max-age=0", pragma: "no-cache" } },
+  );
 }
 
 async function POSTHandler(request: Request) {
