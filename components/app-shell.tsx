@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
 import { AppLaunchScreen } from "@/components/app-launch-screen";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import overlayStyles from "@/components/overlay-system.module.css";
 
 
 const DeferredCommandPalette = dynamic(() => import("@/components/command-palette").then((module) => module.CommandPalette), { ssr: false });
@@ -101,7 +102,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   return (
-    <div className="mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
+    <div className={`mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr] ${overlayStyles.loaded}`}>
       <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
           <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
