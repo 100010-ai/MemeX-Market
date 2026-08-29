@@ -19,7 +19,18 @@ export default function PublicProfilePage() {
   const { id } = useParams<{ id: string }>();
   const [profile, setProfile] = useState<TraderProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { apiFetch<{ profile: TraderProfile }>(`/api/users/${id}`).then((result) => setProfile(result.profile)).catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить игрока")); }, [id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(null);
+    void apiFetch<{ profile: TraderProfile }>(`/api/users/${id}`, { cacheMs: 5_000, signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setProfile(result.profile);
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Не удалось загрузить игрока");
+      });
+    return () => controller.abort();
+  }, [id]);
   if (!profile) return <div className="mx-auto max-w-5xl"><div className="mxm-skeleton h-56 rounded-[18px]" />{error ? <p className="mt-3 text-xs text-[var(--negative)]">{error}</p> : null}</div>;
   const trader = profile.trader;
 
