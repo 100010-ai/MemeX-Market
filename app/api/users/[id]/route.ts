@@ -44,7 +44,8 @@ async function GETHandler(_request: Request, { params }: { params: Promise<{ id:
     if (error) throw error;
     if (!profileResult.data) return NextResponse.json({ error: "Игрок не найден" }, { status: 404 });
     const reputationUpdatedAt = reputationResult.data?.updated_at ? Date.parse(String(reputationResult.data.updated_at)) : 0;
-    if (!Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000) after(async () => { try { const refresh = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: id }); if (refresh.error) console.error("public profile meta refresh", refresh.error); } catch (error) { console.error("public profile meta refresh", error); } });
+    const reputationStale = !Number.isFinite(reputationUpdatedAt) || Date.now() - reputationUpdatedAt > 5 * 60_000;
+    if (reputationStale) after(async () => { try { const refresh = await getSupabaseAdmin().rpc("refresh_profile_meta_v048", { p_profile_id: id }); if (refresh.error) console.error("public profile meta refresh", refresh.error); } catch (error) { console.error("public profile meta refresh", error); } });
 
     const person = profileResult.data;
     const stats = statsResult.data && typeof statsResult.data === "object" && !Array.isArray(statsResult.data) ? statsResult.data as Record<string, unknown> : {};
