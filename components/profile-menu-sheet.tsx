@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ChevronRight, CircleHelpRound, Palette, Settings2, UserRound, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile-avatar";
 
@@ -20,19 +20,34 @@ export function ProfileMenuSheet({
     level: number;
   };
 }) {
+  const closeRef = useRef(onClose);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
-    const previousOverflow = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    root.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus({ preventScroll: true }));
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.documentElement.style.overflow = previousOverflow;
+      window.cancelAnimationFrame(focusFrame);
+      root.style.overflow = previousRootOverflow;
+      body.style.overflow = previousBodyOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -62,7 +77,7 @@ export function ProfileMenuSheet({
             <p className="mt-0.5 flex items-center gap-1 text-[9px] text-[var(--muted)]"><UserRound size={10} />Уровень {profile.level}</p>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="mxm-profile-menu-close" aria-label="Закрыть меню"><X size={18} /></button>
+        <button ref={closeButtonRef} type="button" onClick={onClose} className="mxm-profile-menu-close" aria-label="Закрыть меню"><X size={18} /></button>
       </header>
 
       <div className="mxm-profile-menu-body">
