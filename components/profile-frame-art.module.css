@@ -1,0 +1,101 @@
+.shell {
+  --frame-hi: rgba(255,255,255,.34);
+  --frame-mid: rgba(142,154,170,.92);
+  --frame-lo: rgba(35,41,49,.98);
+  --frame-glow: rgba(139,164,255,.14);
+  --frame-speed: 7s;
+  background:
+    radial-gradient(circle at 22% 12%, var(--frame-hi), transparent 22%),
+    radial-gradient(circle at 82% 86%, var(--frame-glow), transparent 28%),
+    conic-gradient(from 205deg, var(--frame-lo), var(--frame-mid) 24%, var(--frame-lo) 48%, var(--frame-hi) 67%, var(--frame-lo) 83%, var(--frame-mid));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 -2px 5px rgba(0,0,0,.34),
+    0 5px 16px rgba(0,0,0,.24),
+    0 0 15px var(--frame-glow);
+  transition: filter .18s ease, transform .18s ease;
+}
+.shell::before,
+.shell::after {
+  border: 1px solid color-mix(in srgb, var(--frame-mid) 52%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--frame-hi) 80%, transparent), color-mix(in srgb, var(--frame-lo) 88%, transparent));
+  box-shadow: inset 0 1px rgba(255,255,255,.28), 0 2px 7px rgba(0,0,0,.28);
+}
+.shell::before { width: 8px; height: 5px; top: -2px; left: 13%; border-radius: 4px 7px 4px 6px; transform: rotate(-17deg); }
+.shell::after { width: 6px; height: 8px; right: -2px; bottom: 17%; border-radius: 7px 4px 6px 4px; transform: rotate(19deg); }
+
+/* Existing exclusive frames. These used to resolve to one generic shell. */
+.mxm-profile-frame-arctic-relay { --frame-hi:#e5f5ff; --frame-mid:#83b7d0; --frame-lo:#182b39; --frame-glow:rgba(105,185,224,.22); border-radius:21px 28px 20px 25px; clip-path:polygon(11% 1%,42% 4%,51% 0,63% 4%,89% 1%,99% 17%,96% 82%,84% 99%,17% 97%,1% 82%,4% 50%,1% 17%); }
+.mxm-profile-frame-circuit-elite { --frame-hi:#dce7ee; --frame-mid:#879ba7; --frame-lo:#182027; --frame-glow:rgba(119,146,163,.18); border-radius:18px; clip-path:polygon(5% 9%,30% 1%,74% 1%,96% 14%,99% 74%,86% 98%,23% 99%,1% 84%,1% 28%); animation:frame-metal-breathe var(--frame-speed) ease-in-out infinite; }
+.mxm-profile-frame-ember-sentinel { --frame-hi:#ffd6b1; --frame-mid:#a95e3f; --frame-lo:#271512; --frame-glow:rgba(198,91,52,.23); border-radius:23px 18px 26px 20px; clip-path:polygon(16% 1%,77% 0,96% 15%,100% 69%,91% 96%,59% 100%,50% 95%,40% 100%,9% 94%,0 70%,4% 17%); animation:frame-ember 5.8s ease-in-out infinite; }
+.mxm-profile-frame-glacier-crown { --frame-hi:#f0fbff; --frame-mid:#87b9c9; --frame-lo:#17262e; --frame-glow:rgba(128,204,226,.24); border-radius:18px 25px 22px 27px; clip-path:polygon(7% 13%,22% 2%,38% 7%,50% 0,63% 7%,80% 2%,94% 13%,100% 77%,85% 99%,15% 98%,0 78%); }
+.mxm-profile-frame-iron-regent { --frame-hi:#e1ddd5; --frame-mid:#807a72; --frame-lo:#211f1d; --frame-glow:rgba(177,165,146,.13); border-radius:18px 22px 18px 25px; clip-path:polygon(10% 0,78% 2%,99% 20%,96% 81%,81% 100%,18% 97%,1% 82%,4% 18%); }
+.mxm-profile-frame-midnight-laurels { --frame-hi:#d9d8e5; --frame-mid:#6f718c; --frame-lo:#14151e; --frame-glow:rgba(111,113,140,.24); border-radius:48% 39% 47% 41% / 42% 50% 40% 48%; animation:frame-metal-breathe 8s ease-in-out infinite; }
+.mxm-profile-frame-obsidian-signal { --frame-hi:#8f98a2; --frame-mid:#3f4750; --frame-lo:#07090b; --frame-glow:rgba(103,116,128,.18); border-radius:18px 25px 19px 23px; clip-path:polygon(4% 18%,18% 3%,63% 0,96% 13%,100% 55%,94% 89%,76% 100%,24% 97%,1% 80%); }
+.mxm-profile-frame-quantum-frost { --frame-hi:#f0f8ff; --frame-mid:#a0abc2; --frame-lo:#1b2030; --frame-glow:rgba(144,161,200,.25); border-radius:49% 43% 46% 40% / 43% 49% 41% 47%; animation:frame-frost-shift 7.2s linear infinite; }
+.mxm-profile-frame-vault-sovereign { --frame-hi:#f2e3b5; --frame-mid:#9a7a46; --frame-lo:#251e13; --frame-glow:rgba(190,154,82,.22); border-radius:20px 20px 28px 28px; clip-path:polygon(10% 4%,37% 4%,50% 0,64% 4%,90% 4%,100% 19%,97% 83%,81% 100%,18% 98%,2% 82%,1% 20%); }
+
+.mxm-profile-frame-league-challenger { --frame-hi:#e3e8f1; --frame-mid:#6f829e; --frame-lo:#18212e; --frame-glow:rgba(112,141,184,.19); border-radius:23px 18px 25px 19px; clip-path:polygon(13% 0,71% 2%,96% 16%,100% 72%,88% 98%,22% 100%,1% 84%,2% 20%); }
+.mxm-profile-frame-league-apex { --frame-hi:#fff0bd; --frame-mid:#b89853; --frame-lo:#26200f; --frame-glow:rgba(211,173,83,.23); border-radius:18px 18px 27px 27px; clip-path:polygon(6% 15%,20% 3%,39% 6%,50% 0,62% 6%,81% 3%,95% 15%,100% 78%,84% 99%,16% 99%,0 78%); animation:frame-metal-breathe 6.6s ease-in-out infinite; }
+.mxm-profile-frame-league-founder { --frame-hi:#fff7dc; --frame-mid:#c7a45a; --frame-lo:#16130d; --frame-glow:rgba(226,188,91,.27); border-radius:20px 17px 29px 24px; clip-path:polygon(12% 0,41% 3%,50% 0,59% 3%,89% 1%,100% 18%,96% 81%,80% 100%,18% 97%,1% 80%,3% 19%); animation:frame-founder-breathe 5.4s ease-in-out infinite; }
+
+/* New store / case frames. */
+.mxm-profile-frame-titanium-edge { --frame-hi:#f1f4f6; --frame-mid:#9ba4aa; --frame-lo:#20262b; --frame-glow:rgba(175,190,199,.12); border-radius:20px 16px 23px 18px; clip-path:polygon(6% 12%,22% 1%,80% 3%,98% 18%,100% 78%,84% 98%,20% 100%,1% 84%,2% 24%); }
+.mxm-profile-frame-graphite-crown { --frame-hi:#b7bdc1; --frame-mid:#5b6267; --frame-lo:#111416; --frame-glow:rgba(121,130,137,.18); border-radius:18px 22px 25px 21px; clip-path:polygon(8% 14%,22% 3%,38% 7%,50% 1%,64% 7%,81% 3%,95% 15%,99% 80%,83% 99%,17% 97%,1% 79%); animation:frame-metal-breathe 8.4s ease-in-out infinite; }
+.mxm-profile-frame-blue-hour { --frame-hi:#e1e7ef; --frame-mid:#71819b; --frame-lo:#151b25; --frame-glow:rgba(104,129,169,.23); border-radius:49% 42% 47% 40% / 41% 50% 40% 48%; animation:frame-blue-hour 7.6s ease-in-out infinite; }
+.mxm-profile-frame-black-ice { --frame-hi:#e9f3f8; --frame-mid:#69808c; --frame-lo:#0b1115; --frame-glow:rgba(118,171,194,.19); border-radius:19px 27px 18px 25px; clip-path:polygon(13% 0,33% 4%,47% 0,60% 5%,87% 1%,99% 18%,95% 43%,100% 58%,95% 84%,83% 99%,57% 95%,43% 100%,15% 96%,1% 82%,5% 56%,0 42%,4% 16%); animation:frame-frost-shift 8.6s linear infinite; }
+.mxm-profile-frame-crimson-regent { --frame-hi:#f0c9c8; --frame-mid:#975c5e; --frame-lo:#241416; --frame-glow:rgba(163,74,78,.22); border-radius:20px 19px 28px 24px; clip-path:polygon(9% 6%,37% 3%,50% 0,64% 3%,91% 6%,100% 22%,97% 82%,81% 100%,18% 97%,1% 80%,2% 20%); animation:frame-crimson 7s ease-in-out infinite; }
+.mxm-profile-frame-silver-archive { --frame-hi:#ffffff; --frame-mid:#aeb7bf; --frame-lo:#30373d; --frame-glow:rgba(200,211,220,.14); border-radius:22px 17px 25px 20px; clip-path:polygon(8% 3%,75% 0,97% 13%,100% 77%,87% 99%,24% 100%,2% 86%,0 20%); }
+.mxm-profile-frame-market-maker { --frame-hi:#e9f0e8; --frame-mid:#7e9782; --frame-lo:#17211a; --frame-glow:rgba(109,151,118,.22); border-radius:18px 24px 22px 19px; clip-path:polygon(7% 12%,26% 1%,72% 3%,96% 17%,100% 67%,90% 96%,67% 100%,50% 95%,34% 100%,9% 94%,0 68%,4% 20%); animation:frame-market 6.8s ease-in-out infinite; }
+.mxm-profile-frame-monolith { --frame-hi:#8b9298; --frame-mid:#3f454a; --frame-lo:#080a0c; --frame-glow:rgba(89,98,106,.22); border-radius:15px 20px 17px 22px; clip-path:polygon(15% 0,86% 4%,100% 20%,96% 84%,80% 100%,14% 96%,0 78%,4% 15%); animation:frame-monolith 9s ease-in-out infinite; }
+.mxm-profile-frame-singularity { --frame-hi:#eceaf0; --frame-mid:#8d8797; --frame-lo:#17131d; --frame-glow:rgba(155,139,177,.27); border-radius:52% 42% 48% 39% / 43% 52% 40% 49%; animation:frame-singularity 6.4s linear infinite; }
+.mxm-profile-frame-dynasty { --frame-hi:#fff0bf; --frame-mid:#b78d45; --frame-lo:#261b0b; --frame-glow:rgba(215,169,77,.28); border-radius:18px 20px 29px 27px; clip-path:polygon(5% 17%,20% 2%,39% 7%,50% 0,61% 7%,81% 2%,96% 17%,100% 78%,82% 100%,17% 98%,0 77%); animation:frame-founder-breathe 6s ease-in-out infinite; }
+.mxm-profile-frame-cinder-vault { --frame-hi:#f0d1ba; --frame-mid:#93624c; --frame-lo:#21140f; --frame-glow:rgba(178,91,55,.25); border-radius:22px 18px 27px 21px; clip-path:polygon(10% 2%,74% 0,96% 14%,100% 72%,89% 96%,61% 100%,49% 95%,37% 100%,9% 94%,0 73%,4% 17%); animation:frame-ember 6.7s ease-in-out infinite; }
+.mxm-profile-frame-meridian { --frame-hi:#f3f0e8; --frame-mid:#9f9481; --frame-lo:#25221c; --frame-glow:rgba(177,162,133,.23); border-radius:47% 40% 50% 42% / 42% 49% 39% 51%; animation:frame-meridian 9.5s linear infinite; }
+
+@keyframes frame-metal-breathe {
+  0%,100% { filter:brightness(.95) saturate(.9); }
+  50% { filter:brightness(1.12) saturate(1.04); }
+}
+@keyframes frame-founder-breathe {
+  0%,100% { filter:brightness(.96); box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 5px 16px rgba(0,0,0,.26),0 0 12px var(--frame-glow); }
+  50% { filter:brightness(1.09); box-shadow:inset 0 0 0 1px rgba(255,255,255,.27),0 6px 19px rgba(0,0,0,.30),0 0 22px var(--frame-glow); }
+}
+@keyframes frame-ember {
+  0%,100% { filter:brightness(.92) saturate(.92); }
+  48% { filter:brightness(1.11) saturate(1.08); }
+}
+@keyframes frame-frost-shift {
+  0% { filter:hue-rotate(-4deg) brightness(.96); }
+  50% { filter:hue-rotate(8deg) brightness(1.1); }
+  100% { filter:hue-rotate(-4deg) brightness(.96); }
+}
+@keyframes frame-blue-hour {
+  0%,100% { filter:brightness(.93) saturate(.84); }
+  50% { filter:brightness(1.12) saturate(1.02); }
+}
+@keyframes frame-crimson {
+  0%,100% { filter:brightness(.93) saturate(.88); }
+  50% { filter:brightness(1.08) saturate(1.06); }
+}
+@keyframes frame-market {
+  0%,100% { filter:brightness(.95) saturate(.88); }
+  50% { filter:brightness(1.1) saturate(1.02); }
+}
+@keyframes frame-monolith {
+  0%,100% { filter:brightness(.86) contrast(1.05); }
+  50% { filter:brightness(1.05) contrast(1.12); }
+}
+@keyframes frame-singularity {
+  0% { filter:hue-rotate(0deg) brightness(.94); }
+  50% { filter:hue-rotate(13deg) brightness(1.1); }
+  100% { filter:hue-rotate(0deg) brightness(.94); }
+}
+@keyframes frame-meridian {
+  0%,100% { filter:brightness(.94) saturate(.82); }
+  50% { filter:brightness(1.1) saturate(1); }
+}
+
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .shell { animation:none!important; filter:none!important; }
+}
