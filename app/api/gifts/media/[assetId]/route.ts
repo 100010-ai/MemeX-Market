@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/auth";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 import { tonApiGet } from "@/lib/providers/tonapi-client";
+import { APP_VERSION } from "@/lib/app-version";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -113,7 +114,7 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string, max
       cache: "no-store",
       headers: {
         accept,
-        "user-agent": "MXM-Market/0.79.5",
+        "user-agent": `MXM-Market/${APP_VERSION}`,
         referer: "https://fragment.com/",
       },
     });
