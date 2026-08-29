@@ -32,14 +32,7 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
     const giftId = nonEmptyId(row.virtualGiftId);
     const baseName = text(row.baseName, "", 120);
     const giftNumber = finiteNumber(row.giftNumber, NaN);
-    const giftImage = giftId ? resolveGiftImageUrl({
-      virtual_gift_id: giftId,
-      base_name: baseName,
-      gift_number: giftNumber,
-      model_preview_url: row.modelPreviewUrl,
-      model_media_url: row.modelMediaUrl,
-      symbol_media_url: row.symbolMediaUrl,
-    }) : null;
+    const giftImage = giftId ? resolveGiftImageUrl({ virtual_gift_id: giftId, base_name: baseName, gift_number: giftNumber, model_preview_url: row.modelPreviewUrl, model_media_url: row.modelMediaUrl, symbol_media_url: row.symbolMediaUrl }) : null;
     const base = { id: `activity-${id}`, actorId, amount, createdAt, importance };
     let item: ActivityItem | null = null;
 
@@ -53,7 +46,9 @@ export async function getUnifiedMarketActivity(supabase: SupabaseClient, limit =
       else if (eventKind === "gift_listed") item = { ...base, kind: "listing", label: `${actorName} выставил`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
       else if (eventKind === "gift_repriced") item = { ...base, kind: "reprice", label: `${actorName} изменил цену`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
       else if (eventKind === "gift_unlisted" || eventKind === "gift_expired") item = { ...base, kind: "unlist", label: eventKind === "gift_expired" ? `${actorName} · срок продажи истёк` : `${actorName} снял с продажи`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
-      else if (eventKind === "gift_offer") item = { ...base, kind: "offer", label: `${actorName} предложил`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
+      else if (eventKind === "gift_offer") item = { ...base, kind: "offer", label: `${actorName} предложил цену`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
+      else if (eventKind === "trade_offer_created") item = { ...base, kind: "offer", label: `${actorName} предложил обмен`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
+      else if (eventKind === "trade_swap") item = { ...base, kind: "offer", label: `${actorName} завершил обмен`, detail, href: `/gifts/${giftId}`, imageUrl: giftImage };
     } else if (eventKind === "case_drop") {
       const rewardLabel = text(metadata.rewardLabel, "Редкая награда", 160);
       const rarity = text(metadata.rarity, "epic", 32);
