@@ -331,7 +331,8 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
         trustedUrl(fragment?.medium),
       ];
       const response = await previewResponse([...liveTonApiCandidates, ...storedCandidates], controller.signal);
-      return response || unavailablePreviewResponse();
+      if (response) return response;
+      return unavailablePreviewResponse();
     }
 
     // Static partner NFTs must not manufacture a Lottie request from a
