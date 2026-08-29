@@ -165,7 +165,7 @@ export function ControlCenterV210() {
   }
   async function logout() { await request("/api/control/session", { method: "DELETE" }).catch(() => null); setSession((current) => current ? { ...current, authenticated: false } : current); setDashboard(null); setData(null); }
 
-  async function runAction(action: string, payload: Record<string, unknown> = {}, optimistic?: () => void) {
+  async function runAction(action: string, payload: Record<string, unknown> = {}, optimistic?: () => void, onFailure?: (message: string) => void) {
     const key = `${action}:${String(payload.id || payload.profileId || "")}`;
     setBusy(key); setError(null); setNotice(null);
     try {
@@ -175,8 +175,11 @@ export function ControlCenterV210() {
       sectionCache.current.clear();
       if (sectionTabs.has(tab)) void loadSection(tab, true);
       void loadDashboard(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Операция не выполнена"); }
-    finally { setBusy(null); }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Операция не выполнена";
+      setError(message);
+      onFailure?.(message);
+    } finally { setBusy(null); }
   }
   async function runOp(action: string, payload: Record<string, unknown> = {}) {
     setBusy(action); setError(null); setNotice(null);
@@ -313,10 +316,36 @@ function Badge({ children, good, danger }: { children: ReactNode; good?: boolean
 
 function Pagination({ payload, offset, setOffset }: { payload: DataPayload; offset: number; setOffset: (v: number) => void }) { const from = payload.total ? offset + 1 : 0; const to = Math.min(payload.total, offset + payload.limit); return <div className="mt-3 flex items-center justify-between text-[8px] text-white/25"><span>{from}–{to} из {payload.total}</span><div className="flex gap-1"><button disabled={offset <= 0} onClick={() => setOffset(Math.max(0, offset - payload.limit))} className="control-icon !h-8 !w-8"><ChevronLeft size={12}/></button><button disabled={offset + payload.limit >= payload.total} onClick={() => setOffset(offset + payload.limit)} className="control-icon !h-8 !w-8"><ChevronRight size={12}/></button></div></div>; }
 
-function ActionModal({ modal, close, runAction }: { modal: Exclude<ModalState, null>; close: () => void; runAction: (a: string, p?: Record<string, unknown>) => Promise<void> }) {
+function ActionModal({ modal, close, runAction }: { modal: Exclude<ModalState, null>; close: () => void; runAction: (a: string, p?: Record<string, unknown>, onSuccess?: () => void, onFailure?: (message: string) => void) => Promise<void> }) {
   const [value, setValue] = useState(modal.kind === "balance" ? String(modal.row.balance || 0) : modal.kind === "xp" ? String(modal.row.xp || 0) : String(modal.row.listing_price || modal.row.estimated_value || ""));
   const [reason, setReason] = useState("");
-  async function submit(event: FormEvent) { event.preventDefault(); const numeric = Number(value); if (!Number.isFinite(numeric) || numeric < 0) return; if (modal.kind === "balance") await runAction("balance.set", { profileId: modal.row.id, balance: numeric, reason: reason || "Control Center" }); if (modal.kind === "xp") await runAction("profile.set_xp", { profileId: modal.row.id, xp: numeric }); if (modal.kind === "giftPrice") await runAction("gift.list", { id: modal.row.virtual_gift_id, price: numeric }); close(); }
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (submitting) return;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0 || (modal.kind === "giftPrice" && numeric <= 0)) {
+      setLocalError(modal.kind === "giftPrice" ? "Цена Gift должна быть больше 0" : "Введите корректное неотрицательное значение");
+      return;
+    }
+    if (modal.kind === "xp" && !Number.isInteger(numeric)) {
+      setLocalError("XP должен быть целым числом");
+      return;
+    }
+
+    setSubmitting(true);
+    setLocalError(null);
+    try {
+      if (modal.kind === "balance") await runAction("balance.set", { profileId: modal.row.id, balance: numeric, reason: reason || "Control Center" }, close, setLocalError);
+      if (modal.kind === "xp") await runAction("profile.set_xp", { profileId: modal.row.id, xp: numeric }, close, setLocalError);
+      if (modal.kind === "giftPrice") await runAction("gift.list", { id: modal.row.virtual_gift_id, price: numeric }, close, setLocalError);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const title = modal.kind === "balance" ? "Установить баланс" : modal.kind === "xp" ? "Установить XP" : "Выставить Gift";
-  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/65 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.currentTarget === event.target) close(); }}><form onSubmit={submit} className="w-full max-w-[410px] rounded-[20px] border border-white/[.08] bg-[#0b0e12] p-5 shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-[13px] font-semibold">{title}</h3><button type="button" onClick={close} className="text-[9px] text-white/30">Закрыть</button></div><p className="mt-1 truncate text-[9px] text-white/25">{modal.row.username ? `@${modal.row.username}` : modal.row.base_name || modal.row.id}</p><label className="mt-4 block text-[8px] text-white/30">Значение<input autoFocus type="number" min="0" step={modal.kind === "xp" ? "1" : "0.01"} value={value} onChange={(event) => setValue(event.target.value)} className="control-input mt-1.5 !min-h-10 !text-[12px]"/></label>{modal.kind === "balance" ? <label className="mt-3 block text-[8px] text-white/30">Причина<input value={reason} onChange={(event) => setReason(event.target.value)} className="control-input mt-1.5" placeholder="Корректировка через Control Center"/></label> : null}<div className="mt-4 flex justify-end gap-2"><button type="button" onClick={close} className="control-small">Отмена</button><button className="control-primary">Применить</button></div></form></div>;
+  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/65 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (!submitting && event.currentTarget === event.target) close(); }}><form onSubmit={submit} className="w-full max-w-[410px] rounded-[20px] border border-white/[.08] bg-[#0b0e12] p-5 shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-[13px] font-semibold">{title}</h3><button type="button" disabled={submitting} onClick={close} className="text-[9px] text-white/30 disabled:opacity-40">Закрыть</button></div><p className="mt-1 truncate text-[9px] text-white/25">{modal.row.username ? `@${modal.row.username}` : modal.row.base_name || modal.row.id}</p><label className="mt-4 block text-[8px] text-white/30">Значение<input autoFocus type="number" min={modal.kind === "giftPrice" ? "0.01" : "0"} step={modal.kind === "xp" ? "1" : "0.01"} value={value} disabled={submitting} onChange={(event) => { setValue(event.target.value); setLocalError(null); }} className="control-input mt-1.5 !min-h-10 !text-[12px]"/></label>{modal.kind === "balance" ? <label className="mt-3 block text-[8px] text-white/30">Причина<input value={reason} disabled={submitting} onChange={(event) => setReason(event.target.value)} className="control-input mt-1.5" placeholder="Корректировка через Control Center"/></label> : null}{localError ? <div className="control-alert control-alert-error mt-4">{localError}</div> : null}<div className="mt-4 flex justify-end gap-2"><button type="button" disabled={submitting} onClick={close} className="control-small">Отмена</button><button disabled={submitting} className="control-primary">{submitting ? <LoaderCircle size={12} className="animate-spin"/> : null}{submitting ? "Применяем…" : "Применить"}</button></div></form></div>;
 }
