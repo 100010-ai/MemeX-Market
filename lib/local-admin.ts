@@ -146,25 +146,25 @@ export async function requestControlLoginCode(rawTelegramId: unknown) {
   }
 
   const supabase = getSupabaseAdmin();
-  const since = new Date(Date.now() - 10 * 60_000).toISOString();
-  const recent = await supabase
-    .from("control_login_challenges_v210")
-    .select("id", { count: "exact", head: true })
-    .eq("telegram_id", Number(telegramId))
-    .gte("created_at", since);
-  if (recent.error) throw recent.error;
-  if (Number(recent.count || 0) >= MAX_CODE_REQUESTS_10M) {
-    throw new Error("Слишком много кодов входа. Подождите несколько минут.");
-  }
-
   const code = String(crypto.randomInt(100000, 1000000));
   const expiresAt = new Date(Date.now() + CODE_TTL_SECONDS * 1000).toISOString();
-  const inserted = await supabase
-    .from("control_login_challenges_v210")
-    .insert({ telegram_id: Number(telegramId), code_hash: codeHash(telegramId, code), expires_at: expiresAt })
-    .select("id")
-    .single();
-  if (inserted.error) throw inserted.error;
+  const challenge = await supabase.rpc("create_control_login_challenge_v212", {
+    // Keep bigint identifiers as decimal strings. Converting an allowed
+    // 20-digit Telegram ID through JS Number can silently lose precision.
+    p_telegram_id: telegramId,
+    p_code_hash: codeHash(telegramId, code),
+    p_expires_at: expiresAt,
+    p_max_requests: MAX_CODE_REQUESTS_10M,
+    p_window_seconds: 10 * 60,
+  });
+  if (challenge.error) {
+    if (/CONTROL_LOGIN_RATE_LIMIT/i.test(String(challenge.error.message || ""))) {
+      throw new Error("Слишком много кодов входа. Подождите несколько минут.");
+    }
+    throw challenge.error;
+  }
+  const challengeId = String(challenge.data || "");
+  if (!challengeId) throw new Error("Не удалось создать код входа");
 
   try {
     await telegramBotApi("sendMessage", {
@@ -174,7 +174,8 @@ export async function requestControlLoginCode(rawTelegramId: unknown) {
       disable_notification: false,
     });
   } catch (error) {
-    await supabase.from("control_login_challenges_v210").delete().eq("id", inserted.data.id);
+    const cleanup = await supabase.from("control_login_challenges_v210").delete().eq("id", challengeId);
+    if (cleanup.error) console.error("control login challenge cleanup", cleanup.error);
     throw error;
   }
 
@@ -188,7 +189,7 @@ export async function verifyControlLoginCode(rawTelegramId: unknown, rawCode: un
   if (!/^\d{4,20}$/.test(telegramId) || !/^\d{6}$/.test(code) || !adminTelegramIds().has(telegramId)) return false;
 
   const consumed = await getSupabaseAdmin().rpc("consume_control_login_challenge_v211", {
-    p_telegram_id: Number(telegramId),
+    p_telegram_id: telegramId,
     p_code_hash: codeHash(telegramId, code),
     p_max_attempts: MAX_CODE_ATTEMPTS,
   });
