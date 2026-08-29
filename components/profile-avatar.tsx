@@ -4,6 +4,7 @@ import type { ProfileBadge } from "@/lib/types";
 import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { rarityLabel } from "@/lib/ui-copy";
 import { getProfileFrameClass, getProfileFrameDefinition } from "@/lib/profile-frames";
+import frameArt from "@/components/profile-frame-art.module.css";
 
 export function ProfileAvatar({
   photoUrl,
@@ -22,13 +23,16 @@ export function ProfileAvatar({
   const sizeClass = size === "large" ? "h-14 w-14" : size === "small" ? "h-8 w-8" : "h-13 w-13";
   const radiusClass = size === "large" ? "rounded-[19px]" : size === "small" ? "rounded-[10px]" : "rounded-[18px]";
   const frameClass = framed ? getProfileFrameClass(equippedFrame) : "border border-[var(--border)] bg-[var(--panel-2)] p-[1px]";
+  const premiumArtClass = frame ? frameArt[frame.cssClass] || "" : "";
   const avatarSrc = telegramAvatarProxyUrl(photoUrl);
 
   return <span
     data-profile-frame={equippedFrame || undefined}
     data-profile-frame-size={size}
+    data-profile-frame-rarity={frame?.rarity || undefined}
+    data-profile-frame-source={frame?.source || undefined}
     title={frameTitle ? `Рамка профиля: ${frameTitle}` : undefined}
-    className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass}`}
+    className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass} ${framed ? frameArt.shell : ""} ${premiumArtClass}`}
   >
     <span className={`relative z-[1] block h-full w-full overflow-hidden ${radiusClass} bg-[var(--panel-2)]`}>
       {avatarSrc
