@@ -66,6 +66,19 @@ export function timeAgo(value: string | null | undefined) {
   return new Date(value).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
 }
 
+// Backward-compatible public name still used by several client components.
+// Keep it as a wrapper instead of a const alias so its call signature stays
+// stable for static analyzers/Turbopack.
+export function ago(value: string | null | undefined) {
+  return timeAgo(value);
+}
+
+export function rgbIntToHex(value: number | string | null | undefined) {
+  const numeric = Number(value);
+  const safe = Number.isInteger(numeric) && numeric >= 0 && numeric <= 0xffffff ? numeric : 0;
+  return `#${safe.toString(16).padStart(6, "0")}`;
+}
+
 export function shortAddress(value: string | null | undefined) {
   const safe = String(value || "").trim();
   if (!safe) return "—";
