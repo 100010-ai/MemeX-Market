@@ -8,7 +8,10 @@ export type MXMScore = {
   components: Record<MXMScoreComponentKey, number>;
 };
 
-type ItemStats = { tradeCount: number; volume: number; highSale: number | null; lowSale: number | null };
+type ItemStats = { tradeCount: number };
+type MXMScoreCollection = Pick<GiftCollection,
+  "itemCount" | "holderCount" | "listedCount" | "floorPrice" | "volume24h" | "change24h" | "tradeCount24h" | "volume7d" | "tradeCount7d" | "listedPct"
+>;
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
@@ -34,7 +37,7 @@ export function calculateMXMScore({
   offerCount = gift.offerCount || 0,
 }: {
   gift: GiftAsset;
-  collection: GiftCollection;
+  collection: MXMScoreCollection;
   itemStats: ItemStats;
   offerCount?: number;
 }): MXMScore {
@@ -50,8 +53,6 @@ export function calculateMXMScore({
   const dayVolume = logProgress(collection.volume24h, Math.max(10, (collection.floorPrice || 1) * 18));
   const demand = clamp(dayTrades * 0.38 + dayVolume * 0.42 + offers * 0.20);
 
-  // A flat market starts neutral. Positive moves increase the score, while a
-  // sharp one-day dump lowers it without pretending this is a price forecast.
   const momentum = clamp(50 + collection.change24h * 1.5);
 
   const listedPct = collection.itemCount > 0 ? (collection.listedCount / collection.itemCount) * 100 : collection.listedPct;
