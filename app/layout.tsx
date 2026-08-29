@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
+import "./product-polish.css";
 import { TelegramProvider } from "@/components/telegram-provider";
 import { AppShell } from "@/components/app-shell";
 

@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/auth";
 import { readResponseBytesLimited, toBodyArrayBuffer } from "@/lib/http-body";
 import { tonApiGet } from "@/lib/providers/tonapi-client";
+import { APP_VERSION } from "@/lib/app-version";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -14,6 +15,7 @@ const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
 const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
 const MEDIA_CANDIDATE_TIMEOUT_MS = 3_500;
+const MEDIA_REQUEST_TIMEOUT_MS = 10_000;
 
 type GiftMediaRow = {
   model_media_url: string | null;
@@ -32,6 +34,11 @@ type TonApiNftItem = {
   previews?: TonApiPreview[];
   trust?: string;
   verified?: boolean;
+};
+
+type CandidatePayload = {
+  bytes: Uint8Array;
+  contentType: string;
 };
 
 function trustedMediaHost(hostname: string) {
@@ -75,8 +82,8 @@ async function liveTonApiPreviewUrls(chainAddress: string | null) {
   if (!address) return [] as URL[];
   try {
     const item = await tonApiGet<TonApiNftItem>(`/v2/nfts/${encodeURIComponent(address)}`, {
-      timeoutMs: 5_000,
-      attempts: 2,
+      timeoutMs: 2_500,
+      attempts: 1,
       cacheTtlMs: 60_000,
       allowStaleOnFailure: true,
     });
@@ -91,7 +98,7 @@ async function liveTonApiPreviewUrls(chainAddress: string | null) {
   }
 }
 
-async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
+async function fetchCandidate(url: URL, signal: AbortSignal, accept: string, maxBytes: number): Promise<CandidatePayload | null> {
   const controller = new AbortController();
   const abortFromParent = () => controller.abort();
   if (signal.aborted) controller.abort();
@@ -107,7 +114,7 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
       cache: "no-store",
       headers: {
         accept,
-        "user-agent": "MXM-Market/0.64.9",
+        "user-agent": `MXM-Market/${APP_VERSION}`,
         referer: "https://fragment.com/",
       },
     });
@@ -115,7 +122,17 @@ async function fetchCandidate(url: URL, signal: AbortSignal, accept: string) {
       await response.body?.cancel().catch(() => undefined);
       return null;
     }
-    return response;
+
+    // Keep the candidate timeout and parent abort wiring alive until the body
+    // is fully consumed. Previously they were cleared as soon as headers
+    // arrived, which allowed a stalled CDN body to pin the route until Vercel
+    // killed the function.
+    const bytes = await readResponseBytesLimited(response, maxBytes);
+    if (!bytes) return null;
+    return {
+      bytes,
+      contentType: (response.headers.get("content-type") || "").toLowerCase(),
+    };
   } finally {
     clearTimeout(timeout);
     signal.removeEventListener("abort", abortFromParent);
@@ -134,19 +151,18 @@ async function previewResponse(candidates: Array<URL | null>, signal: AbortSigna
     if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
     seen.add(candidate.href);
     try {
-      const upstream = await fetchCandidate(candidate, signal, "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5");
+      const upstream = await fetchCandidate(
+        candidate,
+        signal,
+        "image/avif,image/webp,image/jpeg,image/png,image/*;q=0.9,*/*;q=0.5",
+        MAX_PREVIEW_BYTES,
+      );
       if (!upstream) continue;
-      const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-      if (!contentType.startsWith("image/")) {
-        await upstream.body?.cancel().catch(() => undefined);
-        continue;
-      }
-      const limited = await readResponseBytesLimited(upstream, MAX_PREVIEW_BYTES);
-      if (!limited) continue;
-      return new Response(toBodyArrayBuffer(limited), {
+      if (!upstream.contentType.startsWith("image/")) continue;
+      return new Response(toBodyArrayBuffer(upstream.bytes), {
         status: 200,
         headers: {
-          "content-type": contentType.split(";")[0] || "image/jpeg",
+          "content-type": upstream.contentType.split(";")[0] || "image/jpeg",
           "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
           "x-content-type-options": "nosniff",
         },
@@ -167,11 +183,14 @@ async function animationResponse(candidates: Array<URL | null>, signal: AbortSig
     if (!candidate || seen.has(candidate.href) || unavailableHosts.has(candidate.hostname)) continue;
     seen.add(candidate.href);
     try {
-      const upstream = await fetchCandidate(candidate, signal, "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5");
+      const upstream = await fetchCandidate(
+        candidate,
+        signal,
+        "application/json,application/x-tgsticker,application/gzip,application/octet-stream;q=0.9,*/*;q=0.5",
+        MAX_ANIMATION_SOURCE_BYTES,
+      );
       if (!upstream) continue;
-      const limited = await readResponseBytesLimited(upstream, MAX_ANIMATION_SOURCE_BYTES);
-      if (!limited) continue;
-      const compressed = Buffer.from(limited);
+      const compressed = Buffer.from(upstream.bytes);
 
       try {
         const isGzip = compressed.length >= 2 && compressed[0] === 0x1f && compressed[1] === 0x8b;
@@ -213,7 +232,7 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
   const variant = requestUrl.searchParams.get("variant") === "preview" ? "preview" : "animation";
   const size = requestUrl.searchParams.get("size") === "medium" ? "medium" : "large";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), MEDIA_REQUEST_TIMEOUT_MS);
 
   try {
     // Use a client-supplied canonical Fragment slug first because it is the
@@ -284,9 +303,13 @@ async function GETHandler(request: Request, { params }: { params: Promise<{ asse
     ], controller.signal);
     return animation || NextResponse.json({ error: "Анимация подарка не найдена" }, { status: 404 });
   } catch (error) {
-    const message = error instanceof Error && error.name === "AbortError" ? "Media timeout" : "Media fetch failed";
-    console.warn("gift media proxy", { assetId, variant, error });
-    return NextResponse.json({ error: message }, { status: 502 });
+    const timedOut = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
+    const message = timedOut ? "Media timeout" : "Media fetch failed";
+    console.warn("gift media proxy", { assetId, variant, timedOut, error });
+    return NextResponse.json({ error: message }, {
+      status: timedOut ? 504 : 502,
+      headers: timedOut ? { "retry-after": "2" } : undefined,
+    });
   } finally {
     clearTimeout(timeout);
   }

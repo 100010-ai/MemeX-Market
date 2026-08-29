@@ -1,0 +1,361 @@
+/* v0.79.5 product polish
+   This layer intentionally comes after globals.css. It consolidates the current
+   product surface without rewriting legacy/admin-specific styling. */
+
+:root {
+  --mxm-bg-deep: #06080b;
+  --mxm-surface: #0b0f14;
+  --mxm-surface-raised: #10151b;
+  --mxm-surface-hover: #151b22;
+  --mxm-stroke: rgba(255,255,255,.085);
+  --mxm-stroke-strong: rgba(255,255,255,.14);
+  --mxm-text-soft: #b2bac4;
+  --mxm-focus: rgba(166,181,255,.42);
+  --mxm-radius-control: 12px;
+  --mxm-radius-card: 18px;
+}
+
+html { font-size: 16px; }
+body {
+  background:
+    radial-gradient(80% 34% at 50% -12%, rgba(130,151,255,.055), transparent 68%),
+    var(--mxm-bg-deep);
+  line-height: 1.45;
+}
+
+button,
+a,
+input,
+select,
+textarea { -webkit-tap-highlight-color: transparent; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--mxm-focus);
+  outline-offset: 2px;
+}
+
+/* App shell */
+.mxm-shell-content { padding-bottom: 74px; }
+.mxm-topbar {
+  border-bottom: 1px solid rgba(255,255,255,.065);
+  background: rgba(6,8,11,.94);
+  box-shadow: 0 8px 28px rgba(0,0,0,.12);
+}
+.mxm-topbar::after { display: none; }
+
+.mxm-top-plus,
+.header-action {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--mxm-radius-control);
+  background: transparent;
+  color: #9aa3ad;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .12s ease;
+}
+.mxm-top-plus:hover,
+.header-action:hover { background: rgba(255,255,255,.04); color: #f5f7fa; }
+.mxm-top-plus:active,
+.header-action:active { transform: scale(.975); background: rgba(255,255,255,.055); }
+.header-action.is-active {
+  border-color: rgba(166,181,255,.20);
+  background: rgba(166,181,255,.085);
+  color: #dfe5ff;
+}
+
+.mxm-balance-pill {
+  min-width: 72px;
+  height: 40px;
+  justify-content: center;
+  border: 1px solid var(--mxm-stroke);
+  border-radius: var(--mxm-radius-control);
+  background: var(--mxm-surface);
+  padding: 0 11px;
+  color: #f1f4f8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  box-shadow: inset 0 1px rgba(255,255,255,.02);
+}
+
+.mxm-side-link {
+  min-height: 42px;
+  gap: 11px;
+  border-radius: 11px;
+  padding: 0 10px;
+  color: #8f98a2;
+  font-size: 12px;
+  font-weight: 560;
+}
+.mxm-side-link:hover { background: rgba(255,255,255,.035); color: #e9edf2; }
+.mxm-side-link.is-active {
+  background: rgba(166,181,255,.07);
+  color: #f7f8fb;
+}
+.mxm-side-link.is-active::before {
+  left: -16px;
+  width: 3px;
+  height: 20px;
+}
+
+.mxm-bottom-nav {
+  border-top: 1px solid rgba(255,255,255,.075);
+  background: rgba(7,9,12,.97);
+  box-shadow: 0 -12px 32px rgba(0,0,0,.20);
+}
+.mxm-bottom-link {
+  min-height: 59px;
+  gap: 4px;
+  border-radius: 10px;
+  color: #848d97;
+  font-size: 10px;
+  font-weight: 600;
+}
+.mxm-bottom-link.is-active {
+  background: rgba(255,255,255,.025) !important;
+  color: #f3f5f8;
+}
+.mxm-bottom-link.is-active::before {
+  top: 3px;
+  width: 24px;
+  height: 2px;
+  border-radius: 2px;
+}
+.mxm-bottom-icon { width: 38px; height: 25px; }
+
+/* Shared product typography */
+.mxm-compact-page-title { font-size: 15px; font-weight: 700; }
+.mxm-compact-muted { font-size: 11px; }
+.mxm-alert { font-size: 11px; }
+.mxm-section-head { min-height: 48px; font-size: 13px; }
+.mxm-section-head > span,
+.mxm-section-head > a { font-size: 11px; }
+
+/* Market */
+.mxm-market-page { width: 100%; }
+.mxm-market-head {
+  min-height: 48px;
+  gap: 10px;
+  border-bottom-color: rgba(255,255,255,.075);
+}
+.mxm-segment { min-height: 48px; gap: 25px; }
+.mxm-segment-button {
+  min-height: 48px;
+  gap: 7px;
+  color: #89929c;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -.012em;
+}
+.mxm-segment-button.is-active::after { height: 2px; }
+
+.mxm-market-searchbar {
+  height: 48px;
+  border: 1px solid var(--mxm-stroke);
+  border-radius: 14px;
+  background: var(--mxm-surface);
+  padding: 0 11px;
+  box-shadow: inset 0 1px rgba(255,255,255,.018);
+}
+.mxm-market-searchbar:focus-within {
+  border-color: rgba(166,181,255,.26);
+  background: #0d1117;
+  box-shadow: 0 0 0 3px rgba(166,181,255,.045);
+}
+.mxm-market-searchbar input { font-size: 14px !important; }
+.mxm-clear-search {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.mxm-clear-search:hover { background: rgba(255,255,255,.04); color: white; }
+.mxm-feed-link {
+  height: 34px;
+  border-left-color: rgba(255,255,255,.08);
+  padding-left: 11px;
+  color: #aeb6bf;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mxm-view-tabs { border-bottom-color: rgba(255,255,255,.075); }
+.mxm-tab-chip {
+  height: 39px;
+  color: #848d97;
+  font-size: 11px;
+  font-weight: 620;
+}
+.mxm-tab-chip.is-active { color: #f5f7fa; }
+.mxm-tab-chip.is-active::after { height: 2px; }
+
+.mxm-filter-row { min-height: 42px; }
+.mxm-filter-chip {
+  min-height: 38px;
+  color: #9ca5af;
+  font-size: 11px;
+  font-weight: 590;
+}
+.mxm-filter-chip.is-active { color: #e9edff; }
+
+.mxm-market-tools {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+}
+.mxm-market-filter-trigger {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--mxm-stroke);
+  border-radius: 11px;
+  background: var(--mxm-surface);
+  padding: 0 11px;
+  color: #c4cad1;
+  font-size: 11px;
+  font-weight: 650;
+}
+.mxm-market-filter-trigger:hover { border-color: var(--mxm-stroke-strong); background: var(--mxm-surface-raised); color: white; }
+.mxm-market-filter-trigger.is-active { border-color: rgba(166,181,255,.25); color: #eef1ff; }
+.mxm-market-filter-trigger b {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(166,181,255,.11);
+  color: #dfe5ff;
+  font-size: 9px;
+}
+.mxm-market-result-count {
+  color: #78828c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.mxm-market-clear {
+  margin-left: auto;
+  color: #aeb6bf;
+  font-size: 10px;
+  font-weight: 600;
+}
+.mxm-market-clear:hover { color: white; }
+
+.mxm-active-filters > button,
+.mxm-inline-result {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--mxm-stroke);
+  border-radius: 10px;
+  background: rgba(255,255,255,.022);
+  padding: 0 9px;
+  color: #b8c0c8;
+  font-size: 10px;
+}
+
+.mxm-market-meta,
+.mxm-reset-filters { font-size: 10px; }
+
+/* Gift cards: stronger hierarchy without turning every item into a floating tile. */
+.market-grid { gap: 20px 12px; }
+.mxm-gift-card { contain-intrinsic-size: 320px; }
+.mxm-gift-cover {
+  border-radius: var(--mxm-radius-card);
+  background: #090c10;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.075), 0 8px 22px rgba(0,0,0,.10);
+}
+.mxm-gift-number,
+.mxm-gift-offers {
+  min-height: 23px;
+  border-radius: 8px;
+  background: rgba(5,7,10,.70);
+  padding: 0 7px;
+  font-size: 9px;
+  font-weight: 650;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.mxm-gift-card p[class*="text-[12px]"] { font-size: 13px !important; }
+.mxm-gift-card div[class*="text-[9px]"] { font-size: 10px !important; }
+.mxm-gift-card a[class*="text-[11px]"] { font-size: 12px !important; }
+.mxm-gift-cart {
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #89929c;
+}
+.mxm-gift-cart:hover,
+.mxm-gift-cart:active { border-color: var(--mxm-stroke); background: rgba(255,255,255,.04); }
+.mxm-gift-cart.is-active {
+  border-color: rgba(166,181,255,.20);
+  background: rgba(166,181,255,.08);
+  color: #dce3ff;
+}
+
+/* Sheets and selectors */
+.mxm-select-overlay { background: rgba(0,0,0,.64); }
+.mxm-select-drawer {
+  border-top-color: rgba(255,255,255,.10);
+  background: #090c10;
+}
+.mxm-select-header { min-height: 70px; }
+.mxm-select-close {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--mxm-stroke);
+  border-radius: 11px;
+}
+.mxm-select-option {
+  min-height: 54px;
+  color: #c9cfd6;
+  font-size: 12px;
+}
+
+/* Inputs across user-facing pages. Admin controls retain their own density. */
+body:not(:has(.control-root)) .mxm-input {
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+@media (min-width: 900px) {
+  .mxm-shell-content { padding-bottom: 0; }
+  .mxm-market-page { max-width: 1160px; }
+  .market-grid { gap: 24px 16px; }
+}
+
+@media (max-width: 520px) {
+  html { font-size: 16px; }
+  .mxm-market-page { max-width: none; }
+  .mxm-market-head { margin-bottom: 12px !important; }
+  .mxm-segment { gap: 18px; }
+  .mxm-segment-button { font-size: 12px; }
+  .mxm-market-searchbar { margin-bottom: 12px !important; }
+  .mxm-filter-chip { font-size: 10.5px; }
+  .market-grid { gap: 18px 10px; }
+  .mxm-gift-cover { border-radius: 16px; }
+}
+
+@media (max-width: 360px) {
+  .mxm-balance-pill { min-width: 62px; padding-inline: 8px; }
+  .mxm-top-plus,
+  .header-action { width: 38px; height: 38px; }
+  .mxm-bottom-link { font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mxm-top-plus,
+  .header-action,
+  .mxm-gift-cover,
+  .mxm-gift-cart { transition: none !important; }
+}

@@ -49,14 +49,22 @@ export async function consumeRateLimit(key: string, limit: number, windowSeconds
 }
 
 export async function enforceRateLimit(request: Request, scope: string, actor: string | number, limit: number, windowSeconds: number) {
-  // The actor-only bucket prevents a client from resetting its quota by
-  // rotating/spoofing forwarded IPs. The actor+IP bucket remains useful for
-  // incident analysis and constrains one device/network path independently.
-  const [actorAllowed, actorIpAllowed] = await Promise.all([
-    consumeRateLimit(securityKey(scope, "actor", actor), limit, windowSeconds),
-    consumeRateLimit(securityKey(scope, "actor-ip", actor, requestIp(request)), limit, windowSeconds),
-  ]);
-  return actorAllowed && actorIpAllowed;
+  const supabase = getSupabaseAdmin();
+  const actorKey = securityKey(scope, "actor", actor);
+  const actorIpKey = securityKey(scope, "actor-ip", actor, requestIp(request));
+
+  // Keep both buckets in one PostgREST request and one DB transaction. The
+  // previous Promise.all performed two independent authenticated RPC calls;
+  // a transient failure in either request rejected the whole mutation after
+  // the other bucket had already been consumed.
+  const { data, error } = await supabase.rpc("consume_rate_limit_pair_v0795", {
+    p_actor_key: actorKey,
+    p_actor_ip_key: actorIpKey,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 export function validUuidLike(value: string) {
