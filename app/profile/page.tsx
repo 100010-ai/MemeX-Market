@@ -10,23 +10,53 @@ import { money } from "@/lib/format";
 import type { Achievement, ProfileBadge, Reputation } from "@/lib/types";
 
 type TraderStats = {
-  tradeCount: number; tradeVolume: number; giftTradeVolume: number; coinTradeVolume: number;
-  closedTrades: number; winningTrades: number; winRate: number; activeDays: number; lastActivityAt: string | null;
-  collectorScore: number; collectorRank: number | null; giftCount: number; uniqueCollections: number; rareGiftCount: number;
-  avgRarityScore: number; collectionValue: number;
+  tradeCount: number;
+  tradeVolume: number;
+  giftTradeVolume: number;
+  coinTradeVolume: number;
+  closedTrades: number;
+  winningTrades: number;
+  winRate: number;
+  activeDays: number;
+  lastActivityAt: string | null;
+  collectorScore: number;
+  collectorRank: number | null;
+  giftCount: number;
+  uniqueCollections: number;
+  rareGiftCount: number;
+  avgRarityScore: number;
+  collectionValue: number;
 };
-type Meta = { reputation: Reputation; trader: TraderStats; achievements: Achievement[]; appearance: { equippedProfileFrame: string | null; creatorVerified: boolean; badges: ProfileBadge[] } };
+
+type Meta = {
+  reputation: Reputation;
+  trader: TraderStats;
+  achievements: Achievement[];
+  achievementCount: number;
+  appearance: { equippedProfileFrame: string | null; creatorVerified: boolean; badges: ProfileBadge[] };
+};
 
 export default function ProfilePage() {
   const { profile } = useTelegramProfile();
+  const profileId = profile?.id || null;
   const [meta, setMeta] = useState<Meta | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+
   useEffect(() => {
-    if (!profile) return;
+    if (!profileId) return;
+    const controller = new AbortController();
     setMetaError(null);
-    void apiFetch<Meta>("/api/profile/meta", { cacheMs: 20_000 }).then(setMeta).catch((cause) => setMetaError(cause instanceof Error ? cause.message : "Не удалось загрузить данные профиля"));
-  }, [profile, retryKey]);
+    void apiFetch<Meta>("/api/profile/meta", { cacheMs: 20_000, signal: controller.signal })
+      .then((value) => {
+        if (!controller.signal.aborted) setMeta(value);
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted) setMetaError(cause instanceof Error ? cause.message : "Не удалось загрузить данные профиля");
+      });
+    return () => controller.abort();
+  }, [profileId, retryKey]);
+
   if (!profile) return null;
   const trader = meta?.trader;
 
@@ -72,7 +102,7 @@ export default function ProfilePage() {
       <ProfileAction href="/referrals" icon={<UsersRound size={16} />} title="Рефералы" detail="Приглашения" />
     </section>
 
-    {meta?.achievements.length ? <section className="mt-4"><div className="mb-2 flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-medium"><Award size={15} />Достижения</h2><Link href="/progression" className="text-[10px] text-[var(--accent)]">Все · {meta.achievements.length}</Link></div><div className="grid gap-2 sm:grid-cols-2">{meta.achievements.slice(0, 4).map((a) => <div key={a.key} className="mxm-profile-achievement"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[12px] bg-[var(--panel-2)] text-[var(--accent)]"><Award size={13} /></span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{a.title}</p><p className="mt-0.5 line-clamp-1 text-[9px] text-[var(--muted)]">{a.description}</p></div>{a.xpReward ? <span className="shrink-0 text-[9px] text-[var(--accent)]">+{a.xpReward} XP</span> : null}</div>)}</div></section> : null}
+    {meta?.achievements.length ? <section className="mt-4"><div className="mb-2 flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-medium"><Award size={15} />Достижения</h2><Link href="/progression" className="text-[10px] text-[var(--accent)]">Все · {meta.achievementCount}</Link></div><div className="grid gap-2 sm:grid-cols-2">{meta.achievements.slice(0, 4).map((a) => <div key={a.key} className="mxm-profile-achievement"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[12px] bg-[var(--panel-2)] text-[var(--accent)]"><Award size={13} /></span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{a.title}</p><p className="mt-0.5 line-clamp-1 text-[9px] text-[var(--muted)]">{a.description}</p></div>{a.xpReward ? <span className="shrink-0 text-[9px] text-[var(--accent)]">+{a.xpReward} XP</span> : null}</div>)}</div></section> : null}
 
     <Link href="/about" className="mxm-card mt-4 flex items-center gap-3 p-3"><ShieldCheck size={15} /><div className="min-w-0 flex-1"><p className="text-xs font-medium">О MXM</p></div><ChevronRight size={14} className="text-[var(--muted)]" /></Link>
   </div>;
