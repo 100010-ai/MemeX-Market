@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { ChevronRight, CircleHelpRound, Palette, Settings2, UserRound, X } from "lucide-react";
+import { ChevronRight, CircleHelp, Palette, Settings2, UserRound, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile-avatar";
 
 export function ProfileMenuSheet({
@@ -54,7 +54,7 @@ export function ProfileMenuSheet({
   const items = [
     { href: "/profile", label: "Настройки", note: "Профиль, аккаунт и параметры", icon: Settings2 },
     { href: "/profile/customize", label: "Оформление", note: "Рамки, значки и внешний вид", icon: Palette },
-    { href: "/support", label: "Помощь", note: "Поддержка и ответы по MXM", icon: CircleHelpRound },
+    { href: "/support", label: "Помощь", note: "Поддержка и ответы по MXM", icon: CircleHelp },
   ] as const;
 
   return <div
