@@ -3,7 +3,6 @@ import { fragmentGiftMedia, telegramCollectibleSlug } from "@/lib/fragment-gifts
 import { tonApiGet } from "@/lib/providers/tonapi-client";
 
 type JsonRecord = Record<string, unknown>;
-
 type TonPreview = { resolution?: string; url?: string };
 type TonPrice = {
   currency_type?: "native" | "extra_currency" | "jetton" | "fiat" | string;
@@ -35,9 +34,7 @@ type TonItem = {
   collection?: { address?: string; name?: string; description?: string };
   sale?: TonSale;
 };
-
 type MediaKind = "static" | "animated" | "video";
-
 type ParsedItem = {
   address: string;
   collectionAddress: string;
@@ -53,7 +50,14 @@ type ParsedItem = {
   model: string;
   symbol: string;
   backdrop: string;
+  chainVerified: boolean;
   metadata: JsonRecord;
+};
+type CollectionRow = {
+  address: string;
+  next_offset: number | null;
+  name?: string | null;
+  description?: string | null;
 };
 
 export type TonApiGiftSyncResult = {
@@ -69,23 +73,29 @@ export type TonApiGiftSyncResult = {
   errors?: string[];
 };
 
-// A real exported Telegram Gift collection used only as a bootstrap anchor.
-// The importer still validates the live TonAPI metadata before trusting it.
+// Canonical raw workchain addresses. Friendly EQ aliases encode the same accounts,
+// but using both representations in the catalogue created duplicate collection rows.
 const BOOTSTRAP_COLLECTIONS = [
-  { address: "EQBG-g6ahkAUGWpefWbx-D_9sQ8oWbvy6puuq78U2c4NUDFS", name: "Plush Pepes" },
-  { address: "EQD9ikZq6xPgKjzmdBG0G0S80RvUJjbwgHrPZXDKc_wsE84w", name: "Durov's Caps" },
-  { address: "EQC4XEulxb05Le5gF6esMtDWT5XZ6tlzlMBQGNsqffxpdC5U", name: "Heart Lockets" },
-  { address: "EQDRrfw5pgIC4e6NafUAx52Z9Ym6q1k26xxaXR_qx0LKJJ7D", name: "Light Swords" },
-  { address: "EQCeTSJOPXP_SSvOjILY-kui4bGHUmsa-U7TXP4DjUANTl4s", name: "Jolly Chimps" },
-  { address: "EQATuUGdvrjLvTWE5ppVFOVCqU2dlCLUnKTsu0n1JYm9la10", name: "Scared Cats" },
-  { address: "EQCNsmpHqRSY_Dxnyh6P0MMO7zcABf8sVvG0wr245pBzO3B3", name: "Voodoo Dolls" },
-  { address: "EQD6mH9bwbn6S3M_tCRWOvqAIW8M34kRwbI01niGLRPeDPsl", name: "Spy Agarics" },
-  { address: "EQA4i58iuS9DUYRtUZ97sZo5mnkbiYUBpWXQOe3dEUCcP1W8", name: "Precious Peaches" },
-  { address: "EQA_kx2WOydXWzYUYO1DP80aHl4yhlLGYhxjPAtRPNjMgfYM", name: "Tama Gadgets" },
-  { address: "EQCyAMkb6bNyNlKPH0tJbubk1VVjASqyq9sZwkJ8AbxMkxxU", name: "Trapped Hearts" },
+  { address: "0:46fa0e9a864014196a5e7d66f1f83ffdb10f2859bbf2ea9baeabbf14d9ce0d50", name: "Plush Pepes" },
+  { address: "0:fd8a466aeb13e02a3ce67411b41b44bcd11bd42636f0807acf6570ca73fc2c13", name: "Durov's Caps" },
+  { address: "0:b85c4ba5c5bd392dee6017a7ac32d0d64f95d9ead97394c05018db2a7dfc6974", name: "Heart Lockets" },
+  { address: "0:d1adfc39a60202e1ee8d69f500c79d99f589baab5936eb1c5a5d1feac742ca24", name: "Light Swords" },
+  { address: "0:9e4d224e3d73ff492bce8c82d8fa4ba2e1b187526b1af94ed35cfe038d400d4e", name: "Jolly Chimps" },
+  { address: "0:13b9419dbeb8cbbd3584e69a5514e542a94d9d9422d49ca4ecbb49f52589bd95", name: "Scared Cats" },
+  { address: "0:8db26a47a91498fc3c67ca1e8fd0c30eef370005ff2c56f1b4c2bdb8e690733b", name: "Voodoo Dolls" },
+  { address: "0:fa987f5bc1b9fa4b733fb424563afa80216f0cdf8911c1b234d678862d13de0c", name: "Spy Agarics" },
+  { address: "0:388b9f22b92f4351846d519f7bb19a399a791b898501a565d039eddd11409c3f", name: "Precious Peaches" },
+  { address: "0:3f931d963b27575b361460ed433fcd1a1e5e328652c6621c633c0b513cd8cc81", name: "Tama Gadgets" },
+  { address: "0:b200c91be9b37236528f1f4b496ee6e4d55563012ab2abdb19c2427c01bc4c93", name: "Trapped Hearts" },
 ] as const;
 const BOOTSTRAP_COLLECTION_SET = new Set<string>(BOOTSTRAP_COLLECTIONS.map((item) => item.address));
 const BOOTSTRAP_COLLECTION_NAME = new Map<string, string>(BOOTSTRAP_COLLECTIONS.map((item) => [item.address, item.name]));
+const BOOTSTRAP_NAME_ADDRESS = new Map<string, string>(BOOTSTRAP_COLLECTIONS.map((item) => [normalizeCollectionName(item.name), item.address]));
+const EXPLICIT_REJECTED_COLLECTIONS = new Set<string>([
+  // Third-party HeadNFTs/OnlyGames collection that advertises future Telegram
+  // conversion/status integration, not an official Telegram collectible.
+  "0:4b1448be92504e94173494c164f267aeabfde5e40ec8b367028d2d153604a139",
+]);
 
 function str(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -95,16 +105,52 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
 
-function isTelegramGiftCollection(collection: TonCollection) {
-  if (!collection?.address || collection.trust === "blacklist") return false;
-  const metadata = asRecord(collection.metadata) || {};
+function normalizeCollectionName(value: unknown) {
+  return str(value).toLowerCase().replace(/’/g, "'").replace(/\s+/g, " ");
+}
+
+function collectionMetadata(collection: TonCollection) {
+  return asRecord(collection.metadata) || {};
+}
+
+function hasNegativeCollectionSignal(collection: TonCollection) {
+  if (!collection?.address || EXPLICIT_REJECTED_COLLECTIONS.has(collection.address) || collection.trust === "blacklist") return true;
+  const metadata = collectionMetadata(collection);
   const name = str(metadata.name);
   const description = str(metadata.description);
   const text = `${name}\n${description}`.toLowerCase();
-  // These addresses are a maintained registry of real exported Telegram Gift
-  // collections. Items are still validated independently before insertion.
-  if (BOOTSTRAP_COLLECTION_SET.has(collection.address)) return true;
+  if (name.toLowerCase().includes("[staging]")) return true;
+  return /(hope.{0,120}soon|will be able to|convert.{0,160}(telegram )?gifts?|tribute to telegram gifts?|inspired by telegram.{0,80}gifts?|for our app.{0,120}(telegram|status)|our application.{0,120}(telegram|status))/i.test(text);
+}
+
+function canonicalNameMatchesAddress(collection: TonCollection) {
+  const metadata = collectionMetadata(collection);
+  const name = normalizeCollectionName(metadata.name);
+  const canonical = BOOTSTRAP_NAME_ADDRESS.get(name);
+  return !canonical || canonical === collection.address;
+}
+
+function hasTelegramGiftText(collection: TonCollection) {
+  const metadata = collectionMetadata(collection);
+  const text = `${str(metadata.name)}\n${str(metadata.description)}`.toLowerCase();
   return text.includes("telegram") && (text.includes("gift") || text.includes("collectible"));
+}
+
+// Existing active rows are still allowed to refresh when their metadata passes the
+// rejection/canonical guards. This avoids suddenly deleting legitimate special
+// collections that predate the stronger discovery policy.
+function isImportableCollection(collection: TonCollection) {
+  if (!collection?.address || hasNegativeCollectionSignal(collection) || !canonicalNameMatchesAddress(collection)) return false;
+  if (BOOTSTRAP_COLLECTION_SET.has(collection.address)) return true;
+  return hasTelegramGiftText(collection);
+}
+
+// New automatic discovery is intentionally stricter than legacy refresh. Free-text
+// metadata is forgeable; a non-bootstrap collection must also be TonAPI-whitelisted.
+function isDiscoveryCandidate(collection: TonCollection) {
+  if (!isImportableCollection(collection)) return false;
+  if (BOOTSTRAP_COLLECTION_SET.has(collection.address)) return true;
+  return collection.trust === "whitelist";
 }
 
 function highestPreview(previews: TonPreview[] | undefined) {
@@ -140,8 +186,6 @@ function mediaKindFrom(metadata: JsonRecord, url: string): MediaKind {
   const clean = url.split("?")[0].toLowerCase();
   if (/video\/(mp4|webm|quicktime|ogg)/.test(hint) || /\.(mp4|webm|mov|m4v|ogv)$/.test(clean)) return "video";
   if (/lottie|tgsticker|application\/json/.test(hint) || /\.(json|tgs)$/.test(clean)) return "animated";
-  // GIF/APNG/animated WebP animate natively in <img>, so they intentionally
-  // stay in the static renderer instead of being parsed as Lottie.
   return "static";
 }
 
@@ -258,9 +302,10 @@ function isBurnedOwner(address: unknown) {
 
 function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | null {
   if (!item?.address || item.trust === "blacklist" || item.verified === false || isBurnedOwner(item.owner?.address)) return null;
+  if (!isImportableCollection(collection)) return null;
   const metadata = asRecord(item.metadata) || {};
-  const collectionMetadata = asRecord(collection.metadata) || {};
-  const collectionName = str(collectionMetadata.name || item.collection?.name);
+  const collectionMeta = collectionMetadata(collection);
+  const collectionName = str(collectionMeta.name || item.collection?.name);
   const itemName = str(metadata.name);
   const identity = parseGiftIdentity(itemName, collectionName, item.index);
   const tonApiMedia = metadataMedia(metadata, item.previews);
@@ -268,21 +313,13 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
 
   const rows = traitRows(metadata);
   const descriptionTraits = traitsFromDescription(metadata);
-  const collectionSignal = isTelegramGiftCollection(collection);
-  const descriptionSignal = Boolean(descriptionTraits.model && descriptionTraits.backdrop && descriptionTraits.symbol);
-  if (!collectionSignal && !descriptionSignal) return null;
   const model = traitValue(rows, ["model", "appearance", "модель"]) || descriptionTraits.model;
   const symbol = traitValue(rows, ["symbol", "pattern", "icon", "символ"]) || descriptionTraits.symbol;
   const backdrop = traitValue(rows, ["backdrop", "background", "фон"]) || descriptionTraits.backdrop;
-  // The fallback parser above reads the real on-chain metadata description
-  // used by exported Telegram Gifts (appearance / background / icons). If the
-  // indexer exposes neither structured attributes nor that description, skip.
   if (!model || !symbol || !backdrop) return null;
 
-  const telegramSlug = findTelegramSlug(metadata)
-    || telegramCollectibleSlug(null, identity.baseName, identity.number);
+  const telegramSlug = findTelegramSlug(metadata) || telegramCollectibleSlug(null, identity.baseName, identity.number);
   const fragmentMedia = telegramSlug ? fragmentGiftMedia(telegramSlug) : null;
-
   return {
     address: item.address,
     collectionAddress: collection.address,
@@ -291,10 +328,6 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
     baseName: identity.baseName,
     number: identity.number,
     telegramSlug,
-    // Fragment publishes the complete Telegram collectible render: the model,
-    // the real backdrop and the repeating symbol pattern. TonAPI previews are
-    // kept only as a validation/source fallback because many of them contain
-    // the transparent model layer without Telegram's backdrop.
     mediaUrl: fragmentMedia?.animation || tonApiMedia.mediaUrl,
     previewUrl: fragmentMedia?.large || tonApiMedia.previewUrl,
     mediaKind: fragmentMedia ? "animated" : tonApiMedia.mediaKind,
@@ -302,6 +335,7 @@ function parseTonItem(item: TonItem, collection: TonCollection): ParsedItem | nu
     model,
     symbol,
     backdrop,
+    chainVerified: item.verified === true,
     metadata,
   };
 }
@@ -320,9 +354,19 @@ async function tonapi<T>(path: string): Promise<T> {
   return tonApiGet<T>(path, { cacheTtlMs: path.includes("/items?") ? 12_000 : 60_000, allowStaleOnFailure: true });
 }
 
+async function rejectCollection(address: string, reason: string) {
+  const supabase = getSupabaseAdmin();
+  const rejected = await supabase.from("tonapi_gift_collection_rejections_v221").upsert({
+    address,
+    reason: reason.slice(0, 1000),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "address" });
+  if (rejected.error) throw rejected.error;
+}
+
 async function upsertCollection(collection: TonCollection) {
-  if (!isTelegramGiftCollection(collection)) return false;
-  const metadata = asRecord(collection.metadata) || {};
+  if (!isDiscoveryCandidate(collection)) return false;
+  const metadata = collectionMetadata(collection);
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("tonapi_gift_collections").upsert({
     address: collection.address,
@@ -386,19 +430,29 @@ async function ensureBootstrapCollections(limit: number = BOOTSTRAP_COLLECTIONS.
   return rows.length;
 }
 
-async function importCollectionItems(collectionRow: { address: string; next_offset: number | null }, maxItems: number) {
+function collectionFromRowAndItems(collectionRow: CollectionRow, rawItems: TonItem[]): TonCollection {
+  const firstCollection = rawItems.find((item) => item.collection?.address)?.collection;
+  return {
+    address: collectionRow.address,
+    metadata: {
+      name: firstCollection?.name || collectionRow.name || BOOTSTRAP_COLLECTION_NAME.get(collectionRow.address) || "",
+      description: firstCollection?.description || collectionRow.description || "",
+    },
+  };
+}
+
+async function importCollectionItems(collectionRow: CollectionRow, maxItems: number) {
   let offset = Math.max(0, Number(collectionRow.next_offset || 0));
   const limit = Math.max(1, Math.min(1000, maxItems));
   const payload = await tonapi<{ nft_items?: TonItem[] }>(`/v2/nfts/collections/${encodeURIComponent(collectionRow.address)}/items?limit=${limit}&offset=${offset}`);
   const rawItems = Array.isArray(payload.nft_items) ? payload.nft_items : [];
-  const firstCollection = rawItems.find((item) => item.collection?.address)?.collection;
-  const collection: TonCollection = {
-    address: collectionRow.address,
-    metadata: {
-      name: firstCollection?.name || BOOTSTRAP_COLLECTION_NAME.get(collectionRow.address) || "",
-      description: firstCollection?.description || "",
-    },
-  };
+  const collection = collectionFromRowAndItems(collectionRow, rawItems);
+
+  if (!isImportableCollection(collection)) {
+    await rejectCollection(collectionRow.address, "Rejected by source-side Telegram Gift validation");
+    return { seen: rawItems.length, upserted: 0, skipped: rawItems.length };
+  }
+
   const parsed = rawItems.map((item) => parseTonItem(item, collection)).filter((item): item is ParsedItem => Boolean(item));
   const now = new Date().toISOString();
   const rows = parsed.map((item) => ({
@@ -421,9 +475,6 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     symbol_is_video: false,
     backdrop_name: item.backdrop,
     backdrop_rarity_per_mille: perMille(parsed, "backdrop", item.backdrop),
-    // TonAPI gives the already-rendered NFT preview. These technical color
-    // fields are not rendered for source=tonapi and therefore are not exposed
-    // as Telegram trait data.
     backdrop_center_color: 0,
     backdrop_edge_color: 0,
     backdrop_symbol_color: 0,
@@ -443,24 +494,19 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     symbol_media_url: null,
     chain_nft_address: item.address,
     chain_collection_address: item.collectionAddress,
-    chain_verified: true,
+    chain_verified: item.chainVerified,
     chain_metadata: item.metadata,
   }));
 
   const supabase = getSupabaseAdmin();
   let upserted = 0;
   if (rows.length) {
-    // Upsert one-by-one only when a base_name + gift_number identity already
-    // exists from Bot API; otherwise batch insert is substantially faster.
     const { error } = await supabase.from("gift_assets").upsert(rows, { onConflict: "telegram_name" });
     if (error) {
       for (const row of rows) {
         const existing = await supabase.from("gift_assets").select("id,catalog_source").eq("base_name", row.base_name).eq("gift_number", row.gift_number).maybeSingle();
         if (existing.error) throw existing.error;
         if (existing.data) {
-          // If Bot API already knows this exact collectible, keep its official
-          // Telegram sticker file/media fields. Replacing an animated TGS with
-          // TonAPI's rendered PNG preview would silently kill the animation.
           const preserveTelegramMedia = existing.data.catalog_source !== "tonapi";
           const update = await supabase.from("gift_assets").update({
             ...(!preserveTelegramMedia ? {
@@ -473,7 +519,7 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
             resale_seen_at: row.resale_seen_at,
             chain_nft_address: row.chain_nft_address,
             chain_collection_address: row.chain_collection_address,
-            chain_verified: true,
+            chain_verified: row.chain_verified,
             chain_metadata: row.chain_metadata,
             is_from_blockchain: true,
             last_seen_at: now,
@@ -499,56 +545,43 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
       .select("id,chain_nft_address,base_name")
       .in("chain_nft_address", priced.map((item) => item.address));
     if (assetLookup.error) throw assetLookup.error;
-    {
-      const assetRows = (assetLookup.data || []) as Array<{ id: string; chain_nft_address: string | null; base_name: string | null }>;
-      const byAddress = new Map<string, { id: string; chain_nft_address: string | null; base_name: string | null }>(assetRows.map((row) => [String(row.chain_nft_address), row]));
-      const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
-      const assetIds = [...byAddress.values()].map((asset) => String(asset.id));
-      const recentResult = assetIds.length
-        ? await supabase
-          .from("gift_price_observations")
-          .select("asset_id,price_ton,observed_at")
-          .in("asset_id", assetIds)
-          .eq("source", "tonapi")
-          .eq("kind", "listing")
-          .gte("observed_at", recentCutoff)
-          .order("observed_at", { ascending: false })
-        : { data: [], error: null };
-      const recentPrice = new Map<string, number>();
-      if (!recentResult.error) {
-        for (const row of recentResult.data || []) {
-          const assetId = String(row.asset_id || "");
-          if (!assetId || recentPrice.has(assetId)) continue;
-          const value = Number(row.price_ton);
-          if (Number.isFinite(value) && value > 0) recentPrice.set(assetId, value);
-        }
-      } else {
-        throw recentResult.error;
-      }
-
-      const observations = priced.flatMap((item) => {
-        const asset = byAddress.get(item.address);
-        if (!asset || item.resalePriceTon == null) return [];
-        const assetId = String(asset.id);
-        const previous = recentPrice.get(assetId);
-        // Keep enough history for charts/audit without inserting an identical
-        // row on every bounded catalogue refresh.
-        if (previous != null && Math.abs(previous - item.resalePriceTon) < 1e-9) return [];
-        return [{
-          asset_id: asset.id,
-          base_name: String(asset.base_name || item.baseName),
-          source: "tonapi",
-          kind: "listing",
-          currency: "TON",
-          price_ton: item.resalePriceTon,
-          source_ref: item.address,
-          observed_at: now,
-        }];
-      });
-      if (observations.length) {
-        const observationResult = await supabase.from("gift_price_observations").insert(observations);
-        if (observationResult.error) throw observationResult.error;
-      }
+    const assetRows = (assetLookup.data || []) as Array<{ id: string; chain_nft_address: string | null; base_name: string | null }>;
+    const byAddress = new Map(assetRows.map((row) => [String(row.chain_nft_address), row]));
+    const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+    const assetIds = assetRows.map((asset) => String(asset.id));
+    const recentResult = assetIds.length
+      ? await supabase.from("gift_price_observations").select("asset_id,price_ton,observed_at")
+        .in("asset_id", assetIds).eq("source", "tonapi").eq("kind", "listing")
+        .gte("observed_at", recentCutoff).order("observed_at", { ascending: false })
+      : { data: [], error: null };
+    if (recentResult.error) throw recentResult.error;
+    const recentPrice = new Map<string, number>();
+    for (const row of recentResult.data || []) {
+      const assetId = String(row.asset_id || "");
+      if (!assetId || recentPrice.has(assetId)) continue;
+      const value = Number(row.price_ton);
+      if (Number.isFinite(value) && value > 0) recentPrice.set(assetId, value);
+    }
+    const observations = priced.flatMap((item) => {
+      const asset = byAddress.get(item.address);
+      if (!asset || item.resalePriceTon == null) return [];
+      const assetId = String(asset.id);
+      const previous = recentPrice.get(assetId);
+      if (previous != null && Math.abs(previous - item.resalePriceTon) < 1e-9) return [];
+      return [{
+        asset_id: asset.id,
+        base_name: String(asset.base_name || item.baseName),
+        source: "tonapi",
+        kind: "listing",
+        currency: "TON",
+        price_ton: item.resalePriceTon,
+        source_ref: item.address,
+        observed_at: now,
+      }];
+    });
+    if (observations.length) {
+      const observationResult = await supabase.from("gift_price_observations").insert(observations);
+      if (observationResult.error) throw observationResult.error;
     }
   }
 
@@ -561,13 +594,11 @@ async function importCollectionItems(collectionRow: { address: string; next_offs
     updated_at: now,
   }).eq("address", collection.address);
   if (collectionState.error) throw collectionState.error;
-
   return { seen: rawItems.length, upserted, skipped: rawItems.length - parsed.length };
 }
 
 async function recalculateCollectionRarity(collectionAddress: string) {
-  const supabase = getSupabaseAdmin();
-  const result = await supabase.rpc("recalculate_tonapi_collection_rarity_v040", { p_collection_address: collectionAddress });
+  const result = await getSupabaseAdmin().rpc("recalculate_tonapi_collection_rarity_v040", { p_collection_address: collectionAddress });
   if (result.error) throw result.error;
 }
 
@@ -596,9 +627,8 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
 
     const maxCollections = Math.max(1, Math.min(24, Math.floor(options.maxCollections ?? (options.bootstrapOnly ? 3 : (process.env.TONAPI_KEY?.trim() ? 10 : 6)))));
     const itemsPerCollection = Math.max(8, Math.min(1000, Math.floor(options.itemsPerCollection ?? (options.bootstrapOnly ? 160 : 300))));
-    const collectionResult = await supabase
-      .from("tonapi_gift_collections")
-      .select("address,next_offset")
+    const collectionResult = await supabase.from("tonapi_gift_collections")
+      .select("address,next_offset,name,description")
       .eq("active", true)
       .order("last_synced_at", { ascending: true, nullsFirst: true })
       .limit(maxCollections);
@@ -606,7 +636,12 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
 
     for (const row of collectionResult.data || []) {
       try {
-        const imported = await importCollectionItems({ address: String(row.address), next_offset: Number(row.next_offset || 0) }, itemsPerCollection);
+        const imported = await importCollectionItems({
+          address: String(row.address),
+          next_offset: Number(row.next_offset || 0),
+          name: row.name == null ? null : String(row.name),
+          description: row.description == null ? null : String(row.description),
+        }, itemsPerCollection);
         collectionsProcessed += 1;
         itemsSeen += imported.seen;
         assetsUpserted += imported.upserted;
@@ -621,11 +656,7 @@ export async function syncTonApiGiftCatalog(options: { discoverPages?: number; m
       }
     }
 
-    // Do not report a green global sync when every TonAPI collection failed.
-    // That used to make the market retry the same slow bootstrap on every GET.
-    if (collectionsProcessed === 0 && collectionsFailed > 0) {
-      throw new Error(errors[0] || "TonAPI collection import failed");
-    }
+    if (collectionsProcessed === 0 && collectionsFailed > 0) throw new Error(errors[0] || "TonAPI collection import failed");
     const partialError = collectionsFailed > 0 ? `${collectionsFailed} collection(s) failed: ${errors.join(" | ")}`.slice(0, 1000) : null;
     const syncState = await supabase.from("tonapi_catalog_state").upsert({ singleton: true, last_sync_at: started, last_error: partialError, updated_at: new Date().toISOString() }, { onConflict: "singleton" });
     if (syncState.error) throw syncState.error;
@@ -651,7 +682,6 @@ export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
   const stateResult = await supabase.from("tonapi_catalog_state").select("last_sync_at,last_error").eq("singleton", true).maybeSingle();
   if (stateResult.error) throw stateResult.error;
   const lastAttempt = stateResult.data?.last_sync_at ? new Date(String(stateResult.data.last_sync_at)).getTime() : 0;
-  // If TonAPI is temporarily unavailable, do not stall every market request.
   if (stateResult.data?.last_error && Date.now() - lastAttempt < 5 * 60_000) {
     return { skipped: true, assets: countResult.count || 0, reason: "recent-tonapi-error" };
   }
@@ -661,4 +691,3 @@ export async function ensureTonApiGiftBootstrap(targetAssets = 36) {
   if (refreshed.error) throw refreshed.error;
   return { skipped: false, assets: refreshed.count || 0, result };
 }
-
