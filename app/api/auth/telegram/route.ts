@@ -29,7 +29,17 @@ async function POSTHandler(request: Request) {
     }
     const { user, startParam } = validated;
 
-    if (!(await enforceRateLimit(request, "telegram-auth", user.id, 60, 300))) {
+    // Telegram initData has already passed cryptographic validation above.
+    // Rate limiting is defense in depth here and must not become a single
+    // point of failure for legitimate Telegram users when its storage/API
+    // backend has a transient authorization or availability problem.
+    let rateLimitAllowed = true;
+    try {
+      rateLimitAllowed = await enforceRateLimit(request, "telegram-auth", user.id, 60, 300);
+    } catch (rateLimitError) {
+      console.warn("telegram auth rate limit unavailable; continuing after validated initData", rateLimitError);
+    }
+    if (!rateLimitAllowed) {
       return NextResponse.json({ error: "Слишком много запросов авторизации. Повторите через минуту." }, { status: 429, headers: { "retry-after": "60" } });
     }
 
