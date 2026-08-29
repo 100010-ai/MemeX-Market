@@ -7,6 +7,7 @@ import { finiteNumber, nonEmptyId, nullableText, safeIsoDate, text } from "@/lib
 
 type Board = "hot" | "gainers" | "new" | "verified";
 const boards = new Set<Board>(["hot","gainers","new","verified"]);
+const pulseSelect = "id,name,symbol,image_url,current_price,market_cap,volume_24h,change_24h,liquidity,unique_traders_24h,unique_traders_all,last_public_trade_at,top_trader_share_bps,heat_score,coin_level,heat_tier,coin_level_key" as const;
 
 async function GETHandler(request: NextRequest) {
   const profile = await requireProfile();
@@ -17,7 +18,7 @@ async function GETHandler(request: NextRequest) {
   const limit = Number.isFinite(requested) ? Math.max(6, Math.min(80, Math.floor(requested))) : 40;
   const supabase = getSupabaseAdmin();
   try {
-    let query = supabase.from("coin_discovery_v0730").select("id,creator_profile_id,name,symbol,image_url,description,current_price,market_cap,volume_24h,change_24h,holder_count,trade_count_24h,created_at,creator_name,liquidity,all_time_volume,ath_price,buy_volume_24h,sell_volume_24h,total_supply,token_reserve,quote_reserve,unique_traders_24h,unique_traders_all,last_public_trade_at,top_trader_share_bps,heat_score,coin_level,heat_tier,coin_level_key").eq("status","active");
+    let query = supabase.from("coin_discovery_v0730").select(pulseSelect).eq("status","active");
     if (board === "hot") query = query.order("heat_score", { ascending: false }).order("volume_24h", { ascending: false });
     else if (board === "gainers") query = query.order("change_24h", { ascending: false }).order("volume_24h", { ascending: false });
     else if (board === "new") query = query.order("created_at", { ascending: false });
@@ -30,10 +31,18 @@ async function GETHandler(request: NextRequest) {
     const verified = new Map((verificationResult.data || []).map((row) => [String(row.coin_id), { tier: text(row.tier,"verified",40), verifiedAt: safeIsoDate(row.verified_at) }]));
     const source = board === "verified" ? (rowsResult.data || []).filter((row) => verified.has(String(row.id))).slice(0, limit) : (rowsResult.data || []);
     const coins = source.map((row) => {
-      const coin = mapCoin(row);
-      const verification = verified.get(coin.id) || null;
+      const mapped = mapCoin(row);
+      const verification = verified.get(mapped.id) || null;
       return {
-        ...coin,
+        id: mapped.id,
+        name: mapped.name,
+        symbol: mapped.symbol,
+        imageUrl: mapped.imageUrl,
+        currentPrice: mapped.currentPrice,
+        marketCap: mapped.marketCap,
+        volume24h: mapped.volume24h,
+        change24h: mapped.change24h,
+        liquidity: mapped.liquidity,
         uniqueTraders24h: Math.max(0, Math.floor(finiteNumber(row.unique_traders_24h))),
         uniqueTradersAll: Math.max(0, Math.floor(finiteNumber(row.unique_traders_all))),
         lastTradeAt: nullableText(row.last_public_trade_at, 100),
