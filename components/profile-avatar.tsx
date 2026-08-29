@@ -5,7 +5,6 @@ import { telegramAvatarProxyUrl } from "@/lib/avatar";
 import { rarityLabel } from "@/lib/ui-copy";
 import { getProfileFrameClass, getProfileFrameDefinition } from "@/lib/profile-frames";
 import frameArt from "@/components/profile-frame-art.module.css";
-import caseSeriesArt from "@/components/case-series-art.module.css";
 
 export function ProfileAvatar({
   photoUrl,
@@ -33,7 +32,7 @@ export function ProfileAvatar({
     data-profile-frame-rarity={frame?.rarity || undefined}
     data-profile-frame-source={frame?.source || undefined}
     title={frameTitle ? `Рамка профиля: ${frameTitle}` : undefined}
-    className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass} ${framed ? frameArt.shell : ""} ${premiumArtClass} ${caseSeriesArt.loaded}`}
+    className={`mxm-profile-frame relative grid ${sizeClass} shrink-0 place-items-center rounded-[21px] ${frameClass} ${framed ? frameArt.shell : ""} ${premiumArtClass}`}
   >
     <span className={`relative z-[1] block h-full w-full overflow-hidden ${radiusClass} bg-[var(--panel-2)]`}>
       {avatarSrc
