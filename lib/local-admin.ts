@@ -187,35 +187,13 @@ export async function verifyControlLoginCode(rawTelegramId: unknown, rawCode: un
   const code = String(rawCode || "").trim();
   if (!/^\d{4,20}$/.test(telegramId) || !/^\d{6}$/.test(code) || !adminTelegramIds().has(telegramId)) return false;
 
-  const supabase = getSupabaseAdmin();
-  const challenge = await supabase
-    .from("control_login_challenges_v210")
-    .select("id,code_hash,attempts,expires_at")
-    .eq("telegram_id", Number(telegramId))
-    .is("used_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (challenge.error) throw challenge.error;
-  if (!challenge.data || Number(challenge.data.attempts || 0) >= MAX_CODE_ATTEMPTS) return false;
-
-  const valid = safeEqual(String(challenge.data.code_hash), codeHash(telegramId, code));
-  if (!valid) {
-    await supabase
-      .from("control_login_challenges_v210")
-      .update({ attempts: Number(challenge.data.attempts || 0) + 1 })
-      .eq("id", challenge.data.id);
-    return false;
-  }
-
-  const used = await supabase
-    .from("control_login_challenges_v210")
-    .update({ used_at: new Date().toISOString() })
-    .eq("id", challenge.data.id)
-    .is("used_at", null);
-  if (used.error) throw used.error;
-  return true;
+  const consumed = await getSupabaseAdmin().rpc("consume_control_login_challenge_v211", {
+    p_telegram_id: Number(telegramId),
+    p_code_hash: codeHash(telegramId, code),
+    p_max_attempts: MAX_CODE_ATTEMPTS,
+  });
+  if (consumed.error) throw consumed.error;
+  return consumed.data === true;
 }
 
 export async function createLocalControlSession(telegramId = "local") {
