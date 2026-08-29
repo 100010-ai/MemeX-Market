@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { apiFailure, readJsonObject, withApiErrors } from "@/lib/api-route";
 import { getControlSession, requireLocalControl } from "@/lib/local-admin";
@@ -7,6 +8,7 @@ import { telegramBotApi } from "@/lib/telegram-bot";
 
 export const runtime = "nodejs";
 const BATCH_SIZE = 20;
+const BATCH_LEASE_SECONDS = 300;
 
 type ButtonInput = { text: string; url: string };
 type MessageInput = {
@@ -93,6 +95,9 @@ function campaignInput(row: Record<string, unknown>): MessageInput {
     linkPreview: row.link_preview !== false,
   };
 }
+function validUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 async function GETHandler(request: NextRequest) {
   if (!(await requireLocalControl(request))) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -136,7 +141,7 @@ async function POSTHandler(request: NextRequest) {
       const input = parseMessageInput(body);
       const channel = text(body.channel, 200) || defaultChannel();
       if (!channel) return NextResponse.json({ error: "Укажите канал" }, { status: 400 });
-      await sendContent(channel, input);
+
       const saved = await supabase.from("control_broadcasts_v210").insert({
         actor_telegram_id: actor ? Number(actor) : null,
         audience: "channel",
@@ -148,13 +153,34 @@ async function POSTHandler(request: NextRequest) {
         attachment_url: input.attachmentUrl,
         buttons: input.buttons,
         link_preview: input.linkPreview,
-        status: "completed",
+        status: "sending",
         total_recipients: 1,
-        sent_count: 1,
         started_at: new Date().toISOString(),
-        finished_at: new Date().toISOString(),
       }).select("id").single();
       if (saved.error) throw saved.error;
+
+      try {
+        await sendContent(channel, input);
+        const completedAt = new Date().toISOString();
+        const completed = await supabase.from("control_broadcasts_v210").update({
+          status: "completed",
+          sent_count: 1,
+          finished_at: completedAt,
+          updated_at: completedAt,
+        }).eq("id", saved.data.id);
+        if (completed.error) throw completed.error;
+      } catch (error) {
+        const failedAt = new Date().toISOString();
+        await supabase.from("control_broadcasts_v210").update({
+          status: "failed",
+          failed_count: 1,
+          last_error: error instanceof Error ? error.message.slice(0, 1000) : "Telegram send failed",
+          finished_at: failedAt,
+          updated_at: failedAt,
+        }).eq("id", saved.data.id);
+        throw error;
+      }
+
       await audit(actor, "broadcast.channel", String(saved.data.id), { channel, attachmentType: input.attachmentType });
       return NextResponse.json({ ok: true, id: saved.data.id });
     }
@@ -204,7 +230,14 @@ async function POSTHandler(request: NextRequest) {
 
     if (action === "cancel") {
       const id = text(body.id, 80);
-      const result = await supabase.from("control_broadcasts_v210").update({ status: "cancelled", finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).in("status", ["queued", "sending"]);
+      if (!validUuid(id)) return NextResponse.json({ error: "Некорректный ID рассылки" }, { status: 400 });
+      const result = await supabase.from("control_broadcasts_v210").update({
+        status: "cancelled",
+        finished_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        batch_lock_token: null,
+        batch_lock_until: null,
+      }).eq("id", id).in("status", ["queued", "sending"]);
       if (result.error) throw result.error;
       await audit(actor, "broadcast.cancel", id);
       return NextResponse.json({ ok: true });
@@ -212,12 +245,26 @@ async function POSTHandler(request: NextRequest) {
 
     if (action === "batch") {
       const id = text(body.id, 80);
-      const campaign = await supabase.from("control_broadcasts_v210").select("*").eq("id", id).single();
-      if (campaign.error || !campaign.data) throw campaign.error || new Error("Рассылка не найдена");
-      const row = campaign.data as Record<string, any>;
-      if (row.status === "cancelled" || row.status === "completed" || row.status === "failed" || row.status === "partial") {
-        return NextResponse.json({ ok: true, campaign: row });
+      if (!validUuid(id)) return NextResponse.json({ error: "Некорректный ID рассылки" }, { status: 400 });
+      const lockToken = crypto.randomUUID();
+      const claim = await supabase.rpc("claim_control_broadcast_batch_v211", {
+        p_id: id,
+        p_lock_token: lockToken,
+        p_lock_seconds: BATCH_LEASE_SECONDS,
+      });
+      if (claim.error) throw claim.error;
+      const claimedRows = Array.isArray(claim.data) ? claim.data : claim.data ? [claim.data] : [];
+      if (!claimedRows.length) {
+        const current = await supabase.from("control_broadcasts_v210")
+          .select("id,status,total_recipients,sent_count,failed_count,skipped_count,last_error,updated_at,finished_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (current.error) throw current.error;
+        if (!current.data) return NextResponse.json({ error: "Рассылка не найдена" }, { status: 404 });
+        return NextResponse.json({ ok: true, campaign: current.data, processed: 0, leased: false });
       }
+
+      const row = claimedRows[0] as Record<string, any>;
       const input = campaignInput(row);
       let recipients: number[] = [];
       let nextOffset = Number(row.last_offset || 0);
@@ -278,9 +325,21 @@ async function POSTHandler(request: NextRequest) {
         last_error: lastError,
         finished_at: exhausted ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
-      }).eq("id", id).select("id,status,total_recipients,sent_count,failed_count,skipped_count,last_error,updated_at,finished_at").single();
+        batch_lock_token: null,
+        batch_lock_until: null,
+      }).eq("id", id).eq("status", "sending").eq("batch_lock_token", lockToken)
+        .select("id,status,total_recipients,sent_count,failed_count,skipped_count,last_error,updated_at,finished_at")
+        .maybeSingle();
       if (update.error) throw update.error;
-      return NextResponse.json({ ok: true, campaign: update.data, processed: recipients.length });
+      if (!update.data) {
+        const current = await supabase.from("control_broadcasts_v210")
+          .select("id,status,total_recipients,sent_count,failed_count,skipped_count,last_error,updated_at,finished_at")
+          .eq("id", id)
+          .single();
+        if (current.error) throw current.error;
+        return NextResponse.json({ ok: true, campaign: current.data, processed: recipients.length, leased: true, finalized: false });
+      }
+      return NextResponse.json({ ok: true, campaign: update.data, processed: recipients.length, leased: true, finalized: true });
     }
 
     return NextResponse.json({ error: "Неизвестная операция рассылки" }, { status: 400 });
