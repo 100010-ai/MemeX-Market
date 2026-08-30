@@ -4,10 +4,19 @@ import "./globals.css";
 import "./product-polish.css";
 import { TelegramProvider } from "@/components/telegram-provider";
 import { AppShell } from "@/components/app-shell";
+import { getCanonicalOrigin } from "@/lib/canonical-origin";
+
+const canonicalOrigin = getCanonicalOrigin();
 
 export const metadata: Metadata = {
   title: "MemeX Market",
   description: "MXM — рынок коллекционных подарков Telegram и мемкоинов.",
+  ...(canonicalOrigin
+    ? {
+        metadataBase: new URL(canonicalOrigin),
+        alternates: { canonical: "/" },
+      }
+    : {}),
 };
 
 export const viewport: Viewport = {

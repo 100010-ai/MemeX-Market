@@ -47,5 +47,8 @@ const starsStatusRoute = read("app/api/stars/status/[id]/route.ts"); check("Pend
 const starsInvoiceRoute = read("app/api/stars/invoice/route.ts"); check("Abandoned pending Stars invoices are expired before a new checkout", starsInvoiceRoute.includes('eq("status", "pending")') && starsInvoiceRoute.includes('lt("expires_at", nowIso)') && starsInvoiceRoute.includes("star pending cleanup"));
 const progressionRoute = read("app/api/progression/route.ts"); check("Progression level claims reject fractional input", progressionRoute.includes("const level = Number(body.level)") && progressionRoute.includes("Number.isInteger(level)") && !progressionRoute.includes("Math.floor(Number(body.level))"));
 const feedRoute = read("app/api/feed/route.ts"); check("Market feed requires an active non-banned profile", feedRoute.includes("requireProfile") && !feedRoute.includes("requireSession"));
-const profileMetaRoute = read("app/api/profile/meta/route.ts"); check("Profile achievements query is bounded", profileMetaRoute.includes('.order("unlocked_at", { ascending: false }).limit(100)'));
+const profileMetaRoute = read("app/api/profile/meta/route.ts");
+const achievementLimitMatch = profileMetaRoute.match(/from\("user_achievements"\)[\s\S]{0,700}?\.order\("unlocked_at",\s*\{\s*ascending:\s*false\s*\}\)[\s\S]{0,120}?\.limit\((\d+)\)/);
+const achievementLimit = achievementLimitMatch ? Number(achievementLimitMatch[1]) : 0;
+check("Profile achievements query is bounded", Number.isInteger(achievementLimit) && achievementLimit >= 1 && achievementLimit <= 100, achievementLimit ? `limit=${achievementLimit}` : "limit not detected");
 console.log(`\n${failed ? "PREBUILD SOURCE GATE FAILED" : "PREBUILD SOURCE GATE PASSED"}`); process.exit(failed ? 1 : 0);

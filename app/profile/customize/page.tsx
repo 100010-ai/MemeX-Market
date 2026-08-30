@@ -9,7 +9,7 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import { itemTypeLabel, rankLabel, rarityLabel } from "@/lib/ui-copy";
 import { getProfileFrameDefinition } from "@/lib/profile-frames";
 
-type Item = { key: string; type: string; title: string; equipped: boolean };
+type Item = { key: string; type: string; title: string; rarity?: string; equipped: boolean; acquiredAt?: string; source?: string | null };
 type Payload = { wallet: { vipTier?: string; vipProgress?: number; premiumActive?: boolean }; items: Item[] };
 
 export default function CustomizeProfilePage() {
@@ -17,14 +17,25 @@ export default function CustomizeProfilePage() {
   const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/profile/customize", { cacheMs: 15_000 })), []);
+  const load = useCallback(async () => setData(await apiFetch<Payload>("/api/profile/customize", { cacheMs: 0, dedupe: false })), []);
+
   useEffect(() => {
     let cancelled = false;
-    void apiFetch<Payload>("/api/profile/customize", { cacheMs: 15_000 })
+    void apiFetch<Payload>("/api/profile/customize", { cacheMs: 0, dedupe: false })
       .then((result) => { if (!cancelled) setData(result); })
       .catch((cause) => { if (!cancelled) setNotice(cause instanceof Error ? cause.message : "Не удалось загрузить оформление"); });
-    return () => { cancelled = true; };
-  }, []);
+    const refreshVisible = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      void load().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("focus", refreshVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("focus", refreshVisible);
+    };
+  }, [load]);
 
   async function equip(key: string) {
     if (busy) return;
@@ -66,11 +77,12 @@ export default function CustomizeProfilePage() {
       <div className="grid gap-2 sm:grid-cols-2">
         {data?.items.length ? data.items.map((item) => {
           const frame = item.type === "frame" ? getProfileFrameDefinition(item.key) : null;
+          const rarity = frame?.rarity || item.rarity;
           return <article key={item.key} className="mxm-card flex items-center gap-3 p-3">
-            {frame
+            {item.type === "frame"
               ? <ProfileAvatar photoUrl={profile?.photoUrl || null} name={profile?.firstName || "MXM"} equippedFrame={item.key} />
               : <div className="grid h-10 w-10 place-items-center rounded-[13px] bg-white/[.045] text-[var(--accent)]">{item.type === "title" ? <Star size={16} /> : <Palette size={16} />}</div>}
-            <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{item.title}</p><p className="mt-1 text-[8px] uppercase text-[var(--muted)]">{itemTypeLabel(item.type)}{frame ? ` · ${rarityLabel(frame.rarity)}` : ""}</p></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{item.title}</p><p className="mt-1 text-[8px] uppercase text-[var(--muted)]">{itemTypeLabel(item.type)}{rarity ? ` · ${rarityLabel(rarity)}` : ""}</p></div>
             {item.equipped ? <button type="button" disabled={Boolean(busy)} onClick={() => void unequip()} className="inline-flex items-center gap-1 text-[9px] text-[var(--positive)]"><Check size={11} />{busy === "reset" ? "…" : "Снять"}</button> : item.type === "frame" ? <button type="button" disabled={Boolean(busy)} onClick={() => void equip(item.key)} className="text-[9px] text-[var(--accent)]">{busy === item.key ? "…" : "Выбрать"}</button> : <span className="text-[9px] text-[var(--muted)]">Получено</span>}
           </article>;
         }) : (

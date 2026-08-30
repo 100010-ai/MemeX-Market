@@ -8,15 +8,20 @@ const channelStates = new Map<string, ChannelState>();
 const channelFallbacks = new Map<string, number>();
 const channelLastEventAt = new Map<string, number>();
 
-// Some internal audit tables are intentionally service-role-only and are not
-// safe browser Realtime sources. Subscribe to the public mutation table that
-// changes in the same transaction instead so the UI still receives a signal.
+// Some catalog/audit tables are intentionally server-only or are not part of
+// the Realtime publication. Subscribe to the public mutation table that changes
+// alongside them and use it only as a refresh signal.
 const realtimeTableAliases: Readonly<Record<string, string>> = {
+  gift_assets: "virtual_gifts",
   gift_listing_events: "virtual_gifts",
 };
 
 function pageHidden() {
   return document.visibilityState === "hidden";
+}
+
+function browserOffline() {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
 export function getRealtimePerfSnapshot() {
@@ -45,6 +50,7 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
     let timer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
     let lastRun = 0;
     channelStates.set(channelName, "CONNECTING");
 
@@ -86,29 +92,36 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
       }, 15_000);
     };
 
+    const clearReconnect = () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    };
+
     const scheduleReconnect = () => {
-      if (cancelled || pageHidden() || reconnectTimer) return;
+      if (cancelled || pageHidden() || browserOffline() || reconnectTimer) return;
+      const delay = Math.min(30_000, 4_000 * (2 ** Math.min(reconnectAttempt, 3)));
+      reconnectAttempt += 1;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
-        if (!cancelled && !pageHidden()) void connect();
-      }, 2_000);
+        if (!cancelled && !pageHidden() && !browserOffline()) void connect();
+      }, delay);
     };
 
     const connect = async () => {
-      if (cancelled || connecting || disconnect || pageHidden()) return;
+      if (cancelled || connecting || disconnect || pageHidden() || browserOffline()) return;
       connecting = true;
       channelStates.set(channelName, "CONNECTING");
       try {
         const supabase = await getSupabaseBrowser();
-        if (cancelled || pageHidden()) return;
+        if (cancelled || pageHidden() || browserOffline()) return;
         if (!supabase) {
-          // Realtime can be intentionally unavailable during configuration or
-          // rollout. Keep pages fresh through the documented polling fallback.
           channelStates.set(channelName, "CHANNEL_ERROR");
           startFallback();
+          scheduleReconnect();
           return;
         }
         const channel = supabase.channel(channelName);
+        let removedByUs = false;
         for (const { sourceTable, table } of tableList) {
           const filter = filters?.[sourceTable] || filters?.[table];
           const config = filter
@@ -117,33 +130,33 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
           channel.on("postgres_changes", config, scheduleRefresh);
         }
         disconnect = () => {
+          removedByUs = true;
           disconnect = null;
           void supabase.removeChannel(channel);
         };
         channel.subscribe((status) => {
           if (cancelled) return;
+          if (status === "CLOSED" && removedByUs) return;
           const normalized = status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED"
             ? status
             : "CONNECTING";
           channelStates.set(channelName, normalized);
           if (status === "SUBSCRIBED") {
-            if (reconnectTimer) clearTimeout(reconnectTimer);
-            reconnectTimer = null;
+            reconnectAttempt = 0;
+            clearReconnect();
             stopFallback();
             return;
           }
           if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-            console.error(`[MXM] Realtime ${channelName}: ${status}; включён fallback polling`);
             startFallback();
             disconnect?.();
             scheduleReconnect();
           }
         });
-      } catch (error) {
+      } catch {
         channelStates.set(channelName, "CHANNEL_ERROR");
         startFallback();
         scheduleReconnect();
-        console.error("[MXM] Ошибка запуска Realtime", error);
       } finally {
         connecting = false;
       }
@@ -152,33 +165,56 @@ export function RealtimeRefresh({ channelName, tables, filters, onChange, deboun
     const onVisibility = () => {
       if (pageHidden()) {
         if (timer) { clearTimeout(timer); timer = null; }
-        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        clearReconnect();
         disconnect?.();
         stopFallback();
         channelStates.set(channelName, "CLOSED");
         return;
       }
+      reconnectAttempt = 0;
       void connect();
-      // Reconcile data once after returning from the background; changes may
-      // have happened while the websocket was intentionally disconnected.
       scheduleRefresh();
     };
 
+    const onOnline = () => {
+      reconnectAttempt = 0;
+      clearReconnect();
+      if (!cancelled && !pageHidden()) {
+        void connect();
+        scheduleRefresh();
+      }
+    };
+
+    const onOffline = () => {
+      clearReconnect();
+      disconnect?.();
+      if (!pageHidden()) startFallback();
+      channelStates.set(channelName, "CLOSED");
+    };
+
     document.addEventListener("visibilitychange", onVisibility, { passive: true });
+    window.addEventListener("online", onOnline, { passive: true });
+    window.addEventListener("offline", onOffline, { passive: true });
     let startupTimer = 0;
     let startupIdle: number | null = null;
-    const startRealtime = () => { if (!cancelled) void connect(); };
+    const startRealtime = () => {
+      if (cancelled) return;
+      if (browserOffline()) startFallback();
+      else void connect();
+    };
     if (typeof window.requestIdleCallback === "function") startupIdle = window.requestIdleCallback(startRealtime, { timeout: 1_200 });
     else startupTimer = window.setTimeout(startRealtime, 500);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
       channelStates.delete(channelName);
       channelFallbacks.delete(channelName);
       channelLastEventAt.delete(channelName);
       if (timer) clearTimeout(timer);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearReconnect();
       stopFallback();
       if (startupTimer) window.clearTimeout(startupTimer);
       if (startupIdle != null && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(startupIdle);

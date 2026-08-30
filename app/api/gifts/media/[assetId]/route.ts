@@ -15,9 +15,9 @@ const MAX_ANIMATION_BYTES = 8 * 1024 * 1024;
 const MAX_ANIMATION_SOURCE_BYTES = 6 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 6 * 1024 * 1024;
 const MEDIA_CANDIDATE_TIMEOUT_MS = 3_000;
-const SLOW_PARTNER_TIMEOUT_MS = 1_100;
+const SLOW_PARTNER_TIMEOUT_MS = 3_500;
 const MEDIA_REQUEST_TIMEOUT_MS = 10_000;
-const HOST_BREAKER_MS = 60_000;
+const HOST_BREAKER_MS = 20_000;
 
 type GiftMediaRow = {
   model_media_url: string | null;
@@ -102,7 +102,7 @@ function markHostFailure(url: URL) {
   const key = hostKey(url);
   const previous = hostHealth.get(key);
   const failures = Math.min(10, (previous?.failures || 0) + 1);
-  const threshold = key === "headgun.org" || key.endsWith(".headgun.org") ? 1 : 2;
+  const threshold = key === "headgun.org" || key.endsWith(".headgun.org") ? 3 : 2;
   hostHealth.set(key, {
     failures,
     blockedUntil: failures >= threshold ? Date.now() + HOST_BREAKER_MS : 0,
@@ -266,7 +266,7 @@ function unavailablePreviewResponse() {
     status: 200,
     headers: {
       "content-type": "image/svg+xml; charset=utf-8",
-      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+      "cache-control": "public, max-age=10, stale-while-revalidate=30",
       "x-content-type-options": "nosniff",
       "x-mxm-media-status": "unavailable",
     },

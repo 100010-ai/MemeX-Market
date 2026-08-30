@@ -11,7 +11,8 @@ import { apiFetch } from "@/lib/api";
 import type { RuntimeConfig } from "@/lib/runtime-config";
 import { AppLaunchScreen } from "@/components/app-launch-screen";
 import { ProfileAvatar } from "@/components/profile-avatar";
-
+import { ProfileMenuSheet } from "@/components/profile-menu-sheet";
+import overlayStyles from "@/components/overlay-system.module.css";
 
 const DeferredCommandPalette = dynamic(() => import("@/components/command-palette").then((module) => module.CommandPalette), { ssr: false });
 const DeferredPerfOverlay = dynamic(() => import("@/components/dev/perf-overlay").then((module) => module.PerfOverlay), { ssr: false });
@@ -58,6 +59,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   const { profile, loading, appReady, error, retryAuth } = useTelegramProfile();
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [desktopToolsReady, setDesktopToolsReady] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const title = currentTitle(pathname);
   const profileId = profile?.id;
 
@@ -69,6 +71,10 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       .catch((cause) => console.error("runtime config", cause));
     return () => { cancelled = true; };
   }, [profileId]);
+
+  useEffect(() => {
+    setProfileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
@@ -101,7 +107,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
   }
 
   return (
-    <div className="mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr]">
+    <div className={`mx-auto min-h-[var(--mxm-viewport-height)] max-w-[1320px] lg:grid lg:grid-cols-[220px_1fr] ${overlayStyles.loaded}`}>
       <aside className="sticky top-0 hidden h-screen border-r border-[var(--border-soft)] px-4 py-5 lg:flex lg:flex-col">
         <Link href="/market" className="flex items-baseline gap-2 px-1 py-1">
           <span className="text-[13px] font-black tracking-[-.08em]">MXM</span>
@@ -127,7 +133,7 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
       <div className="mxm-shell-content min-w-0 lg:pb-0">
         <header className="mxm-topbar mxm-topbar-fixed safe-top z-40">
           <div className="flex h-[54px] items-center gap-2.5 px-3 md:px-5">
-            <Link href="/profile" aria-label="Профиль" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></Link>
+            <button type="button" onClick={() => setProfileMenuOpen(true)} aria-label="Открыть меню профиля" className="shrink-0 lg:hidden"><ProfileAvatar photoUrl={profile.photoUrl} name={profile.firstName} equippedFrame={profile.equippedFrame} size="small" /></button>
             <div className="min-w-0 lg:hidden"><p className="truncate text-[11px] font-black tracking-[-.055em]">MXM</p><p className="mt-0.5 truncate text-[9px] text-[var(--muted)]">{title}</p></div>
             <div className="hidden min-w-0 lg:block"><p className="truncate text-[12px] font-semibold tracking-[-.015em]">{title}</p></div>
             <div className="ml-auto flex items-center gap-1.5"><Link href="/watchlist" aria-label="Избранное" className="mxm-top-plus"><Star size={13}/></Link><Link href="/notifications" aria-label="Уведомления" className="mxm-top-plus"><Bell size={13}/></Link><Link href="/vault" className="mxm-balance-pill" title={profile.reservedBalance > 0 ? `${money(profile.availableBalance)} доступно · ${money(profile.reservedBalance)} зарезервировано` : undefined}><Gem size={12} fill="currentColor" />{money(profile.balance)}</Link><Link href="/store" aria-label="Магазин MXM" className="mxm-top-plus"><Plus size={14}/></Link></div>
@@ -144,6 +150,11 @@ export function AppShell({ children, modal }: { children: React.ReactNode; modal
         })}
       </nav>
 
+      <ProfileMenuSheet
+        open={profileMenuOpen}
+        onClose={() => setProfileMenuOpen(false)}
+        profile={{ firstName: profile.firstName, username: profile.username, photoUrl: profile.photoUrl, equippedFrame: profile.equippedFrame, level: profile.level }}
+      />
       {desktopToolsReady ? <DeferredCommandPalette /> : null}
       {process.env.NODE_ENV !== "production" && desktopToolsReady ? <DeferredPerfOverlay /> : null}
       {modal}
