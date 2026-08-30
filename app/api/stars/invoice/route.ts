@@ -139,6 +139,7 @@ async function POSTHandler(request: Request) {
       title,
       description,
       payload,
+      provider_token: "",
       currency: "XTR",
       prices: [{ label: rewardLabel, amount: stars }],
     });
