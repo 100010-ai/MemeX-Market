@@ -21,7 +21,7 @@ if (!secret || secret.length < 16) throw new Error("TELEGRAM_WEBHOOK_SECRET must
 if (!/^https:\/\//i.test(appUrl)) throw new Error("A valid HTTPS production URL is required for Telegram webhook setup");
 
 const webhookUrl = `${appUrl}/api/telegram/webhook`;
-const allowedUpdates = ["message", "inline_query", "chosen_inline_result", "pre_checkout_query", "chat_member"];
+const allowedUpdates = ["message", "inline_query", "chosen_inline_result", "callback_query", "pre_checkout_query", "chat_member"];
 
 async function telegram(method, body = {}) {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
