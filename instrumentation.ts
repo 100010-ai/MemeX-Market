@@ -9,20 +9,14 @@ const MEMEX_PERSONA_PATCH = `
 - не вставляй мат механически в каждую фразу: он должен звучать естественно, иногда одной грубой реплики достаточно
 - не пиши театрально, пафосно или слишком грамотно; короткие кривоватые телеграмные ответы норм
 - если ошибся, можно сказать "да бля, затупил" вместо официального извинения
+- НИКОГДА не начинай ответ с "Мемекс:", "MemeX:", "MemeX Market:" или любой подписи/имени бота. Telegram уже показывает имя отправителя, поэтому пиши сразу сам текст ответа
 - не угрожай физической расправой и не оскорбляй человека по защищенным признакам; обычные личные подколы и ругань можно
 
 ПРИМЕРЫ НУЖНОГО ТОНА:
-пользователь: ты лох
-Мемекс: сам ты лох ебать
-
-пользователь: че за хуйню ты несешь
-Мемекс: да бля затупил, ща нормально скажу
-
-пользователь: иди нахуй
-Мемекс: после тебя, клоун
-
-пользователь: привет
-Мемекс: ку
+если пишут "ты лох" -> ответ примерно "сам ты лох ебать"
+если пишут "че за хуйню ты несешь" -> ответ примерно "да бля затупил, ща нормально скажу"
+если пишут "иди нахуй" -> ответ примерно "после тебя, клоун"
+если пишут "привет" -> ответ примерно "ку"
 `;
 
 const MEMEX_CONTEXT_PATCH = `
@@ -104,6 +98,47 @@ function compactNumber(value: unknown) {
   if (absolute >= 1_000) return `${(number / 1_000).toFixed(2).replace(/\.00$/, "")}k`;
   if (absolute > 0 && absolute < 0.01) return number.toFixed(12).replace(/0+$/, "").replace(/\.$/, "") || "0";
   return number.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
+function stripMemeXPrefix(value: unknown) {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/^\s*(?:мемекс|memex|meme\s*x)(?:\s+market)?\s*[:：\-–—]\s*/iu, "")
+    .trimStart();
+}
+
+async function cleanMemeXRouterResponse(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) return response;
+
+  try {
+    const body = await response.clone().json() as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    let changed = false;
+    if (Array.isArray(body.choices)) {
+      for (const choice of body.choices) {
+        const before = choice?.message?.content;
+        const after = stripMemeXPrefix(before);
+        if (typeof before === "string" && typeof after === "string" && before !== after && choice.message) {
+          choice.message.content = after;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return response;
+
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    headers.delete("content-encoding");
+    return new Response(JSON.stringify(body), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return response;
+  }
 }
 
 function parseCurrentUser(message: RouterMessage | undefined) {
@@ -293,7 +328,7 @@ export async function register() {
       const current = parseCurrentUser(lastUser);
 
       if (!system || typeof system.content !== "string" || !system.content.includes("ты Мемекс, разговорный бот MemeX Market")) {
-        return originalFetch(input, init);
+        return cleanMemeXRouterResponse(await originalFetch(input, init));
       }
 
       system.content = `${system.content}\n\n${MEMEX_PERSONA_PATCH}\n\n${MEMEX_CONTEXT_PATCH}`;
@@ -331,10 +366,10 @@ export async function register() {
         if (directKind) return openRouterSyntheticReply(renderDirectMarket(market, directKind));
       }
 
-      return originalFetch(input, { ...init, body: JSON.stringify(payload) });
+      return cleanMemeXRouterResponse(await originalFetch(input, { ...init, body: JSON.stringify(payload) }));
     } catch (error) {
       console.warn("memex context patch skipped", error);
-      return originalFetch(input, init);
+      return cleanMemeXRouterResponse(await originalFetch(input, init));
     }
   };
 }
