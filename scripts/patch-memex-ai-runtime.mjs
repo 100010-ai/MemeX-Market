@@ -15,9 +15,9 @@ function replaceOnce(label, pattern, replacement) {
 }
 
 replaceOnce(
-  "free model list",
+  "paid model list",
   /const DEFAULT_FAST_MODELS = \[[\s\S]*?\] as const;/,
-  `const DEFAULT_FAST_MODELS = [\n  "minimax/minimax-m2.7-free",\n  "inclusionai/ling-3.0-flash-free",\n  "inclusionai/ling-3.0-tiny-free",\n] as const;`,
+  `const DEFAULT_FAST_MODELS = [\n  "deepseek/deepseek-v4-flash-0731",\n] as const;`,
 );
 
 replaceOnce(
@@ -29,13 +29,13 @@ replaceOnce(
 replaceOnce(
   "timeouts",
   /const OPENROUTER_TIMEOUT_MS = \d[\d_]*;\nconst OPENROUTER_TOTAL_BUDGET_MS = \d[\d_]*;/,
-  `const OPENROUTER_TIMEOUT_MS = 12_000;\nconst OPENROUTER_TOTAL_BUDGET_MS = 30_000;`,
+  `const OPENROUTER_TIMEOUT_MS = 16_000;\nconst OPENROUTER_TOTAL_BUDGET_MS = 20_000;`,
 );
 
 replaceOnce(
-  "key ordering",
+  "primary key only",
   /function configuredOpenRouterKeys\(\) \{[\s\S]*?\n\}/,
-  `function configuredOpenRouterKeys() {\n  return [] as string[];\n}`,
+  `function configuredOpenRouterKeys() {\n  const primary = String(process.env.OPENROUTER_PRIMARY_API_KEY || "").trim();\n  return primary ? [primary] : [];\n}`,
 );
 
 replaceOnce(
@@ -65,15 +65,15 @@ replaceOnce(
 );
 
 replaceOnce(
-  "gateway inference",
+  "primary OpenRouter inference",
   /async function askOpenRouter\(messages: OpenRouterMessage\[\], longAnswer: boolean\) \{[\s\S]*?\n\}\n\nfunction choose<T>/,
-  `async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean) {\n  const auth = String(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || "").trim();\n  if (!auth) throw new Error("AI_GATEWAY_AUTH_MISSING");\n\n  const models = configuredFastModels();\n  const startedAt = Date.now();\n  let lastError: Error | null = null;\n\n  for (const model of models) {\n    const remainingBudget = OPENROUTER_TOTAL_BUDGET_MS - (Date.now() - startedAt);\n    if (remainingBudget < 900) break;\n    const controller = new AbortController();\n    const timer = setTimeout(() => controller.abort(), Math.min(OPENROUTER_TIMEOUT_MS, remainingBudget));\n    try {\n      const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {\n        method: "POST",\n        headers: {\n          "content-type": "application/json",\n          authorization: \`Bearer \${auth}\`,\n        },\n        body: JSON.stringify({\n          model,\n          messages,\n          temperature: 0.94,\n          top_p: 0.95,\n          presence_penalty: 0.2,\n          frequency_penalty: 0.14,\n          max_tokens: longAnswer ? 360 : 140,\n        }),\n        cache: "no-store",\n        signal: controller.signal,\n      });\n      const payload = await response.json().catch(() => null);\n      if (response.ok) {\n        const raw = extractOpenRouterText(payload);\n        if (!raw.trim()) throw new Error(\`AI Gateway returned empty answer for \${model}\`);\n        return sanitizeAssistantText(raw, longAnswer ? LONG_REPLY_CHARS : DEFAULT_REPLY_CHARS);\n      }\n      const errorPayload = object(object(payload).error);\n      const message = truncate(errorPayload.message || response.statusText, 220);\n      lastError = new Error(\`AI Gateway \${response.status} \${model}: \${message}\`);\n      console.warn("memex gateway model failover", { model, status: response.status });\n      if ([400, 401, 403].includes(response.status)) {\n        if (response.status === 401 || response.status === 403) break;\n        continue;\n      }\n      if (response.status === 429 || response.status >= 500) continue;\n      continue;\n    } catch (error) {\n      lastError = error instanceof Error ? error : new Error(String(error || "AI Gateway request failed"));\n      if (lastError.name === "AbortError") {\n        console.warn("memex gateway model timeout", { model });\n        continue;\n      }\n    } finally {\n      clearTimeout(timer);\n    }\n  }\n\n  throw lastError || new Error("AI_GATEWAY_FREE_MODELS_EXHAUSTED");\n}\n\nfunction choose<T>`,
+  `async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean) {\n  const [apiKey] = configuredOpenRouterKeys();\n  if (!apiKey) throw new Error("OPENROUTER_PRIMARY_KEY_MISSING");\n\n  const model = configuredFastModels()[0];\n  const appUrl = String(process.env.APP_CANONICAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").trim();\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);\n\n  try {\n    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {\n      method: "POST",\n      headers: {\n        "content-type": "application/json",\n        authorization: \`Bearer \${apiKey}\`,\n        "HTTP-Referer": appUrl,\n        "X-Title": "MemeX Market Telegram Bot",\n      },\n      body: JSON.stringify({\n        model,\n        messages,\n        provider: { sort: { by: "price", partition: "none" } },\n        reasoning: { effort: "none", exclude: true },\n        temperature: 0.92,\n        top_p: 0.94,\n        presence_penalty: 0.2,\n        frequency_penalty: 0.14,\n        max_tokens: longAnswer ? 360 : 150,\n      }),\n      cache: "no-store",\n      signal: controller.signal,\n    });\n\n    const payload = await response.json().catch(() => null);\n    if (!response.ok) {\n      const errorPayload = object(object(payload).error);\n      const message = truncate(errorPayload.message || response.statusText, 220);\n      throw new Error(\`OpenRouter \${response.status}: \${message}\`);\n    }\n\n    const raw = extractOpenRouterText(payload);\n    if (!raw.trim()) throw new Error("OpenRouter returned empty answer");\n    return sanitizeAssistantText(raw, longAnswer ? LONG_REPLY_CHARS : DEFAULT_REPLY_CHARS);\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nfunction choose<T>`,
 );
 
 replaceOnce(
   "fallback errors",
   /  const text = \/OPENROUTER_KEYS_MISSING\/\.test\(message\)[\s\S]*?      : "чет мозг подвис попробуй еще раз";/,
-  `  const text = /AI_GATEWAY_AUTH_MISSING/.test(message)\n    ? "нейронка пока не подключена"\n    : /AI_GATEWAY_FREE_MODELS_EXHAUSTED|AI Gateway 429|quota|credit|rate/i.test(message)\n      ? "мозги ща в лимите попробуй чуть позже"\n      : "чет мозг подвис попробуй еще раз";`,
+  `  const text = /OPENROUTER_PRIMARY_KEY_MISSING/.test(message)\n    ? "нейронка пока не подключена"\n    : /OpenRouter 402|OpenRouter 429|quota|credit|rate/i.test(message)\n      ? "мозги ща в лимите попробуй чуть позже"\n      : "чет мозг подвис попробуй еще раз";`,
 );
 
 fs.writeFileSync(aiPath, source);
@@ -81,12 +81,16 @@ fs.writeFileSync(aiPath, source);
 let instrumentation = fs.readFileSync(instrumentationPath, "utf8");
 const instrumentationModelsPattern = /const MEMEX_FREE_MODELS = \[[\s\S]*?\] as const;/;
 if (!instrumentationModelsPattern.test(instrumentation)) {
-  throw new Error("MemeX AI patch failed: instrumentation free model list pattern not found");
+  throw new Error("MemeX AI patch failed: instrumentation model list pattern not found");
 }
 instrumentation = instrumentation.replace(
   instrumentationModelsPattern,
-  `const MEMEX_FREE_MODELS = [\n  "minimax/minimax-m2.7-free",\n  "inclusionai/ling-3.0-flash-free",\n  "inclusionai/ling-3.0-tiny-free",\n] as const;`,
+  `const MEMEX_FREE_MODELS = [\n  "deepseek/deepseek-v4-flash-0731",\n] as const;`,
+);
+instrumentation = instrumentation.replace(
+  `payload.provider = { sort: { by: "latency", partition: "none" } };`,
+  `payload.provider = { sort: { by: "price", partition: "none" } };`,
 );
 fs.writeFileSync(instrumentationPath, instrumentation);
 
-console.log("MemeX AI runtime patch applied: Vercel AI Gateway OIDC, 3 zero-price models, 42-message context, human chat style");
+console.log("MemeX AI runtime patch applied: primary OpenRouter key only, DeepSeek V4 Flash 0731, 42-message context, human chat style");
