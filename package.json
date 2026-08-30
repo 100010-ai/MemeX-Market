@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/configure-telegram-webhook.mjs",
     "start": "next start",
     "lint": "node node_modules/eslint/bin/eslint.js .",
     "typecheck": "tsc --noEmit",
