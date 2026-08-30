@@ -170,7 +170,7 @@ export async function handleTelegramChosenInlineResult(input: {
     console.warn("telegram staged inline markdown fallback", { queryLength: query.length, error: error instanceof Error ? error.message : String(error) });
     await telegramBotApi("editMessageText", {
       inline_message_id: inlineMessageId,
-      text: `Вопрос\n${query}\n\nОтвет\n${answer}`,
+      text: "Вопрос\\n" + query + "\\n\\nОтвет\\n" + answer,
       disable_web_page_preview: true,
       reply_markup: replyMarkup,
     }, 6_000);
