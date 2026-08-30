@@ -2,15 +2,16 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
 
 const DEFAULT_FAST_MODELS = [
-  "nvidia/nemotron-nano-9b-v2:free",
-  "openai/gpt-oss-20b:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "minimax/minimax-m3:free",
+  "openrouter/free",
 ] as const;
 const HISTORY_LIMIT = 14;
 const HISTORY_CHAR_BUDGET = 4_600;
 const DEFAULT_REPLY_CHARS = 520;
 const LONG_REPLY_CHARS = 1_500;
-const OPENROUTER_TIMEOUT_MS = 8_000;
-const OPENROUTER_TOTAL_BUDGET_MS = 13_000;
+const OPENROUTER_TIMEOUT_MS = 12_000;
+const OPENROUTER_TOTAL_BUDGET_MS = 20_000;
 const MARKET_CACHE_TTL_MS = 15_000;
 const openRouterKeyCooldowns = new Map<string, number>();
 
@@ -597,10 +598,12 @@ function configuredFastModels() {
     .split(/[;,\n]/g)
     .map((model) => model.trim())
     .filter(Boolean);
-  if (custom.length) return [...new Set(custom)].slice(0, 5);
   const legacy = String(process.env.OPENROUTER_MODEL || "").trim();
-  if (legacy && legacy !== "openrouter/free") return [...new Set([legacy, ...DEFAULT_FAST_MODELS])];
-  return [...DEFAULT_FAST_MODELS];
+  return [...new Set([
+    ...DEFAULT_FAST_MODELS,
+    ...custom,
+    ...(legacy && legacy !== "openrouter/free" ? [legacy] : []),
+  ])].slice(0, 5);
 }
 
 function retryAfterMs(header: string | null) {
@@ -654,7 +657,7 @@ async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean)
           messages,
           provider: { sort: { by: "latency", partition: "none" } },
           reasoning: { effort: "none", exclude: true },
-          temperature: 0.98,
+          temperature: 0.84,
           top_p: 0.92,
           presence_penalty: 0.12,
           frequency_penalty: 0.08,
