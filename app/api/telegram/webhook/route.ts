@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { safeSecretEquals } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
-import { handleTelegramAiMessage } from "@/lib/telegram-ai";
+import {
+  forgetTelegramAiMemory,
+  handleTelegramAiMessage,
+  rememberTelegramAiMessage,
+  shouldHandleTelegramAiMessage,
+  type TelegramAiMessageInput,
+} from "@/lib/telegram-ai";
 import { getHumanSupportUsername } from "@/lib/support";
 import { applyMainChannelMembership, MAIN_CHANNEL_USERNAME, telegramChatMemberIsMember } from "@/lib/telegram-membership";
 
@@ -48,6 +54,40 @@ type TelegramUpdate = {
   };
   message?: TelegramMessage;
 };
+
+function telegramAiInput(message: TelegramMessage): TelegramAiMessageInput | null {
+  const messageText = String(message.text || "").trim();
+  const messageId = Number(message.message_id || 0);
+  const senderId = Number(message.from?.id || 0);
+  const chatId = Number(message.chat?.id || 0);
+  if (!Number.isSafeInteger(chatId) || chatId === 0 || !Number.isSafeInteger(messageId) || messageId <= 0 || !Number.isSafeInteger(senderId) || senderId <= 0 || !messageText) return null;
+
+  return {
+    chatId,
+    chatType: String(message.chat?.type || "private"),
+    threadId: Number(message.message_thread_id || 0) || undefined,
+    messageId,
+    text: messageText,
+    from: {
+      id: senderId,
+      isBot: Boolean(message.from?.is_bot),
+      username: message.from?.username,
+      firstName: message.from?.first_name,
+      lastName: message.from?.last_name,
+    },
+    replyTo: message.reply_to_message ? {
+      messageId: Number(message.reply_to_message.message_id || 0) || undefined,
+      text: message.reply_to_message.text,
+      from: message.reply_to_message.from ? {
+        id: Number(message.reply_to_message.from.id || 0),
+        isBot: Boolean(message.reply_to_message.from.is_bot),
+        username: message.reply_to_message.from.username,
+        firstName: message.reply_to_message.from.first_name,
+        lastName: message.reply_to_message.from.last_name,
+      } : undefined,
+    } : undefined,
+  };
+}
 
 async function POSTHandler(request: Request) {
   const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
@@ -217,37 +257,31 @@ async function POSTHandler(request: Request) {
       return await done(NextResponse.json({ ok: true }));
     }
 
-    const message = update.message;
-    const messageText = String(message?.text || "").trim();
-    const messageId = Number(message?.message_id || 0);
-    const senderId = Number(message?.from?.id || 0);
-    if (message?.chat?.id && Number.isSafeInteger(messageId) && messageId > 0 && Number.isSafeInteger(senderId) && senderId > 0 && messageText) {
+    if (chatId && command === "/forget") {
+      const chatType = String(update.message?.chat?.type || "private");
+      const threadId = Number(update.message?.message_thread_id || 0) || 0;
+      const text = chatType === "private"
+        ? "память этого диалога стер"
+        : "в группе общую память через эту команду не стираю";
       try {
-        await handleTelegramAiMessage({
-          chatId: message.chat.id,
-          chatType: String(message.chat.type || "private"),
-          threadId: Number(message.message_thread_id || 0) || undefined,
-          messageId,
-          text: messageText,
-          from: {
-            id: senderId,
-            isBot: Boolean(message.from?.is_bot),
-            username: message.from?.username,
-            firstName: message.from?.first_name,
-            lastName: message.from?.last_name,
-          },
-          replyTo: message.reply_to_message ? {
-            messageId: Number(message.reply_to_message.message_id || 0) || undefined,
-            text: message.reply_to_message.text,
-            from: message.reply_to_message.from ? {
-              id: Number(message.reply_to_message.from.id || 0),
-              isBot: Boolean(message.reply_to_message.from.is_bot),
-              username: message.reply_to_message.from.username,
-              firstName: message.reply_to_message.from.first_name,
-              lastName: message.reply_to_message.from.last_name,
-            } : undefined,
-          } : undefined,
+        if (chatType === "private") await forgetTelegramAiMemory(chatId, threadId);
+        await telegramBotApi("sendMessage", {
+          chat_id: chatId,
+          ...(threadId ? { message_thread_id: threadId } : {}),
+          text,
+          disable_web_page_preview: true,
         });
+      } catch (error) {
+        console.error("telegram ai forget", error);
+      }
+      return await done(NextResponse.json({ ok: true }));
+    }
+
+    const aiInput = update.message ? telegramAiInput(update.message) : null;
+    if (aiInput) {
+      try {
+        if (shouldHandleTelegramAiMessage(aiInput)) await handleTelegramAiMessage(aiInput);
+        else await rememberTelegramAiMessage(aiInput);
       } catch (error) {
         console.error("telegram ai handler", error);
       }
