@@ -33,9 +33,9 @@ replaceOnce(
 );
 
 replaceOnce(
-  "primary key only",
+  "funded main key only",
   /function configuredOpenRouterKeys\(\) \{[\s\S]*?\n\}/,
-  `function configuredOpenRouterKeys() {\n  const primary = String(process.env.OPENROUTER_PRIMARY_API_KEY || "").trim();\n  return primary ? [primary] : [];\n}`,
+  `function configuredOpenRouterKeys() {\n  const main = String(process.env.OPENROUTER_API_KEY || "").trim();\n  return main ? [main] : [];\n}`,
 );
 
 replaceOnce(
@@ -65,15 +65,15 @@ replaceOnce(
 );
 
 replaceOnce(
-  "primary OpenRouter inference",
+  "main OpenRouter inference",
   /async function askOpenRouter\(messages: OpenRouterMessage\[\], longAnswer: boolean\) \{[\s\S]*?\n\}\n\nfunction choose<T>/,
-  `async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean) {\n  const [apiKey] = configuredOpenRouterKeys();\n  if (!apiKey) throw new Error("OPENROUTER_PRIMARY_KEY_MISSING");\n\n  const model = configuredFastModels()[0];\n  const appUrl = String(process.env.APP_CANONICAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").trim();\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);\n\n  try {\n    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {\n      method: "POST",\n      headers: {\n        "content-type": "application/json",\n        authorization: \`Bearer \${apiKey}\`,\n        "HTTP-Referer": appUrl,\n        "X-Title": "MemeX Market Telegram Bot",\n      },\n      body: JSON.stringify({\n        model,\n        messages,\n        provider: { sort: { by: "price", partition: "none" } },\n        reasoning: { effort: "none", exclude: true },\n        temperature: 0.92,\n        top_p: 0.94,\n        presence_penalty: 0.2,\n        frequency_penalty: 0.14,\n        max_tokens: longAnswer ? 360 : 150,\n      }),\n      cache: "no-store",\n      signal: controller.signal,\n    });\n\n    const payload = await response.json().catch(() => null);\n    if (!response.ok) {\n      const errorPayload = object(object(payload).error);\n      const message = truncate(errorPayload.message || response.statusText, 220);\n      throw new Error(\`OpenRouter \${response.status}: \${message}\`);\n    }\n\n    const raw = extractOpenRouterText(payload);\n    if (!raw.trim()) throw new Error("OpenRouter returned empty answer");\n    return sanitizeAssistantText(raw, longAnswer ? LONG_REPLY_CHARS : DEFAULT_REPLY_CHARS);\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nfunction choose<T>`,
+  `async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean) {\n  const [apiKey] = configuredOpenRouterKeys();\n  if (!apiKey) throw new Error("OPENROUTER_MAIN_KEY_MISSING");\n\n  const model = configuredFastModels()[0];\n  const appUrl = String(process.env.APP_CANONICAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").trim();\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);\n\n  try {\n    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {\n      method: "POST",\n      headers: {\n        "content-type": "application/json",\n        authorization: \`Bearer \${apiKey}\`,\n        "HTTP-Referer": appUrl,\n        "X-Title": "MemeX Market Telegram Bot",\n      },\n      body: JSON.stringify({\n        model,\n        messages,\n        provider: { sort: { by: "price", partition: "none" } },\n        reasoning: { effort: "none", exclude: true },\n        temperature: 0.92,\n        top_p: 0.94,\n        presence_penalty: 0.2,\n        frequency_penalty: 0.14,\n        max_tokens: longAnswer ? 360 : 150,\n      }),\n      cache: "no-store",\n      signal: controller.signal,\n    });\n\n    const payload = await response.json().catch(() => null);\n    if (!response.ok) {\n      const errorPayload = object(object(payload).error);\n      const message = truncate(errorPayload.message || response.statusText, 220);\n      throw new Error(\`OpenRouter \${response.status}: \${message}\`);\n    }\n\n    const raw = extractOpenRouterText(payload);\n    if (!raw.trim()) throw new Error("OpenRouter returned empty answer");\n    return sanitizeAssistantText(raw, longAnswer ? LONG_REPLY_CHARS : DEFAULT_REPLY_CHARS);\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nfunction choose<T>`,
 );
 
 replaceOnce(
   "fallback errors",
   /  const text = \/OPENROUTER_KEYS_MISSING\/\.test\(message\)[\s\S]*?      : "чет мозг подвис попробуй еще раз";/,
-  `  const text = /OPENROUTER_PRIMARY_KEY_MISSING/.test(message)\n    ? "нейронка пока не подключена"\n    : /OpenRouter 402|OpenRouter 429|quota|credit|rate/i.test(message)\n      ? "мозги ща в лимите попробуй чуть позже"\n      : "чет мозг подвис попробуй еще раз";`,
+  `  const text = /OPENROUTER_MAIN_KEY_MISSING/.test(message)\n    ? "нейронка пока не подключена"\n    : /OpenRouter 402|OpenRouter 429|quota|credit|rate/i.test(message)\n      ? "мозги ща в лимите попробуй чуть позже"\n      : "чет мозг подвис попробуй еще раз";`,
 );
 
 fs.writeFileSync(aiPath, source);
@@ -93,4 +93,4 @@ instrumentation = instrumentation.replace(
 );
 fs.writeFileSync(instrumentationPath, instrumentation);
 
-console.log("MemeX AI runtime patch applied: primary OpenRouter key only, DeepSeek V4 Flash 0731, 42-message context, human chat style");
+console.log("MemeX AI runtime patch applied: funded OPENROUTER_API_KEY only, DeepSeek V4 Flash 0731, 42-message context, human chat style");
