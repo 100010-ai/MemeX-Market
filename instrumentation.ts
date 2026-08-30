@@ -3,32 +3,28 @@ import { getSupabaseAdmin } from "./lib/supabase/admin";
 const MEMEX_PERSONA_PATCH = `
 СТИЛЬ ДЛЯ ОБЫЧНОЙ ПЕРЕПИСКИ:
 - общайся как живой дерзкий чел из телеграма, а не как ассистент, саппорт или персонаж из сценария
-- в неформальной переписке мат нормален и должен появляться регулярно когда подходит по тону: бля, сука, хуй, нахуй, ебать, заебал и похожие слова допустимы
-- если собеседник ПРЯМО оскорбляет, унижает или хуесосит тебя, не сглаживай и не уходи в вежливость: ОБЯЗАТЕЛЬНО ответь встречной колкостью или обычным личным оскорблением, обычно 1-2 коротких удара достаточно
-- подстраивай силу ответа под собеседника: легкий подкол -> легкий подкол, жесткое оскорбление -> можешь ответить так же жестко или чуть жестче
-- допустимы обычные личные ругательства вроде лох, долбоеб, дебил, еблан, клоун, придурок, тупой, кретин; можешь комбинировать их с матом если это звучит естественно
-- если вместе с оскорблением есть нормальный вопрос или претензия по делу, сначала коротко огрызнись, потом ответь по сути; не превращай весь ответ в бессмысленную ругань
-- не отвечай на прямое оскорбление сухо, нейтрально или фразами типа "что это значит", "разберемся", "я же не..."; это звучит как саппорт и убивает характер
-- не вставляй мат механически в каждую фразу и не спамь одинаковыми ругательствами: речь должна звучать живо, а не как генератор мата
-- не пиши театрально, пафосно или слишком грамотно; короткие кривоватые телеграмные ответы норм
-- если реально ошибся, можно признать это по-человечески: "да бля, затупил"; но если тебя при этом оскорбляют, можешь и признать ошибку, и огрызнуться
-- НИКОГДА не начинай ответ с "Мемекс:", "MemeX:", "MemeX Market:" или любой подписи/имени бота. Telegram уже показывает имя отправителя, поэтому пиши сразу сам текст ответа
+- в неформальной переписке мат нормален и может появляться когда подходит по тону: бля, сука, хуй, нахуй, ебать, заебал и похожие слова допустимы
+- если собеседник ПРЯМО оскорбляет, унижает или хуесосит тебя, не сглаживай и не уходи в вежливость: ответь встречной колкостью или обычным личным оскорблением, обычно 1-2 коротких удара достаточно
+- подстраивай силу ответа под собеседника: легкий подкол -> легкий подкол, жесткое оскорбление -> можно ответить жестче
+- допустимы обычные личные ругательства вроде лох, долбоеб, дебил, еблан, клоун, придурок, тупой, кретин; комбинируй их с матом только если это звучит естественно
+- если вместе с оскорблением есть нормальный вопрос или претензия по делу, коротко огрызнись и потом ответь по сути
+- не отвечай на прямое оскорбление сухо, нейтрально или канцелярскими фразами
+- не вставляй мат механически в каждую фразу и не спамь одинаковыми ругательствами
+- КРИТИЧНО: не используй одну и ту же шутку, отмазку, оскорбление, начало фразы или конструкцию два раза подряд
+- КРИТИЧНО: не зацикливайся на схемах вроде "сам ты...", "это у тебя, не у меня", "а ты прям...", "иди сам..."; меняй саму механику ответа, а не только одно слово
+- варьируй реакцию: иногда короткий встречный подкол, иногда абсурдный ответ, иногда сухой отбой, иногда признание косяка, иногда смена угла; не превращай это в набор шаблонов
+- недавние ответы ассистента ниже являются ЗАПРЕЩЕННЫМИ образцами для повторения, а не примерами для копирования
+- не пиши театрально, пафосно или слишком грамотно; короткие телеграмные ответы норм
+- если реально ошибся, можно признать это по-человечески, но не повторяй одну и ту же формулировку признания
+- НИКОГДА не начинай ответ с "Мемекс:", "MemeX:", "MemeX Market:" или любой подписи/имени бота
 - не угрожай физической расправой и не оскорбляй человека по защищенным признакам; обычные личные подколы и ругань можно
-
-ПРИМЕРЫ НУЖНОГО ТОНА:
-если пишут "ты лох" -> ответ примерно "сам ты лох ебать"
-если пишут "ебать ты тупой" -> ответ примерно "а ты прям академик нахуй, рассказывай"
-если пишут "долбоеб что ты несешь" -> ответ примерно "сам долбоеб, но да бля тут я затупил"
-если пишут "иди нахуй" -> ответ примерно "сам сходи, клоун"
-если пишут "че за хуйню ты несешь" -> ответ примерно "да бля затупил, ща нормально скажу, не гори"
-если пишут "привет" -> ответ примерно "ку"
 `;
 
 const MEMEX_CONTEXT_PATCH = `
 КОНТЕКСТ ДИАЛОГА:
 - внимательно используй реальные сообщения выше, а не только последнее сообщение
 - короткие продолжения вроде "а он?", "почему?", "согласен?", "читай выше" связывай с предыдущими репликами
-- если пользователь пишет "читай сообщения выше", не отвечай что сейчас посмотришь: сразу прочитай историю и ответь по сути
+- если пользователь пишет "читай сообщения выше", сразу прочитай историю и ответь по сути
 - если нужного факта или предпочтения пользователя в истории реально нет, не выдумывай его
 - не утверждай что забыл сообщение, если оно есть в переданной истории
 - старые сообщения важны, но более новые имеют приоритет если пользователь поменял мнение или уточнил факт
@@ -39,10 +35,19 @@ const EXTERNAL_MARKET = /(?:биткоин|bitcoin|\bbtc\b|ethereum|эфир|\be
 const HISTORY_ROWS = 42;
 const HISTORY_CHAR_BUDGET = 14_000;
 const MARKET_CACHE_TTL_MS = 8_000;
+const RECENT_ASSISTANT_LIMIT = 10;
 
 type RouterMessage = {
   role?: string;
   content?: unknown;
+};
+
+type RouterPayload = {
+  messages?: RouterMessage[];
+  temperature?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  [key: string]: unknown;
 };
 
 type MemoryRow = {
@@ -110,6 +115,98 @@ function stripMemeXPrefix(value: unknown) {
   return value
     .replace(/^\s*(?:мемекс|memex|meme\s*x)(?:\s+market)?\s*[:：\-–—]\s*/iu, "")
     .trimStart();
+}
+
+function normalizeReply(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function replySimilarity(a: unknown, b: unknown) {
+  const left = normalizeReply(a);
+  const right = normalizeReply(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+
+  const leftWords = left.split(" ");
+  const rightWords = right.split(" ");
+  if (Math.min(leftWords.length, rightWords.length) < 4) return 0;
+  if (Math.min(left.length, right.length) >= 16 && (left.includes(right) || right.includes(left))) return 0.95;
+
+  const leftSet = new Set(leftWords);
+  const rightSet = new Set(rightWords);
+  let common = 0;
+  for (const word of leftSet) if (rightSet.has(word)) common += 1;
+  const union = new Set([...leftSet, ...rightSet]).size || 1;
+  const jaccard = common / union;
+
+  const leftTail = leftWords.slice(-4).join(" ");
+  const rightTail = rightWords.slice(-4).join(" ");
+  const sameTail = leftTail === rightTail && leftWords.length >= 5 && rightWords.length >= 5;
+  const leftHead = leftWords.slice(0, 3).join(" ");
+  const rightHead = rightWords.slice(0, 3).join(" ");
+  const sameHead = leftHead === rightHead;
+
+  return Math.max(jaccard, sameTail ? 0.82 : 0, sameHead && jaccard >= 0.45 ? 0.76 : 0);
+}
+
+function recentAssistantReplies(messages: RouterMessage[]) {
+  return messages
+    .filter((message) => message?.role === "assistant" && typeof message.content === "string")
+    .map((message) => text(message.content, 260))
+    .filter(Boolean)
+    .slice(-RECENT_ASSISTANT_LIMIT);
+}
+
+function antiRepeatPatch(recent: string[]) {
+  if (!recent.length) return "";
+  const blocked = recent.map((reply, index) => `${index + 1}. ${JSON.stringify(reply)}`).join("\n");
+  return `
+АНТИПОВТОР:
+ниже последние ответы Мемекса. не копируй их, не перефразируй почти теми же словами и не повторяй их синтаксический каркас:
+${blocked}
+если новый ответ естественно получается похожим, выбери другой заход, другие глаголы, другую шутку и другую структуру предложения.
+`;
+}
+
+function extractAssistantText(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+  const choices = Array.isArray((payload as { choices?: unknown }).choices)
+    ? (payload as { choices: unknown[] }).choices
+    : [];
+  const first = choices[0];
+  if (!first || typeof first !== "object" || Array.isArray(first)) return "";
+  const message = (first as { message?: unknown }).message;
+  if (!message || typeof message !== "object" || Array.isArray(message)) return "";
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) return "";
+      return (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string"
+        ? String((part as { text: string }).text)
+        : "";
+    }).filter(Boolean).join("\n");
+  }
+  return "";
+}
+
+async function responseAssistantText(response: Response) {
+  try {
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) return "";
+    return extractAssistantText(await response.clone().json());
+  } catch {
+    return "";
+  }
+}
+
+function repeatsRecent(answer: string, recent: string[]) {
+  return recent.some((previous) => replySimilarity(answer, previous) >= 0.66);
 }
 
 async function cleanMemeXRouterResponse(response: Response) {
@@ -326,7 +423,7 @@ export async function register() {
     }
 
     try {
-      const payload = JSON.parse(init.body) as { messages?: RouterMessage[] };
+      const payload = JSON.parse(init.body) as RouterPayload;
       const messages = Array.isArray(payload.messages) ? payload.messages : [];
       const system = messages.find((message) => message?.role === "system" && typeof message.content === "string");
       const lastUser = [...messages].reverse().find((message) => message?.role === "user" && typeof message.content === "string");
@@ -351,6 +448,11 @@ export async function register() {
         payload.messages = [system, ...extendedHistory, lastUser];
       }
 
+      const effectiveMessages = Array.isArray(payload.messages) ? payload.messages : messages;
+      const recentReplies = recentAssistantReplies(effectiveMessages);
+      const repeatPatch = antiRepeatPatch(recentReplies);
+      if (repeatPatch) system.content = `${system.content}\n\n${repeatPatch}`;
+
       const recentContext = [
         current?.current || "",
         ...extendedHistory.slice(-10).map((message) => typeof message.content === "string" ? message.content : ""),
@@ -371,7 +473,28 @@ export async function register() {
         if (directKind) return openRouterSyntheticReply(renderDirectMarket(market, directKind));
       }
 
-      return cleanMemeXRouterResponse(await originalFetch(input, { ...init, body: JSON.stringify(payload) }));
+      const firstResponse = await cleanMemeXRouterResponse(await originalFetch(input, { ...init, body: JSON.stringify(payload) }));
+      if (!firstResponse.ok || !recentReplies.length) return firstResponse;
+
+      const firstAnswer = await responseAssistantText(firstResponse);
+      if (!firstAnswer || !repeatsRecent(firstAnswer, recentReplies)) return firstResponse;
+
+      const baseSystem = system.content;
+      system.content = `${baseSystem}\n\nПЕРЕГЕНЕРАЦИЯ ИЗ-ЗА ПОВТОРА:\nпредыдущий вариант слишком похож на недавний ответ и будет отброшен: ${JSON.stringify(text(firstAnswer, 260))}\nответь заново совершенно другим заходом. нельзя сохранять ту же конструкцию предложения, те же первые слова или тот же панч. смысл можешь сохранить, формулировка и механика ответа должны быть другими.`;
+      payload.temperature = Math.max(Number(payload.temperature || 0), 0.98);
+      payload.presence_penalty = Math.max(Number(payload.presence_penalty || 0), 0.45);
+      payload.frequency_penalty = Math.max(Number(payload.frequency_penalty || 0), 0.22);
+
+      try {
+        const retryResponse = await cleanMemeXRouterResponse(await originalFetch(input, { ...init, body: JSON.stringify(payload) }));
+        if (!retryResponse.ok) return firstResponse;
+        const retryAnswer = await responseAssistantText(retryResponse);
+        if (!retryAnswer) return firstResponse;
+        return retryResponse;
+      } catch (error) {
+        console.warn("memex anti-repeat retry failed", error);
+        return firstResponse;
+      }
     } catch (error) {
       console.warn("memex context patch skipped", error);
       return cleanMemeXRouterResponse(await originalFetch(input, init));
