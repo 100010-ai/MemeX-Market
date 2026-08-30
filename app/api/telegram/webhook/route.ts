@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { safeSecretEquals } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
+import { handleTelegramAiMessage } from "@/lib/telegram-ai";
 import { getHumanSupportUsername } from "@/lib/support";
 import { applyMainChannelMembership, MAIN_CHANNEL_USERNAME, telegramChatMemberIsMember } from "@/lib/telegram-membership";
 
@@ -14,6 +15,29 @@ type TelegramChatMemberState = {
   user?: { id?: number };
 };
 
+type TelegramUser = {
+  id: number;
+  is_bot?: boolean;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+type TelegramMessage = {
+  message_id?: number;
+  message_thread_id?: number;
+  chat?: { id: number; username?: string; title?: string; type?: string };
+  from?: TelegramUser;
+  text?: string;
+  reply_to_message?: {
+    message_id?: number;
+    text?: string;
+    from?: TelegramUser;
+  };
+  successful_payment?: { currency: string; total_amount: number; invoice_payload: string; telegram_payment_charge_id: string; provider_payment_charge_id?: string };
+  refunded_payment?: { currency: string; total_amount: number; invoice_payload: string; telegram_payment_charge_id: string; provider_payment_charge_id?: string };
+};
+
 type TelegramUpdate = {
   update_id?: number;
   pre_checkout_query?: { id: string; from: { id: number }; currency: string; total_amount: number; invoice_payload: string };
@@ -22,13 +46,7 @@ type TelegramUpdate = {
     old_chat_member?: TelegramChatMemberState;
     new_chat_member?: TelegramChatMemberState;
   };
-  message?: {
-    chat?: { id: number };
-    from?: { id: number };
-    text?: string;
-    successful_payment?: { currency: string; total_amount: number; invoice_payload: string; telegram_payment_charge_id: string; provider_payment_charge_id?: string };
-    refunded_payment?: { currency: string; total_amount: number; invoice_payload: string; telegram_payment_charge_id: string; provider_payment_charge_id?: string };
-  };
+  message?: TelegramMessage;
 };
 
 async function POSTHandler(request: Request) {
@@ -196,7 +214,45 @@ async function POSTHandler(request: Request) {
       } catch (error) {
         console.error("payment support command", error);
       }
+      return await done(NextResponse.json({ ok: true }));
     }
+
+    const message = update.message;
+    const messageText = String(message?.text || "").trim();
+    const messageId = Number(message?.message_id || 0);
+    const senderId = Number(message?.from?.id || 0);
+    if (message?.chat?.id && Number.isSafeInteger(messageId) && messageId > 0 && Number.isSafeInteger(senderId) && senderId > 0 && messageText) {
+      try {
+        await handleTelegramAiMessage({
+          chatId: message.chat.id,
+          chatType: String(message.chat.type || "private"),
+          threadId: Number(message.message_thread_id || 0) || undefined,
+          messageId,
+          text: messageText,
+          from: {
+            id: senderId,
+            isBot: Boolean(message.from?.is_bot),
+            username: message.from?.username,
+            firstName: message.from?.first_name,
+            lastName: message.from?.last_name,
+          },
+          replyTo: message.reply_to_message ? {
+            messageId: Number(message.reply_to_message.message_id || 0) || undefined,
+            text: message.reply_to_message.text,
+            from: message.reply_to_message.from ? {
+              id: Number(message.reply_to_message.from.id || 0),
+              isBot: Boolean(message.reply_to_message.from.is_bot),
+              username: message.reply_to_message.from.username,
+              firstName: message.reply_to_message.from.first_name,
+              lastName: message.reply_to_message.from.last_name,
+            } : undefined,
+          } : undefined,
+        });
+      } catch (error) {
+        console.error("telegram ai handler", error);
+      }
+    }
+
     return await done(NextResponse.json({ ok: true }));
   } catch (error) {
     console.error("telegram webhook", error);
