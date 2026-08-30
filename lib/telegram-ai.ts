@@ -6,6 +6,8 @@ const DEFAULT_MODEL = "openrouter/free";
 const HISTORY_LIMIT = 16;
 const MAX_REPLY_CHARS = 1_100;
 const OPENROUTER_TIMEOUT_MS = 16_000;
+const OPENROUTER_TOTAL_BUDGET_MS = 22_000;
+const openRouterKeyCooldowns = new Map<string, number>();
 
 type TelegramUserRef = {
   id: number;
@@ -354,48 +356,123 @@ function sanitizeAssistantText(value: string) {
   return text || "чет я завис попробуй еще раз";
 }
 
-async function askOpenRouter(messages: OpenRouterMessage[]) {
-  const apiKey = String(process.env.OPENROUTER_API_KEY || "").trim();
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);
-  const appUrl = String(process.env.APP_CANONICAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").trim();
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-        "HTTP-Referer": appUrl,
-        "X-Title": "MemeX Market Telegram Bot",
-      },
-      body: JSON.stringify({
-        model: String(process.env.OPENROUTER_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL,
-        messages,
-        temperature: 0.92,
-        top_p: 0.95,
-        max_tokens: 240,
-      }),
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      const error = object(object(payload).error);
-      throw new Error(`OpenRouter ${response.status}: ${truncate(error.message || response.statusText, 240)}`);
-    }
-    return sanitizeAssistantText(extractOpenRouterText(payload));
-  } finally {
-    clearTimeout(timer);
+function configuredOpenRouterKeys() {
+  const primary = String(process.env.OPENROUTER_PRIMARY_API_KEY || "").trim();
+  const pool = String(process.env.OPENROUTER_API_KEYS || "")
+    .split(/[;,\n]/g)
+    .map((key) => key.trim())
+    .filter(Boolean);
+  const legacy = String(process.env.OPENROUTER_API_KEY || "").trim();
+  const ordered = [primary, ...pool, legacy].filter(Boolean);
+  return [...new Set(ordered)];
+}
+
+function openRouterCooldownMs(status: number, message: string) {
+  if (status === 401 || status === 403) return 6 * 60 * 60_000;
+  if (status === 402) return 60 * 60_000;
+  if (status === 429) {
+    return /daily|day|quota|credit|free.*limit|limit.*free/i.test(message) ? 30 * 60_000 : 60_000;
   }
+  return 0;
+}
+
+function openRouterCanRotate(status: number) {
+  return status === 401 || status === 402 || status === 403 || status === 429;
+}
+
+function availableOpenRouterKeys(keys: string[]) {
+  const now = Date.now();
+  for (const [key, until] of openRouterKeyCooldowns) {
+    if (until <= now) openRouterKeyCooldowns.delete(key);
+  }
+  return keys.filter((key) => (openRouterKeyCooldowns.get(key) || 0) <= now);
+}
+
+async function askOpenRouter(messages: OpenRouterMessage[]) {
+  const configuredKeys = configuredOpenRouterKeys();
+  if (!configuredKeys.length) throw new Error("OPENROUTER_PRIMARY_API_KEY/OPENROUTER_API_KEYS are not configured");
+
+  const keys = availableOpenRouterKeys(configuredKeys);
+  if (!keys.length) throw new Error("OPENROUTER_POOL_EXHAUSTED");
+
+  const startedAt = Date.now();
+  const appUrl = String(process.env.APP_CANONICAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://meme-x-market.vercel.app").trim();
+  let lastError: Error | null = null;
+  let transientRetries = 0;
+
+  for (let index = 0; index < keys.length; index += 1) {
+    const apiKey = keys[index];
+    const remainingBudget = OPENROUTER_TOTAL_BUDGET_MS - (Date.now() - startedAt);
+    if (remainingBudget < 1_000) break;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(OPENROUTER_TIMEOUT_MS, remainingBudget));
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+          "HTTP-Referer": appUrl,
+          "X-Title": "MemeX Market Telegram Bot",
+        },
+        body: JSON.stringify({
+          model: String(process.env.OPENROUTER_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL,
+          messages,
+          temperature: 0.92,
+          top_p: 0.95,
+          max_tokens: 240,
+        }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.ok) {
+        const answer = sanitizeAssistantText(extractOpenRouterText(payload));
+        openRouterKeyCooldowns.delete(apiKey);
+        return answer;
+      }
+
+      const errorPayload = object(object(payload).error);
+      const message = truncate(errorPayload.message || response.statusText, 240);
+      lastError = new Error(`OpenRouter ${response.status}: ${message}`);
+      const cooldownMs = openRouterCooldownMs(response.status, message);
+      if (cooldownMs > 0) openRouterKeyCooldowns.set(apiKey, Date.now() + cooldownMs);
+
+      if (openRouterCanRotate(response.status)) {
+        console.warn("openrouter key failover", { status: response.status, attempt: index + 1, remainingKeys: keys.length - index - 1 });
+        continue;
+      }
+
+      if (response.status >= 500 && transientRetries < 1 && index + 1 < keys.length) {
+        transientRetries += 1;
+        console.warn("openrouter transient retry", { status: response.status });
+        continue;
+      }
+      throw lastError;
+    } catch (error) {
+      if (error instanceof Error && /^OpenRouter \d+:/.test(error.message)) throw error;
+      lastError = error instanceof Error ? error : new Error(String(error || "OpenRouter request failed"));
+      if (transientRetries < 1 && index + 1 < keys.length) {
+        transientRetries += 1;
+        console.warn("openrouter network retry", { attempt: index + 1 });
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastError || new Error("OPENROUTER_POOL_EXHAUSTED");
 }
 
 async function sendFallback(input: TelegramAiMessageInput, error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
-  const text = message.includes("OPENROUTER_API_KEY")
+  const text = /OPENROUTER_PRIMARY_API_KEY|OPENROUTER_API_KEYS|OPENROUTER_API_KEY/.test(message)
     ? "нейронка пока не подключена"
-    : /OpenRouter 429|rate.?limit/i.test(message)
-      ? "лимит бесплатного мозга кончился попробуй чуть позже"
+    : /OPENROUTER_POOL_EXHAUSTED|OpenRouter 429|rate.?limit|quota|credit/i.test(message)
+      ? "все бесплатные мозги сейчас в лимите попробуй чуть позже"
       : "чет бесплатный мозг отвалился попробуй еще раз чуть позже";
   try {
     await telegramBotApi("sendMessage", {
