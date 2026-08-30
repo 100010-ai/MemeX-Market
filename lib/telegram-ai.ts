@@ -2,9 +2,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { telegramBotApi } from "@/lib/telegram-bot";
 
 const DEFAULT_FAST_MODELS = [
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "minimax/minimax-m3:free",
-  "openrouter/free",
+  "deepseek/deepseek-v4-flash-0731",
+  "openai/gpt-4.1-nano",
 ] as const;
 const HISTORY_LIMIT = 14;
 const HISTORY_CHAR_BUDGET = 4_600;
@@ -655,7 +654,7 @@ async function askOpenRouter(messages: OpenRouterMessage[], longAnswer: boolean)
         body: JSON.stringify({
           models,
           messages,
-          provider: { sort: { by: "latency", partition: "none" } },
+          provider: { sort: { by: "price", partition: "none" } },
           reasoning: { effort: "none", exclude: true },
           temperature: 0.84,
           top_p: 0.92,
