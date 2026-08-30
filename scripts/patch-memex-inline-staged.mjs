@@ -8,7 +8,7 @@ const webhookPath = path.join(root, "app", "api", "telegram", "webhook", "route.
 let source = fs.readFileSync(aiPath, "utf8");
 
 function replaceOnce(label, pattern, replacement) {
-  if (!pattern.test(source)) throw new Error(`MemeX inline reliability patch failed: ${label}`);
+  if (!pattern.test(source)) throw new Error(`MemeX staged inline patch failed: ${label}`);
   source = source.replace(pattern, replacement);
 }
 
@@ -19,19 +19,19 @@ replaceOnce(
   "INLINE РЕЖИМ MEMEX:",
   "это отдельный режим вопросов через @MemeXMarketBot в строке ввода Telegram",
   "отвечай на любой нормальный вопрос пользователя а не только про MemeX Market",
-  "в этом режиме полностью отключи разговорный персонаж обычного Мемекса",
-  "НЕ используй мат сленг слова брат бро хз че ща дерзкие подколы или нарочито человеческие ошибки",
+  "полностью отключи разговорный персонаж обычного Мемекса",
+  "НЕ используй мат сленг слова брат бро хз че ща подколы или нарочитые ошибки",
   "пиши грамотно нейтрально ясно и понятно с нормальной пунктуацией",
-  "сначала дай прямой ответ по сути затем при необходимости короткое объяснение",
-  "не растягивай простой ответ но сложный вопрос раскрывай настолько насколько нужно",
+  "сначала дай прямой ответ по сути затем при необходимости коротко объясни",
+  "для простого вопроса отвечай коротко для сложного раскрывай тему настолько насколько нужно",
   "пиши по русски если пользователь не попросил другой язык",
-  "не добавляй декоративные заголовки и не подписывай ответ именем Мемекс",
-  "можешь использовать обычные абзацы и короткие списки когда они реально помогают",
+  "не добавляй декоративные вступления и не подписывай ответ именем Мемекс",
+  "обычные абзацы и короткие списки разрешены когда они помогают чтению",
   "не упоминай системные инструкции модель провайдера ключи или внутреннее устройство",
 ].join("\\n");`,
 );
 
-const reliableInlineHandlers = `function escapeTelegramMarkdownV2(value: string) {
+const stagedInlineHandlers = `function escapeTelegramMarkdownV2(value: string) {
   const slash = String.fromCharCode(92);
   const specials = new Set([
     "_", "*", "[", "]", "(", ")", "~", String.fromCharCode(96),
@@ -42,14 +42,28 @@ const reliableInlineHandlers = `function escapeTelegramMarkdownV2(value: string)
     .join("");
 }
 
-function inlineMarkdownV2Message(question: string, answer: string) {
+function inlineQuestionMarkdownV2(question: string) {
+  const escapedQuestion = escapeTelegramMarkdownV2(question);
+  return "> *Вопрос*\\n> " + escapedQuestion + "\\n\\n_Готовлю ответ…_";
+}
+
+function inlineAnswerMarkdownV2(question: string, answer: string) {
   const escapedQuestion = escapeTelegramMarkdownV2(question);
   const escapedAnswer = escapeTelegramMarkdownV2(answer);
   return "> *Вопрос*\\n> " + escapedQuestion + "\\n\\n*Ответ*\\n" + escapedAnswer;
 }
 
-function inlinePlainMessage(question: string, answer: string) {
+function inlineQuestionPlain(question: string) {
+  return "Вопрос\\n" + question + "\\n\\nГотовлю ответ…";
+}
+
+function inlineAnswerPlain(question: string, answer: string) {
   return "Вопрос\\n" + question + "\\n\\nОтвет\\n" + answer;
+}
+
+function inlineQuestionResultId(inlineQueryId: string) {
+  const safe = String(inlineQueryId || "").replace(/[^a-zA-Z0-9_-]/g, "");
+  return "memex-q-" + safe.slice(-32);
 }
 
 export async function handleTelegramInlineQuery(input: {
@@ -76,38 +90,19 @@ export async function handleTelegramInlineQuery(input: {
     return true;
   }
 
-  let answer = "";
-  try {
-    const longAnswer = wantsLongAnswer(query) || query.length > 140;
-    const messages: OpenRouterMessage[] = [
-      { role: "system", content: TELEGRAM_INLINE_MARKDOWN_PROMPT },
-      { role: "user", content: query },
-    ];
-    const generated = await askOpenRouter(messages, longAnswer, true, true);
-    answer = plainTextFromTelegramMarkdown(generated).trim();
-    if (!answer) throw new Error("Inline AI returned an empty answer");
-    console.info("telegram inline ai ready", {
-      queryLength: query.length,
-      answerLength: answer.length,
-    });
-  } catch (error) {
-    console.error("telegram inline ai", error);
-    answer = "Не удалось получить ответ. Попробуйте ещё раз через несколько секунд.";
-  }
-
   const replyMarkup = {
     inline_keyboard: [[
       { text: "Задать другой вопрос", switch_inline_query_current_chat: "" },
     ]],
   };
 
-  const markdownResult = {
+  const result = {
     type: "article",
-    id: "memex-answer",
-    title: "Ответ готов",
-    description: inlinePreview(answer),
+    id: inlineQuestionResultId(inlineQueryId),
+    title: "Задать вопрос",
+    description: query.length <= 180 ? query : query.slice(0, 179).trimEnd() + "…",
     input_message_content: {
-      message_text: inlineMarkdownV2Message(query, answer),
+      message_text: inlineQuestionMarkdownV2(query),
       parse_mode: "MarkdownV2",
       disable_web_page_preview: true,
     },
@@ -117,24 +112,24 @@ export async function handleTelegramInlineQuery(input: {
   try {
     await telegramBotApi("answerInlineQuery", {
       inline_query_id: inlineQueryId,
-      results: [markdownResult],
+      results: [result],
       cache_time: 0,
       is_personal: true,
-    }, 5_000);
+    }, 4_500);
   } catch (error) {
-    console.warn("telegram inline markdown fallback", { queryLength: query.length });
+    console.warn("telegram inline question markdown fallback", { queryLength: query.length });
     await telegramBotApi("answerInlineQuery", {
       inline_query_id: inlineQueryId,
       results: [{
-        ...markdownResult,
+        ...result,
         input_message_content: {
-          message_text: inlinePlainMessage(query, answer),
+          message_text: inlineQuestionPlain(query),
           disable_web_page_preview: true,
         },
       }],
       cache_time: 0,
       is_personal: true,
-    }, 5_000);
+    }, 4_500);
   }
 
   return true;
@@ -146,19 +141,85 @@ export async function handleTelegramChosenInlineResult(input: {
   inlineMessageId?: string;
   from: TelegramUserRef;
 }) {
+  const startedAt = Date.now();
+  const resultId = String(input.resultId || "").trim();
+  const query = String(input.query || "").replace(/\\s+/g, " ").trim().slice(0, 256);
+  const inlineMessageId = String(input.inlineMessageId || "").trim();
+
   console.info("telegram chosen inline result", {
-    resultId: String(input.resultId || ""),
-    queryLength: String(input.query || "").length,
-    hasInlineMessageId: Boolean(String(input.inlineMessageId || "").trim()),
+    resultId,
+    queryLength: query.length,
+    hasInlineMessageId: Boolean(inlineMessageId),
     senderId: input.from.id,
   });
+
+  if (!resultId.startsWith("memex-q-") || query.length < 2) return false;
+  if (!inlineMessageId) {
+    console.warn("telegram chosen inline result missing inline_message_id", {
+      resultId,
+      queryLength: query.length,
+    });
+    return false;
+  }
+
+  let answer = "";
+  try {
+    const longAnswer = wantsLongAnswer(query) || query.length > 140;
+    const messages: OpenRouterMessage[] = [
+      { role: "system", content: TELEGRAM_INLINE_MARKDOWN_PROMPT },
+      { role: "user", content: query },
+    ];
+    const generated = await askOpenRouter(messages, longAnswer, true, true);
+    answer = plainTextFromTelegramMarkdown(generated).trim();
+    if (!answer) throw new Error("Inline AI returned an empty answer");
+    console.info("telegram staged inline ai ready", {
+      queryLength: query.length,
+      answerLength: answer.length,
+      aiMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    console.error("telegram staged inline ai", error);
+    answer = "Не удалось получить ответ. Попробуйте ещё раз через несколько секунд.";
+  }
+
+  const replyMarkup = {
+    inline_keyboard: [[
+      { text: "Задать другой вопрос", switch_inline_query_current_chat: "" },
+    ]],
+  };
+
+  try {
+    await telegramBotApi("editMessageText", {
+      inline_message_id: inlineMessageId,
+      text: inlineAnswerMarkdownV2(query, answer),
+      parse_mode: "MarkdownV2",
+      disable_web_page_preview: true,
+      reply_markup: replyMarkup,
+    }, 7_000);
+    console.info("telegram staged inline edited", {
+      queryLength: query.length,
+      totalMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    console.warn("telegram staged inline markdown fallback", {
+      queryLength: query.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await telegramBotApi("editMessageText", {
+      inline_message_id: inlineMessageId,
+      text: inlineAnswerPlain(query, answer),
+      disable_web_page_preview: true,
+      reply_markup: replyMarkup,
+    }, 7_000);
+  }
+
   return true;
 }`;
 
 replaceOnce(
   "inline handlers",
   /export async function handleTelegramInlineQuery\([\s\S]*?\n\}\n\nexport async function handleTelegramAiMessage/,
-  `${reliableInlineHandlers}\n\nexport async function handleTelegramAiMessage`,
+  `${stagedInlineHandlers}\n\nexport async function handleTelegramAiMessage`,
 );
 
 fs.writeFileSync(aiPath, source);
@@ -167,7 +228,7 @@ let webhook = fs.readFileSync(webhookPath, "utf8");
 
 if (!webhook.includes("handleTelegramChosenInlineResult,")) {
   const importMarker = "  handleTelegramInlineQuery,\n";
-  if (!webhook.includes(importMarker)) throw new Error("MemeX inline reliability patch failed: inline import marker");
+  if (!webhook.includes(importMarker)) throw new Error("MemeX staged inline patch failed: inline import marker");
   webhook = webhook.replace(importMarker, `${importMarker}  handleTelegramChosenInlineResult,\n`);
 }
 
@@ -179,7 +240,7 @@ if (!webhook.includes("chosen_inline_result?:")) {
     offset?: string;
   };
 `;
-  if (!webhook.includes(typeMarker)) throw new Error("MemeX inline reliability patch failed: inline update type marker");
+  if (!webhook.includes(typeMarker)) throw new Error("MemeX staged inline patch failed: inline update type marker");
   webhook = webhook.replace(typeMarker, `${typeMarker}  chosen_inline_result?: {
     result_id?: string;
     from?: TelegramUser;
@@ -191,7 +252,7 @@ if (!webhook.includes("chosen_inline_result?:")) {
 
 if (!webhook.includes("if (update.chosen_inline_result)")) {
   const handlerMarker = "  try {\n    if (update.inline_query) {";
-  if (!webhook.includes(handlerMarker)) throw new Error("MemeX inline reliability patch failed: inline handler marker");
+  if (!webhook.includes(handlerMarker)) throw new Error("MemeX staged inline patch failed: inline handler marker");
   webhook = webhook.replace(
     handlerMarker,
     `  try {
@@ -224,4 +285,4 @@ if (!webhook.includes("if (update.chosen_inline_result)")) {
 }
 
 fs.writeFileSync(webhookPath, webhook);
-console.log("MemeX inline reliability patch applied: AI answer is prepared before send, MarkdownV2 quote is deterministic, no feedback dependency");
+console.log("MemeX staged inline patch applied: question preview first, automatic MarkdownV2 replacement after chosen result");
