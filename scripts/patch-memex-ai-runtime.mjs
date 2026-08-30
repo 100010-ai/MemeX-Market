@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const aiPath = path.join(root, "lib", "telegram-ai.ts");
+const instrumentationPath = path.join(root, "instrumentation.ts");
 
 let source = fs.readFileSync(aiPath, "utf8");
 
@@ -58,4 +59,16 @@ replaceOnce(
 );
 
 fs.writeFileSync(aiPath, source);
-console.log("MemeX AI runtime patch applied: 3 explicit free models, human chat style, punctuation cleanup");
+
+let instrumentation = fs.readFileSync(instrumentationPath, "utf8");
+const instrumentationModelsPattern = /const MEMEX_FREE_MODELS = \[[\s\S]*?\] as const;/;
+if (!instrumentationModelsPattern.test(instrumentation)) {
+  throw new Error("MemeX AI patch failed: instrumentation free model list pattern not found");
+}
+instrumentation = instrumentation.replace(
+  instrumentationModelsPattern,
+  `const MEMEX_FREE_MODELS = [\n  "z-ai/glm-5.2:free",\n  "nvidia/nemotron-3-ultra-550b-a55b:free",\n  "moonshotai/kimi-k2.6:free",\n] as const;`,
+);
+fs.writeFileSync(instrumentationPath, instrumentation);
+
+console.log("MemeX AI runtime patch applied: exactly 3 explicit free models in core and instrumentation, human chat style, punctuation cleanup");
