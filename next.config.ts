@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   compress: true,
+  // Free OpenRouter model slugs are intentionally not pinned here: they can
+  // disappear or move to paid-only without notice. The official free router
+  // selects a currently available free model and prevents the Telegram bot
+  // from falling over when an individual :free slug is retired.
+  env: {
+    OPENROUTER_FAST_MODELS: "openrouter/free",
+  },
   images: { formats: ["image/avif", "image/webp"], minimumCacheTTL: 86400 },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
